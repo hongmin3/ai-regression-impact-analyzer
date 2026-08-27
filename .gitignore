@@ -52,3 +52,6 @@ Thumbs.db
 
 # --- private, site-specific documentation (internal network details) ---
 docs/local/
+
+# --- typescript incremental build info ---
+*.tsbuildinfo
