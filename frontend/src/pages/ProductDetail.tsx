@@ -9,12 +9,41 @@ import {
   Field,
   Loading,
   Modal,
+  SortTh,
   StatusBadge,
+  dateKey,
   fmtDate,
   fmtDateTime,
   useAsyncAction,
+  useSort,
+  type SortColumn,
 } from '../components/ui'
 import type { Category, DocumentRow, Product } from '../types'
+
+type SortKey =
+  | 'name'
+  | 'category'
+  | 'revision'
+  | 'docNumber'
+  | 'language'
+  | 'revisionDate'
+  | 'uploader'
+  | 'uploadDate'
+  | 'versions'
+
+const COLUMNS: readonly SortColumn<DocumentRow, SortKey>[] = [
+  { key: 'name', value: (d) => d.name },
+  // Curated order (Operation, Service, QC, DICOM ...), not alphabetical --
+  // that sequence is what the categories' sort_order encodes.
+  { key: 'category', value: (d) => d.category_sort_order },
+  { key: 'revision', value: (d) => d.current_version_label },
+  { key: 'docNumber', value: (d) => d.current_document_number },
+  { key: 'language', value: (d) => d.current_language },
+  { key: 'revisionDate', value: (d) => dateKey(d.revision_date) },
+  { key: 'uploader', value: (d) => d.uploaded_by_display_name },
+  { key: 'uploadDate', value: (d) => dateKey(d.upload_date) },
+  { key: 'versions', value: (d) => d.version_count },
+]
 
 export default function ProductDetail() {
   const { productId = '' } = useParams()
@@ -45,8 +74,15 @@ export default function ProductDetail() {
 
   useEffect(load, [load])
 
+  // Sorted in the browser -- the endpoint already returns this product's whole
+  // filtered set, so reordering costs no round-trip.
+  const { sort, toggle, sorted } = useSort(documents, COLUMNS, {
+    key: 'category',
+    dir: 'asc',
+  })
+
   if (error) return <Alert kind="error">{error}</Alert>
-  if (!documents || !product) return <Loading />
+  if (!sorted || !product) return <Loading />
 
   return (
     <>
@@ -87,10 +123,10 @@ export default function ProductDetail() {
 
       <Card
         title="관리 중인 문서"
-        sub={`${documents.length}건`}
+        sub={`${sorted.length}건`}
         flush
       >
-        {documents.length === 0 ? (
+        {sorted.length === 0 ? (
           <Empty title="등록된 문서가 없습니다">
             "문서 등록" 으로 Operation Manual, Service Manual 등을 추가하세요.
           </Empty>
@@ -99,20 +135,47 @@ export default function ProductDetail() {
             <table className="grid">
               <thead>
                 <tr>
-                  <th className="wrap">Document</th>
-                  <th>Category</th>
-                  <th>Current Revision</th>
-                  <th>Doc. No.</th>
-                  <th>Lang</th>
-                  <th>Revision Date</th>
-                  <th>Uploaded By</th>
-                  <th>Upload Date</th>
-                  <th className="num">Ver.</th>
+                  <SortTh
+                    label="Document"
+                    sortKey="name"
+                    sort={sort}
+                    onSort={toggle}
+                    className="wrap"
+                  />
+                  <SortTh label="Category" sortKey="category" sort={sort} onSort={toggle} />
+                  <SortTh
+                    label="Current Revision"
+                    sortKey="revision"
+                    sort={sort}
+                    onSort={toggle}
+                  />
+                  <SortTh label="Doc. No." sortKey="docNumber" sort={sort} onSort={toggle} />
+                  <SortTh label="Lang" sortKey="language" sort={sort} onSort={toggle} />
+                  <SortTh
+                    label="Revision Date"
+                    sortKey="revisionDate"
+                    sort={sort}
+                    onSort={toggle}
+                  />
+                  <SortTh label="Uploaded By" sortKey="uploader" sort={sort} onSort={toggle} />
+                  <SortTh
+                    label="Upload Date"
+                    sortKey="uploadDate"
+                    sort={sort}
+                    onSort={toggle}
+                  />
+                  <SortTh
+                    label="Ver."
+                    sortKey="versions"
+                    sort={sort}
+                    onSort={toggle}
+                    className="num"
+                  />
                   <th></th>
                 </tr>
               </thead>
               <tbody>
-                {documents.map((d) => (
+                {sorted.map((d) => (
                   <tr
                     key={d.id}
                     className={d.status === 'archived' ? 'row-archived' : undefined}

@@ -93,6 +93,7 @@ export interface DocumentRow {
   updated_at: string
   product_name: string
   category_name: string
+  category_sort_order: number
   current_version_id: string | null
   current_revision: string | null
   current_version_label: string | null

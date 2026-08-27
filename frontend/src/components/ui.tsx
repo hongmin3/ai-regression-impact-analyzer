@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
   type FormEvent,
@@ -121,6 +122,135 @@ export function Stat({
       <div className="stat-value">{value}</div>
       {hint && <div className="stat-hint">{hint}</div>}
     </div>
+  )
+}
+
+// --------------------------------------------------------------------------- //
+// sorting
+// --------------------------------------------------------------------------- //
+
+/** Korean-aware, and `numeric` makes V1.0.9 sort before V1.0.12 rather than
+ *  after it -- which plain string comparison gets wrong for every revision
+ *  label in the system. */
+const collator = new Intl.Collator('ko', { numeric: true, sensitivity: 'base' })
+
+export type SortDir = 'asc' | 'desc'
+export interface SortState<K extends string> {
+  key: K
+  dir: SortDir
+}
+
+/** What a column contributes to the comparison. `null` sorts last in both
+ *  directions: an empty cell floating to the top on a descending sort reads as
+ *  a bug, not as an ordering. */
+export type SortValue = string | number | null
+
+export function isEmptySortValue(v: SortValue): boolean {
+  return v === null || v === undefined || v === ''
+}
+
+/** Ascending comparison of two values that are known to be non-empty. */
+function compareFilled(a: SortValue, b: SortValue): number {
+  if (typeof a === 'number' && typeof b === 'number') return a - b
+  return collator.compare(String(a), String(b))
+}
+
+/** Ascending comparison with empties last. Direction is applied by the caller
+ *  to the filled comparison only -- see `useSort`. */
+export function compareSortValues(a: SortValue, b: SortValue): number {
+  const aEmpty = isEmptySortValue(a)
+  const bEmpty = isEmptySortValue(b)
+  if (aEmpty && bEmpty) return 0
+  if (aEmpty) return 1
+  if (bEmpty) return -1
+  return compareFilled(a, b)
+}
+
+/** Timestamp for date-ish columns; `null` for anything unparseable so those
+ *  rows land at the end instead of at epoch zero. */
+export function dateKey(value: string | null | undefined): number | null {
+  if (!value) return null
+  const t = Date.parse(value)
+  return Number.isNaN(t) ? null : t
+}
+
+export interface SortColumn<T, K extends string> {
+  key: K
+  value: (row: T) => SortValue
+}
+
+export function useSort<T, K extends string>(
+  rows: T[] | null,
+  columns: readonly SortColumn<T, K>[],
+  initial: SortState<K>,
+) {
+  const [sort, setSort] = useState<SortState<K>>(initial)
+
+  const toggle = (key: K) =>
+    setSort((s) =>
+      s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' },
+    )
+
+  const sorted = useMemo(() => {
+    if (!rows) return rows
+    const column = columns.find((c) => c.key === sort.key)
+    if (!column) return rows
+    const factor = sort.dir === 'asc' ? 1 : -1
+    // Slice first: sorting the array the caller handed us in place would mutate
+    // component state held elsewhere.
+    return [...rows].sort((a, b) => {
+      const av = column.value(a)
+      const bv = column.value(b)
+      const aEmpty = isEmptySortValue(av)
+      const bEmpty = isEmptySortValue(bv)
+      // Empties sink to the bottom in BOTH directions. Folding this into the
+      // direction flip would float blank cells to the top on a descending
+      // sort, which reads as a broken table rather than an ordering.
+      if (aEmpty !== bEmpty) return aEmpty ? 1 : -1
+      if (!aEmpty) {
+        const primary = compareFilled(av, bv) * factor
+        if (primary !== 0) return primary
+      }
+      // Stable, predictable tiebreak on the first column so equal cells do not
+      // shuffle between renders.
+      return compareSortValues(columns[0].value(a), columns[0].value(b))
+    })
+  }, [rows, columns, sort])
+
+  return { sort, toggle, sorted }
+}
+
+export function SortTh<K extends string>({
+  label,
+  sortKey,
+  sort,
+  onSort,
+  className,
+}: {
+  label: string
+  sortKey: K
+  sort: SortState<K>
+  onSort: (key: K) => void
+  className?: string
+}) {
+  const active = sort.key === sortKey
+  return (
+    <th
+      className={className ? `sortable ${className}` : 'sortable'}
+      aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}
+    >
+      <button
+        type="button"
+        className={active ? 'th-sort is-active' : 'th-sort'}
+        onClick={() => onSort(sortKey)}
+        title={`${label} 기준 정렬`}
+      >
+        <span>{label}</span>
+        <span className="th-arrow" aria-hidden="true">
+          {active ? (sort.dir === 'asc' ? '▲' : '▼') : '↕'}
+        </span>
+      </button>
+    </th>
   )
 }
 

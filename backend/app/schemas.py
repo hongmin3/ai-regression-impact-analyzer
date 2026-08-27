@@ -291,6 +291,10 @@ class DocumentRow(DocumentOut):
 
     product_name: str
     category_name: str
+    # The curated ordering from DocumentCategory.sort_order, so the client can
+    # reproduce the intended sequence (Operation, Service, QC, ...) instead of
+    # falling back to alphabetical.
+    category_sort_order: int = 100
     current_version_id: uuid.UUID | None = None
     current_revision: str | None = None
     current_version_label: str | None = None

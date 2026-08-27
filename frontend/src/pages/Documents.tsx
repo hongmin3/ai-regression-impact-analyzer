@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api'
 import {
@@ -8,12 +8,39 @@ import {
   Empty,
   Field,
   Loading,
+  SortTh,
   StatusBadge,
+  dateKey,
   fmtDate,
   fmtDateTime,
+  useSort,
+  type SortColumn,
 } from '../components/ui'
 import { DocumentForm } from './ProductDetail'
 import type { Category, DocumentRow, Product } from '../types'
+
+type SortKey =
+  | 'product'
+  | 'name'
+  | 'category'
+  | 'revision'
+  | 'revisionDate'
+  | 'uploader'
+  | 'uploadDate'
+  | 'versions'
+
+// Defined once outside the component: a fresh array each render would make the
+// memo inside useSort recompute on every keystroke in the filter box.
+const COLUMNS: readonly SortColumn<DocumentRow, SortKey>[] = [
+  { key: 'product', value: (d) => d.product_name },
+  { key: 'name', value: (d) => d.name },
+  { key: 'category', value: (d) => d.category_sort_order },
+  { key: 'revision', value: (d) => d.current_version_label },
+  { key: 'revisionDate', value: (d) => dateKey(d.revision_date) },
+  { key: 'uploader', value: (d) => d.uploaded_by_display_name },
+  { key: 'uploadDate', value: (d) => dateKey(d.upload_date) },
+  { key: 'versions', value: (d) => d.version_count },
+]
 
 export default function Documents() {
   const [rows, setRows] = useState<DocumentRow[] | null>(null)
@@ -50,12 +77,26 @@ export default function Documents() {
 
   useEffect(load, [load])
 
+  // Sorted in the browser: the endpoint returns the full filtered set, so
+  // reordering is instant and costs no round-trip.
+  const { sort, toggle, sorted } = useSort(rows, COLUMNS, {
+    key: 'product',
+    dir: 'asc',
+  })
+
+  const productCount = useMemo(
+    () => new Set((sorted ?? []).map((d) => d.product_id)).size,
+    [sorted],
+  )
+
   return (
     <>
       <div className="page-head">
         <div>
           <h1>Documents</h1>
-          <div className="desc">전 제품의 문서를 한 화면에서 확인합니다.</div>
+          <div className="desc">
+            전 제품의 문서를 한 화면에서 확인합니다. 표 머리글을 클릭하면 정렬됩니다.
+          </div>
         </div>
         <div className="head-actions">
           <button
@@ -79,6 +120,7 @@ export default function Documents() {
               {products.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
+                  {p.is_active ? '' : ' (비활성)'}
                 </option>
               ))}
             </select>
@@ -108,32 +150,87 @@ export default function Documents() {
               placeholder="부분 검색"
             />
           </Field>
+          {(productId || categoryId || q || status !== 'active') && (
+            <button
+              type="button"
+              onClick={() => {
+                setProductId('')
+                setCategoryId('')
+                setStatus('active')
+                setQ('')
+              }}
+            >
+              초기화
+            </button>
+          )}
         </div>
       </Card>
 
-      <Card title="문서 목록" sub={rows ? `${rows.length}건` : undefined} flush>
-        {!rows ? (
+      <Card
+        title="문서 목록"
+        sub={
+          sorted
+            ? `${sorted.length}건${productCount > 1 ? ` · 제품 ${productCount}개` : ''}`
+            : undefined
+        }
+        flush
+      >
+        {!sorted ? (
           <Loading />
-        ) : rows.length === 0 ? (
-          <Empty title="조건에 맞는 문서가 없습니다" />
+        ) : sorted.length === 0 ? (
+          <Empty title="조건에 맞는 문서가 없습니다">
+            필터를 초기화하거나 검색어를 줄여 보세요.
+          </Empty>
         ) : (
           <div className="table-wrap">
             <table className="grid">
               <thead>
                 <tr>
-                  <th>Product</th>
-                  <th className="wrap">Document</th>
-                  <th>Category</th>
-                  <th>Current Revision</th>
-                  <th>Revision Date</th>
-                  <th>Uploaded By</th>
-                  <th>Upload Date</th>
-                  <th className="num">Ver.</th>
+                  <SortTh label="Product" sortKey="product" sort={sort} onSort={toggle} />
+                  <SortTh
+                    label="Document"
+                    sortKey="name"
+                    sort={sort}
+                    onSort={toggle}
+                    className="wrap"
+                  />
+                  <SortTh label="Category" sortKey="category" sort={sort} onSort={toggle} />
+                  <SortTh
+                    label="Current Revision"
+                    sortKey="revision"
+                    sort={sort}
+                    onSort={toggle}
+                  />
+                  <SortTh
+                    label="Revision Date"
+                    sortKey="revisionDate"
+                    sort={sort}
+                    onSort={toggle}
+                  />
+                  <SortTh
+                    label="Uploaded By"
+                    sortKey="uploader"
+                    sort={sort}
+                    onSort={toggle}
+                  />
+                  <SortTh
+                    label="Upload Date"
+                    sortKey="uploadDate"
+                    sort={sort}
+                    onSort={toggle}
+                  />
+                  <SortTh
+                    label="Ver."
+                    sortKey="versions"
+                    sort={sort}
+                    onSort={toggle}
+                    className="num"
+                  />
                   <th></th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((d) => (
+                {sorted.map((d) => (
                   <tr
                     key={d.id}
                     className={d.status === 'archived' ? 'row-archived' : undefined}

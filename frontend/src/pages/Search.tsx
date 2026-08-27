@@ -8,10 +8,39 @@ import {
   Empty,
   Field,
   Loading,
+  SortTh,
+  dateKey,
   fmtDate,
   fmtDateTime,
+  useSort,
+  type SortColumn,
 } from '../components/ui'
 import type { Category, Product, SearchHit } from '../types'
+
+type SortKey =
+  | 'product'
+  | 'document'
+  | 'category'
+  | 'revision'
+  | 'docNumber'
+  | 'language'
+  | 'revisionDate'
+  | 'uploader'
+  | 'uploadDate'
+  | 'file'
+
+const COLUMNS: readonly SortColumn<SearchHit, SortKey>[] = [
+  { key: 'product', value: (h) => h.product_name },
+  { key: 'document', value: (h) => h.document_name },
+  { key: 'category', value: (h) => h.category_name },
+  { key: 'revision', value: (h) => h.version ?? h.revision },
+  { key: 'docNumber', value: (h) => h.document_number },
+  { key: 'language', value: (h) => h.language },
+  { key: 'revisionDate', value: (h) => dateKey(h.revision_date) },
+  { key: 'uploader', value: (h) => h.uploaded_by_display_name },
+  { key: 'uploadDate', value: (h) => dateKey(h.upload_date) },
+  { key: 'file', value: (h) => h.original_file_name },
+]
 
 const BLANK = {
   q: '',
@@ -41,6 +70,11 @@ export default function Search() {
   const [advanced, setAdvanced] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  const { sort, toggle, sorted } = useSort(hits, COLUMNS, {
+    key: 'product',
+    dir: 'asc',
+  })
 
   useEffect(() => {
     Promise.all([api.products({ include_inactive: true }), api.categories()])
@@ -257,10 +291,10 @@ export default function Search() {
         </form>
       </Card>
 
-      <Card title="검색 결과" sub={hits ? `${hits.length}건` : undefined} flush>
-        {!hits ? (
+      <Card title="검색 결과" sub={sorted ? `${sorted.length}건` : undefined} flush>
+        {!sorted ? (
           <Loading />
-        ) : hits.length === 0 ? (
+        ) : sorted.length === 0 ? (
           <Empty title="조건에 맞는 결과가 없습니다">
             검색어를 줄이거나 상세 조건을 초기화해 보세요.
           </Empty>
@@ -269,21 +303,43 @@ export default function Search() {
             <table className="grid">
               <thead>
                 <tr>
-                  <th>Product</th>
-                  <th className="wrap">Document</th>
-                  <th>Category</th>
-                  <th>Rev / Ver</th>
-                  <th>Doc. No.</th>
-                  <th>Lang</th>
-                  <th>Revision Date</th>
-                  <th>Uploaded By</th>
-                  <th>Upload Date</th>
-                  <th className="wrap">File</th>
+                  <SortTh label="Product" sortKey="product" sort={sort} onSort={toggle} />
+                  <SortTh
+                    label="Document"
+                    sortKey="document"
+                    sort={sort}
+                    onSort={toggle}
+                    className="wrap"
+                  />
+                  <SortTh label="Category" sortKey="category" sort={sort} onSort={toggle} />
+                  <SortTh label="Rev / Ver" sortKey="revision" sort={sort} onSort={toggle} />
+                  <SortTh label="Doc. No." sortKey="docNumber" sort={sort} onSort={toggle} />
+                  <SortTh label="Lang" sortKey="language" sort={sort} onSort={toggle} />
+                  <SortTh
+                    label="Revision Date"
+                    sortKey="revisionDate"
+                    sort={sort}
+                    onSort={toggle}
+                  />
+                  <SortTh label="Uploaded By" sortKey="uploader" sort={sort} onSort={toggle} />
+                  <SortTh
+                    label="Upload Date"
+                    sortKey="uploadDate"
+                    sort={sort}
+                    onSort={toggle}
+                  />
+                  <SortTh
+                    label="File"
+                    sortKey="file"
+                    sort={sort}
+                    onSort={toggle}
+                    className="wrap"
+                  />
                   <th></th>
                 </tr>
               </thead>
               <tbody>
-                {hits.map((h, i) => (
+                {sorted.map((h, i) => (
                   <tr
                     key={`${h.document_id}-${h.version_id ?? i}`}
                     className={
