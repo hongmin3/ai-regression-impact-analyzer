@@ -116,6 +116,7 @@ export function MyAccount() {
   }, [])
 
   const forced = user?.must_change_password || params.get('change') === '1'
+  const minLength = Math.max(1, settings?.password_min_length ?? 1)
 
   const submit = onSubmit(async () => {
     if (next !== confirm) {
@@ -201,13 +202,13 @@ export function MyAccount() {
           </Field>
           <Field
             label="새 비밀번호 *"
-            hint={`최소 ${settings?.password_min_length ?? 8}자`}
+            hint={minLength > 1 ? `최소 ${minLength}자` : '길이 제한 없음'}
           >
             <input
               type="password"
               value={next}
               onChange={(e) => setNext(e.target.value)}
-              minLength={settings?.password_min_length ?? 8}
+              minLength={minLength}
               autoComplete="new-password"
               required
             />
@@ -299,7 +300,11 @@ export function Settings() {
           </div>
           <div className="meta-item">
             <div className="k">비밀번호 최소 길이</div>
-            <div className="v">{settings.password_min_length} 자</div>
+            <div className="v">
+              {settings.password_min_length > 1
+                ? `${settings.password_min_length} 자`
+                : '제한 없음'}
+            </div>
           </div>
           <div className="meta-item">
             <div className="k">Password Hash</div>

@@ -112,10 +112,11 @@ def test_user_can_change_own_password(client, make_user):
         ).status_code
         == 400
     )
+    # Reusing the current password is refused regardless of length.
     assert (
         client.post(
             "/api/auth/change-password",
-            json={"current_password": "Passw0rd!", "new_password": "short"},
+            json={"current_password": "Passw0rd!", "new_password": "Passw0rd!"},
         ).status_code
         == 400
     )
@@ -140,6 +141,46 @@ def test_user_can_change_own_password(client, make_user):
         ).status_code
         == 200
     )
+
+
+def test_own_password_can_be_changed_to_a_single_character(client, make_user):
+    """PASSWORD_MIN_LENGTH defaults to 1, so a one-character password works
+    end to end: change it, log out, log back in with it."""
+    make_user("hong", "홍길동")
+    client.post("/api/auth/login", json={"login_id": "hong", "password": "Passw0rd!"})
+
+    changed = client.post(
+        "/api/auth/change-password",
+        json={"current_password": "Passw0rd!", "new_password": "1"},
+    )
+    assert changed.status_code == 200, changed.text
+
+    client.post("/api/auth/logout")
+    assert (
+        client.post(
+            "/api/auth/login", json={"login_id": "hong", "password": "1"}
+        ).status_code
+        == 200
+    )
+
+
+def test_password_change_rejects_empty_and_padded_values(client, make_user):
+    make_user("hong", "홍길동")
+    client.post("/api/auth/login", json={"login_id": "hong", "password": "Passw0rd!"})
+
+    assert (
+        client.post(
+            "/api/auth/change-password",
+            json={"current_password": "Passw0rd!", "new_password": ""},
+        ).status_code
+        in (400, 422)
+    )
+    padded = client.post(
+        "/api/auth/change-password",
+        json={"current_password": "Passw0rd!", "new_password": " a "},
+    )
+    assert padded.status_code == 400
+    assert "공백" in padded.json()["detail"]
 
 
 def test_must_change_password_blocks_document_work_until_changed(

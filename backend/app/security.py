@@ -41,9 +41,12 @@ def needs_rehash(hashed: str) -> bool:
 def validate_password_strength(plain: str) -> str | None:
     """Return an error message, or ``None`` when the password is acceptable.
 
-    Deliberately minimal (section 28 of the spec): length only.  Tightening this
-    later is a one-function change.
+    Length only, driven entirely by ``PASSWORD_MIN_LENGTH``.  The default of 1
+    means any non-empty password is accepted; raising the setting is the whole
+    change needed to enforce a minimum again.
     """
+    if not plain:
+        return "비밀번호를 입력하세요."
     if len(plain) < settings.password_min_length:
         return f"비밀번호는 최소 {settings.password_min_length}자 이상이어야 합니다."
     if plain.strip() != plain:

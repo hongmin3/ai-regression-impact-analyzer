@@ -360,7 +360,7 @@ Vite dev server 를 쓰는 편이 빠릅니다.
 | `SESSION_LIFETIME_HOURS` | `8` | 세션 유효 시간 |
 | `SESSION_COOKIE_SECURE` | `false` | **HTTPS 적용 시 `true`** |
 | `SESSION_COOKIE_SAMESITE` | `lax` | |
-| `PASSWORD_MIN_LENGTH` | `8` | |
+| `PASSWORD_MIN_LENGTH` | `1` | `1` = 길이 제한 없음(빈 값만 거부). 값을 올리면 API·CLI·웹 폼이 모두 그 값을 따릅니다 |
 | `CORS_ORIGINS` | (빈 값) | Vite dev server 용. 운영에서는 비워 둡니다 |
 
 변경 후 `sudo systemctl restart qa-manual-hub` 가 필요합니다.
@@ -523,7 +523,7 @@ frontend/src/
 
 | 항목 | 구현 |
 |---|---|
-| 비밀번호 | Argon2id. 평문 저장·로깅 없음. 파라미터 상향 시 로그인할 때 자동 재해싱 |
+| 비밀번호 | Argon2id. 평문 저장·로깅 없음. 파라미터 상향 시 로그인할 때 자동 재해싱. **길이 정책은 `PASSWORD_MIN_LENGTH` 하나로 결정되며 기본값은 1(제한 없음)** |
 | 세션 | 서버 세션 테이블 + HttpOnly 쿠키. 쿠키에는 256bit 불투명 토큰, DB에는 SHA-256 만 |
 | 로그인 실패 | 없는 ID / 틀린 비밀번호 / 비활성 계정 **모두 동일 메시지**. 사유는 서버 로그에만 |
 | 세션 무효화 | 비활성화·비밀번호 초기화 시 해당 사용자 세션 전부 즉시 revoke |

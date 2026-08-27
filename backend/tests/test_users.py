@@ -44,13 +44,61 @@ def test_duplicate_login_id_is_rejected(admin_client):
     )
 
 
-def test_short_password_is_rejected(admin_client):
+def test_any_non_empty_password_is_accepted_by_default(admin_client):
+    """PASSWORD_MIN_LENGTH defaults to 1, so length is not a barrier."""
+    created = admin_client.post(
+        "/api/users",
+        json={"login_id": "kim", "display_name": "김철수", "password": "a"},
+    )
+    assert created.status_code == 201, created.text
+
+    admin_client.post("/api/auth/logout")
+    assert (
+        admin_client.post(
+            "/api/auth/login", json={"login_id": "kim", "password": "a"}
+        ).status_code
+        == 200
+    )
+
+
+def test_empty_password_is_still_rejected(admin_client):
     response = admin_client.post(
+        "/api/users",
+        json={"login_id": "kim", "display_name": "김철수", "password": ""},
+    )
+    # Pydantic's min_length=1 on the field catches this before the validator.
+    assert response.status_code in (400, 422)
+
+
+def test_password_with_surrounding_whitespace_is_rejected(admin_client):
+    """Not a length rule -- a password that gets trimmed on the way in would
+    silently differ from what the user typed."""
+    response = admin_client.post(
+        "/api/users",
+        json={"login_id": "kim", "display_name": "김철수", "password": " abc "},
+    )
+    assert response.status_code == 400
+    assert "공백" in response.json()["detail"]
+
+
+def test_minimum_length_is_enforced_when_configured(admin_client, monkeypatch):
+    """Raising PASSWORD_MIN_LENGTH re-enables the check with no code change."""
+    from app import security
+
+    monkeypatch.setattr(security.settings, "password_min_length", 8)
+
+    short = admin_client.post(
         "/api/users",
         json={"login_id": "kim", "display_name": "김철수", "password": "abc"},
     )
-    assert response.status_code == 400
-    assert "8자" in response.json()["detail"]
+    assert short.status_code == 400
+    assert "8자" in short.json()["detail"]
+
+    ok = admin_client.post(
+        "/api/users",
+        json={"login_id": "lee", "display_name": "이영희", "password": "abcdefgh"},
+    )
+    assert ok.status_code == 201
 
 
 def test_normal_user_cannot_reach_user_management(client, make_user):

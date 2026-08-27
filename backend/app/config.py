@@ -50,7 +50,9 @@ class Settings(BaseSettings):
     allowed_extensions: str = DEFAULT_ALLOWED_EXTENSIONS
 
     # --- password policy ---
-    password_min_length: int = 8
+    # 1 means "any non-empty password". Raise this in .env to enforce a minimum
+    # without touching code; every check reads this value.
+    password_min_length: int = 1
 
     # --- bootstrap (first-run admin creation only) ---
     bootstrap_admin_login_id: str | None = None

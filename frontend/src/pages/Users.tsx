@@ -14,6 +14,22 @@ import {
 } from '../components/ui'
 import type { UserRow } from '../types'
 
+/** The server owns the password policy; the forms only mirror it. */
+function usePasswordMinLength(): number {
+  const [minLength, setMinLength] = useState(1)
+  useEffect(() => {
+    api
+      .settings()
+      .then((s) => setMinLength(Math.max(1, s.password_min_length)))
+      .catch(() => undefined)
+  }, [])
+  return minLength
+}
+
+function passwordHint(minLength: number): string {
+  return minLength > 1 ? `최소 ${minLength}자.` : '길이 제한 없음.'
+}
+
 export default function Users() {
   const { user: me } = useAuth()
   const [rows, setRows] = useState<UserRow[] | null>(null)
@@ -251,6 +267,7 @@ function UserForm({
   const [password, setPassword] = useState('')
   const [role, setRole] = useState('user')
   const [mustChange, setMustChange] = useState(true)
+  const minLength = usePasswordMinLength()
   const { busy, error, onSubmit } = useAsyncAction()
 
   const submit = onSubmit(async () => {
@@ -305,12 +322,15 @@ function UserForm({
           </Field>
         </div>
         <div className="form-grid">
-          <Field label="초기 Password *" hint="최소 8자. 사용자에게 별도로 전달하세요.">
+          <Field
+            label="초기 Password *"
+            hint={`${passwordHint(minLength)} 사용자에게 별도로 전달하세요.`}
+          >
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              minLength={8}
+              minLength={minLength}
               maxLength={256}
               required
               autoComplete="new-password"
@@ -432,6 +452,7 @@ function ResetPasswordForm({
 }) {
   const [password, setPassword] = useState('')
   const [mustChange, setMustChange] = useState(true)
+  const minLength = usePasswordMinLength()
   const { busy, error, onSubmit } = useAsyncAction()
 
   const submit = onSubmit(async () => {
@@ -460,12 +481,12 @@ function ResetPasswordForm({
           초기화하면 이 사용자의 열려 있는 모든 세션이 즉시 종료됩니다. 임시 비밀번호는 별도
           경로(사내 메신저 등)로 직접 전달하세요.
         </Alert>
-        <Field label="임시 Password *" hint="최소 8자">
+        <Field label="임시 Password *" hint={passwordHint(minLength)}>
           <input
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            minLength={8}
+            minLength={minLength}
             maxLength={256}
             required
             autoComplete="new-password"
