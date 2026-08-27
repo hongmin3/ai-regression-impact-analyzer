@@ -80,6 +80,9 @@ if [[ -d "$DATA_ROOT/storage" ]]; then
         || warn "현재 storage 백업 실패 (계속 진행합니다)"
 fi
 unset PGPASSWORD
+# This script runs as root, so the safety backup would otherwise be root-owned
+# and the service account could not prune it afterwards.
+chown -R "$(stat -c '%U:%G' "$DATA_ROOT")" "$SAFETY"
 
 # --- 1. stop the service --------------------------------------------------- #
 log "서비스 정지: $SERVICE"
