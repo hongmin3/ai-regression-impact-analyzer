@@ -1,0 +1,53 @@
+[Unit]
+Description=QA Manual Hub - product document management (FastAPI/uvicorn)
+Documentation=https://github.com/hongmin3/qa-manual-hub
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/opt/qa-manual-hub/app/backend
+EnvironmentFile=/opt/qa-manual-hub/.env
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+
+# Bound to loopback only: nginx is the sole entry point from the network.
+ExecStart=/opt/qa-manual-hub/venv/bin/uvicorn app.main:app \
+    --host 127.0.0.1 \
+    --port 9180 \
+    --workers 2 \
+    --proxy-headers \
+    --forwarded-allow-ips 127.0.0.1 \
+    --timeout-keep-alive 65 \
+    --access-log
+
+Restart=on-failure
+RestartSec=5
+KillSignal=SIGINT
+TimeoutStopSec=30
+
+# --- hardening ---
+# The service needs to write only to its storage tree and its own logs.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=false
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+ReadWritePaths=/srv/qa-manual-hub /opt/qa-manual-hub/logs
+
+# This host runs several other services on a shared 8 GB of RAM; cap the unit so
+# a runaway upload cannot starve them.
+MemoryMax=1200M
+MemoryHigh=900M
+TasksMax=256
+
+StandardOutput=append:/opt/qa-manual-hub/logs/app.log
+StandardError=append:/opt/qa-manual-hub/logs/error.log
+
+[Install]
+WantedBy=multi-user.target
