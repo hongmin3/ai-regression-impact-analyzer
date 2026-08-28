@@ -11,6 +11,7 @@ Current-version rules implemented here (spec sections 15, 16, 42):
 """
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -18,6 +19,7 @@ from urllib.parse import quote
 
 from fastapi import (
     APIRouter,
+    BackgroundTasks,
     Depends,
     File,
     Form,
@@ -77,6 +79,24 @@ from ..storage import (
 )
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
+
+log = logging.getLogger("qa_manual_hub")
+
+
+def _warm_preview_cache(storage_key: str, extension: str) -> None:
+    """Convert an office document to PDF ahead of time, off the request path.
+
+    Scheduled as a BackgroundTask after upload / Set-as-Current so a viewer's
+    *first* open of a version is a cache hit instead of waiting out a live
+    LibreOffice conversion. Best-effort: failures just mean the first real
+    preview request converts it instead, same as before this existed.
+    """
+    if not needs_conversion(extension):
+        return
+    try:
+        get_storage().ensure_preview_pdf(storage_key)
+    except ConversionError as exc:
+        log.warning("preview pre-conversion failed for %s: %s", storage_key, exc)
 
 
 # --------------------------------------------------------------------------- #
@@ -426,6 +446,7 @@ def list_versions(
 def upload_version(
     document_id: uuid.UUID,
     request: Request,
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     revision: str | None = Form(default=None),
     version: str | None = Form(default=None),
@@ -569,6 +590,7 @@ def upload_version(
         raise
 
     db.refresh(new_version)
+    background_tasks.add_task(_warm_preview_cache, saved.storage_key, saved.extension)
     warning = None
     if duplicates:
         first = duplicates[0]
@@ -596,6 +618,7 @@ def set_current_version(
     document_id: uuid.UUID,
     payload: SetCurrentRequest,
     request: Request,
+    background_tasks: BackgroundTasks,
     db: DbSession = Depends(get_db),
     user: User = Depends(require_password_current),
 ) -> DocumentDetail:
@@ -632,6 +655,9 @@ def set_current_version(
         detail="사용자가 수동으로 Current 버전 변경",
     )
     db.commit()
+    background_tasks.add_task(
+        _warm_preview_cache, target.stored_file.storage_key, target.stored_file.file_extension
+    )
     return get_document(document_id, True, db, user)
 
 

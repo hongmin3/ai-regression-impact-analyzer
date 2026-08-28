@@ -5,6 +5,7 @@
     python -m app.cli reset-password <login_id>  # rescue path if admin is locked out
     python -m app.cli list-users
     python -m app.cli check-storage              # verify every version's file
+    python -m app.cli warm-preview-cache         # pre-convert office docs to PDF
     python -m app.cli purge-sessions
 
 The initial admin password is never a literal in this file, in the repository, or
@@ -250,6 +251,45 @@ def cmd_check_storage(_: argparse.Namespace) -> int:
     return 0 if not missing and not mismatched else 2
 
 
+def cmd_warm_preview_cache(_: argparse.Namespace) -> int:
+    """Pre-convert every office-format version (doc/docx/xls/xlsx/ppt/pptx) to
+    PDF so the in-browser viewer is a cache hit for everyone from now on.
+
+    New uploads and Set-as-Current already trigger this automatically in the
+    background; this command is the one-time catch-up for versions that were
+    uploaded before that existed.
+    """
+    from time import monotonic
+
+    from .storage import ConversionError, needs_conversion
+
+    storage = get_storage()
+    with SessionLocal() as db:
+        versions = db.scalars(select(DocumentVersion)).unique().all()
+        targets = [v for v in versions if needs_conversion(v.stored_file.file_extension)]
+
+    print(f"오피스 문서 버전: {len(targets)}건")
+    converted, cached, failed = 0, 0, []
+    for v in targets:
+        key = v.stored_file.storage_key
+        if storage.has_cached_preview(key):
+            cached += 1
+            continue
+        start = monotonic()
+        try:
+            storage.ensure_preview_pdf(key)
+        except ConversionError as exc:
+            failed.append(f"{v.label} ({key}): {exc}")
+            continue
+        converted += 1
+        print(f"  변환 완료: {v.label} ({monotonic() - start:.1f}s)")
+
+    print(f"\n이미 캐시됨: {cached}건 / 새로 변환: {converted}건 / 실패: {len(failed)}건")
+    for item in failed:
+        print(f"  - {item}")
+    return 0 if not failed else 2
+
+
 def cmd_purge_sessions(_: argparse.Namespace) -> int:
     now = datetime.now(UTC)
     with SessionLocal() as db:
@@ -302,6 +342,10 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser(
         "check-storage", help="DB에 등록된 모든 버전 파일의 존재/크기 검증"
     ).set_defaults(func=cmd_check_storage)
+    sub.add_parser(
+        "warm-preview-cache",
+        help="오피스 문서(doc/docx/xls/xlsx/ppt/pptx) 버전을 미리 PDF로 변환해 캐시",
+    ).set_defaults(func=cmd_warm_preview_cache)
     sub.add_parser("purge-sessions", help="만료 세션 정리").set_defaults(
         func=cmd_purge_sessions
     )

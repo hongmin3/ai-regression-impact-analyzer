@@ -39,6 +39,7 @@ export default function DocumentDetail() {
   const [editingDoc, setEditingDoc] = useState(false)
   const [editingVersion, setEditingVersion] = useState<Version | null>(null)
   const [previewVersionId, setPreviewVersionId] = useState<string | null>(null)
+  const [viewerLoading, setViewerLoading] = useState(false)
   const [confirm, setConfirm] = useState<{
     title: string
     message: string
@@ -66,6 +67,10 @@ export default function DocumentDetail() {
   useEffect(() => {
     void load()
   }, [load])
+
+  useEffect(() => {
+    if (previewVersionId) setViewerLoading(true)
+  }, [previewVersionId])
 
   useEffect(() => {
     if (!doc) return
@@ -252,11 +257,24 @@ export default function DocumentDetail() {
                 </span>
               )}
             </div>
-            <iframe
-              className="preview-frame"
-              src={api.previewUrl(doc.id, previewVersion.id)}
-              title="manual viewer"
-            />
+            <div className="viewer-frame-wrap">
+              {viewerLoading && (
+                <div className="viewer-loading">
+                  <span className="spinner" aria-hidden="true" />
+                  <span>문서를 불러오는 중입니다...</span>
+                  <span className="faint small">
+                    처음 여는 문서는 변환에 몇 초 걸릴 수 있습니다.
+                  </span>
+                </div>
+              )}
+              <iframe
+                key={previewVersion.id}
+                className="preview-frame"
+                src={api.previewUrl(doc.id, previewVersion.id)}
+                title="manual viewer"
+                onLoad={() => setViewerLoading(false)}
+              />
+            </div>
           </>
         ) : (
           <Empty title="미리보기를 지원하지 않는 문서입니다">

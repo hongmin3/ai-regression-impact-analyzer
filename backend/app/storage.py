@@ -21,6 +21,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -91,6 +92,42 @@ class ContentTypeMismatchError(StorageError):
 
 class ConversionError(StorageError):
     """Office document could not be turned into a previewable PDF."""
+
+
+# uvicorn runs this app as multiple worker PROCESSES (see the systemd unit),
+# so an in-memory lock only protects against races within one worker -- two
+# people opening the same not-yet-cached document at once can still land on
+# different workers. A plain lock *file* is what actually coordinates across
+# processes: whichever worker creates it first converts; the rest wait for
+# either the cache to appear or the lock to go away (or go stale, if the
+# converting worker died).
+def _try_acquire_conversion_lock(lock_path: Path) -> bool:
+    try:
+        os.close(os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY))
+        return True
+    except FileExistsError:
+        return False
+
+
+def _wait_for_conversion(cached: Path, lock_path: Path, timeout: float) -> bool:
+    """Poll while another worker converts the same file.
+
+    Returns True once ``cached`` appears. Returns False (caller should try to
+    take the lock itself) if the lock disappears without producing a cache,
+    or goes stale -- both signs the converting worker died mid-job.
+    """
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if cached.is_file():
+            return True
+        try:
+            age = time.time() - lock_path.stat().st_mtime
+        except FileNotFoundError:
+            return False
+        if age > settings.office_preview_timeout_seconds + 30:
+            return False
+        time.sleep(0.4)
+    return False
 
 
 @dataclass(slots=True)
@@ -246,40 +283,63 @@ class LocalDiskStorage:
     def size(self, storage_key: str) -> int:
         return self._resolve(storage_key).stat().st_size
 
+    def _preview_cache_path(self, storage_key: str) -> Path:
+        source = self._resolve(storage_key)
+        return source.parent / f"{source.stem}.preview.pdf"
+
+    def has_cached_preview(self, storage_key: str) -> bool:
+        return self._preview_cache_path(storage_key).is_file()
+
     def ensure_preview_pdf(self, storage_key: str) -> Path:
         """Return a cached PDF rendering of an office file, converting on the
         first request and reusing it afterwards. Versions are immutable once
         uploaded, so the cache never needs to be invalidated.
         """
         source = self._resolve(storage_key)
-        cached = source.parent / f"{source.stem}.preview.pdf"
+        cached = self._preview_cache_path(storage_key)
         if cached.is_file():
             return cached
 
-        # Convert in the OS temp dir, not under source.parent: LibreOffice's
-        # per-conversion profile (see convert_to_pdf) writes plenty of its own
-        # nested files, and doing that under the storage tree's <product>/
-        # <document>/<version>/ UUID chain can walk straight into Windows'
-        # 260-char MAX_PATH -- confirmed by hand, it fails silently (exit 0,
-        # no PDF, no stderr). Linux has no such limit, but keeping conversion
-        # scratch space off the (possibly network-mounted) storage volume is
-        # the right call there too.
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            produced = convert_to_pdf(source, Path(tmp_dir))
-            # Copy into a same-directory temp file first, then rename: the
-            # copy may cross filesystems (storage_root vs the OS temp dir),
-            # but the final rename is atomic and local, so a concurrent
-            # request for the same file never sees a half-written cache entry.
-            fd, tmp_name = tempfile.mkstemp(dir=source.parent, suffix=".part")
-            tmp_cached = Path(tmp_name)
-            try:
-                with os.fdopen(fd, "wb") as out, produced.open("rb") as src:
-                    shutil.copyfileobj(src, out)
-                os.chmod(tmp_cached, 0o640)
-                tmp_cached.replace(cached)
-            except BaseException:
-                tmp_cached.unlink(missing_ok=True)
-                raise
+        lock_path = source.parent / f"{source.stem}.preview.lock"
+        while not _try_acquire_conversion_lock(lock_path):
+            if _wait_for_conversion(
+                cached, lock_path, settings.office_preview_timeout_seconds + 20
+            ):
+                return cached
+            # Lock vanished or went stale without a cache showing up --
+            # whoever held it is gone. Clear it and try to take over.
+            lock_path.unlink(missing_ok=True)
+
+        try:
+            if cached.is_file():  # produced by someone else while we waited
+                return cached
+            # Convert in the OS temp dir, not under source.parent: LibreOffice's
+            # per-conversion profile (see convert_to_pdf) writes plenty of its
+            # own nested files, and doing that under the storage tree's
+            # <product>/<document>/<version>/ UUID chain can walk straight
+            # into Windows' 260-char MAX_PATH -- confirmed by hand, it fails
+            # silently (exit 0, no PDF, no stderr). Linux has no such limit,
+            # but keeping conversion scratch space off the (possibly
+            # network-mounted) storage volume is the right call there too.
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                produced = convert_to_pdf(source, Path(tmp_dir))
+                # Copy into a same-directory temp file first, then rename: the
+                # copy may cross filesystems (storage_root vs the OS temp dir),
+                # but the final rename is atomic and local, so a concurrent
+                # request for the same file never sees a half-written cache
+                # entry.
+                fd, tmp_name = tempfile.mkstemp(dir=source.parent, suffix=".part")
+                tmp_cached = Path(tmp_name)
+                try:
+                    with os.fdopen(fd, "wb") as out, produced.open("rb") as src:
+                        shutil.copyfileobj(src, out)
+                    os.chmod(tmp_cached, 0o640)
+                    tmp_cached.replace(cached)
+                except BaseException:
+                    tmp_cached.unlink(missing_ok=True)
+                    raise
+        finally:
+            lock_path.unlink(missing_ok=True)
         return cached
 
     def discard(self, storage_key: str) -> None:
