@@ -49,6 +49,13 @@ class Settings(BaseSettings):
     max_upload_mb: int = 500
     allowed_extensions: str = DEFAULT_ALLOWED_EXTENSIONS
 
+    # --- office document preview (doc/docx/xls/xlsx/ppt/pptx -> PDF) ---
+    # Converted PDFs are cached next to the original, so this only runs once
+    # per uploaded file. Left as "soffice" on PATH; set an absolute path if the
+    # server keeps LibreOffice somewhere non-standard.
+    office_preview_binary: str = "soffice"
+    office_preview_timeout_seconds: int = 90
+
     # --- password policy ---
     # 1 means "any non-empty password". Raise this in .env to enforce a minimum
     # without touching code; every check reads this value.

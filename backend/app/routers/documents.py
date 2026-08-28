@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, date, datetime
+from pathlib import Path
 from urllib.parse import quote
 
 from fastapi import (
@@ -66,11 +67,13 @@ from ..services import (
 )
 from ..storage import (
     ContentTypeMismatchError,
+    ConversionError,
     ExtensionNotAllowedError,
     FileTooLargeError,
     StorageError,
     get_storage,
     is_inline_previewable,
+    needs_conversion,
 )
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
@@ -830,6 +833,7 @@ def _serve(
         )
 
     serve_inline = inline and is_inline_previewable(stored.file_extension)
+    convert = serve_inline and needs_conversion(stored.file_extension)
     audit.record(
         db,
         action=audit.DOCUMENT_DOWNLOAD,
@@ -841,6 +845,24 @@ def _serve(
         + f" / {stored.original_file_name}",
     )
     db.commit()
+
+    if convert:
+        try:
+            pdf_path = storage.ensure_preview_pdf(stored.storage_key)
+        except ConversionError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)
+            ) from exc
+        preview_name = f"{Path(stored.original_file_name).stem}.pdf"
+        return FileResponse(
+            path=pdf_path,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": _content_disposition(preview_name, True),
+                "X-Content-Type-Options": "nosniff",
+                "Content-Security-Policy": "sandbox; default-src 'none'",
+            },
+        )
 
     return FileResponse(
         path=storage.path(stored.storage_key),  # type: ignore[arg-type]

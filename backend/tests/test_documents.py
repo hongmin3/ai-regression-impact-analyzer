@@ -2,6 +2,12 @@
 from __future__ import annotations
 
 import hashlib
+import io
+import zipfile
+
+import pytest
+
+from app.storage import office_preview_available
 
 
 def _make_document(client, catalog, name="Operation Manual"):
@@ -321,6 +327,74 @@ def test_preview_is_inline_for_pdf(admin_client, catalog):
     assert response.status_code == 200
     assert response.headers["content-disposition"].startswith("inline;")
     assert response.headers["content-type"] == "application/pdf"
+
+
+def _minimal_docx_bytes() -> bytes:
+    """A tiny but genuinely valid .docx -- real OOXML parts, not just a magic
+    number -- so LibreOffice has an actual document to convert."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr(
+            "[Content_Types].xml",
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+            '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+            '<Default Extension="xml" ContentType="application/xml"/>'
+            '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
+            "</Types>",
+        )
+        zf.writestr(
+            "_rels/.rels",
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            '<Relationship Id="rId1" '
+            'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" '
+            'Target="word/document.xml"/>'
+            "</Relationships>",
+        )
+        zf.writestr(
+            "word/document.xml",
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+            "<w:body><w:p><w:r><w:t>QA Manual Hub preview test</w:t></w:r></w:p></w:body>"
+            "</w:document>",
+        )
+    return buf.getvalue()
+
+
+@pytest.mark.skipif(
+    not office_preview_available(),
+    reason="LibreOffice(soffice) not installed on this host",
+)
+def test_preview_converts_office_documents_to_pdf_and_caches_it(admin_client, catalog):
+    document = _make_document(admin_client, catalog)
+    uploaded = admin_client.post(
+        f"/api/documents/{document['id']}/versions",
+        files={
+            "file": (
+                "Operation Manual.docx",
+                _minimal_docx_bytes(),
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+        },
+        data={"version": "V1.0"},
+    ).json()
+    assert uploaded["version"]["can_preview"] is True
+
+    url = (
+        f"/api/documents/{document['id']}/versions/"
+        f"{uploaded['version']['id']}/preview"
+    )
+    response = admin_client.get(url)
+    assert response.status_code == 200, response.text
+    assert response.headers["content-type"] == "application/pdf"
+    assert response.headers["content-disposition"].startswith("inline;")
+    assert response.content.startswith(b"%PDF")
+
+    # Second request must hit the cached PDF, not re-invoke LibreOffice.
+    cached = admin_client.get(url)
+    assert cached.status_code == 200
+    assert cached.content == response.content
 
 
 def test_download_current_shortcut(admin_client, catalog):

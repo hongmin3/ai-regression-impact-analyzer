@@ -19,6 +19,7 @@ import hashlib
 import os
 import re
 import shutil
+import subprocess
 import tempfile
 import uuid
 from dataclasses import dataclass
@@ -64,8 +65,12 @@ MIME_BY_EXT = {
     "jpeg": "image/jpeg",
 }
 
-# Rendered inline in the browser; everything else is sent as an attachment.
-INLINE_PREVIEW_EXT = {"pdf", "png", "jpg", "jpeg", "txt", "md"}
+# Rendered inline in the browser as-is; everything else is sent as an attachment.
+DIRECT_PREVIEW_EXT = {"pdf", "png", "jpg", "jpeg", "txt", "md"}
+
+# Rendered inline too, but only after conversion to PDF via LibreOffice --
+# see ``convert_to_pdf`` / ``LocalDiskStorage.ensure_preview_pdf``.
+OFFICE_PREVIEW_EXT = {"doc", "docx", "ppt", "pptx", "xls", "xlsx"}
 
 
 class StorageError(RuntimeError):
@@ -82,6 +87,10 @@ class ExtensionNotAllowedError(StorageError):
 
 class ContentTypeMismatchError(StorageError):
     pass
+
+
+class ConversionError(StorageError):
+    """Office document could not be turned into a previewable PDF."""
 
 
 @dataclass(slots=True)
@@ -237,6 +246,42 @@ class LocalDiskStorage:
     def size(self, storage_key: str) -> int:
         return self._resolve(storage_key).stat().st_size
 
+    def ensure_preview_pdf(self, storage_key: str) -> Path:
+        """Return a cached PDF rendering of an office file, converting on the
+        first request and reusing it afterwards. Versions are immutable once
+        uploaded, so the cache never needs to be invalidated.
+        """
+        source = self._resolve(storage_key)
+        cached = source.parent / f"{source.stem}.preview.pdf"
+        if cached.is_file():
+            return cached
+
+        # Convert in the OS temp dir, not under source.parent: LibreOffice's
+        # per-conversion profile (see convert_to_pdf) writes plenty of its own
+        # nested files, and doing that under the storage tree's <product>/
+        # <document>/<version>/ UUID chain can walk straight into Windows'
+        # 260-char MAX_PATH -- confirmed by hand, it fails silently (exit 0,
+        # no PDF, no stderr). Linux has no such limit, but keeping conversion
+        # scratch space off the (possibly network-mounted) storage volume is
+        # the right call there too.
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            produced = convert_to_pdf(source, Path(tmp_dir))
+            # Copy into a same-directory temp file first, then rename: the
+            # copy may cross filesystems (storage_root vs the OS temp dir),
+            # but the final rename is atomic and local, so a concurrent
+            # request for the same file never sees a half-written cache entry.
+            fd, tmp_name = tempfile.mkstemp(dir=source.parent, suffix=".part")
+            tmp_cached = Path(tmp_name)
+            try:
+                with os.fdopen(fd, "wb") as out, produced.open("rb") as src:
+                    shutil.copyfileobj(src, out)
+                os.chmod(tmp_cached, 0o640)
+                tmp_cached.replace(cached)
+            except BaseException:
+                tmp_cached.unlink(missing_ok=True)
+                raise
+        return cached
+
     def discard(self, storage_key: str) -> None:
         """Remove a just-written file after the surrounding transaction failed.
 
@@ -265,5 +310,74 @@ def get_storage() -> LocalDiskStorage:
     return _backend
 
 
+def office_preview_available() -> bool:
+    """Whether this host can convert office documents to PDF right now.
+
+    Checked live (not cached) so installing LibreOffice on a running server
+    takes effect without a restart -- ``shutil.which`` is a cheap stat, not
+    worth caching stale.
+    """
+    return shutil.which(settings.office_preview_binary) is not None
+
+
+def needs_conversion(ext: str) -> bool:
+    return ext.lower().lstrip(".") in OFFICE_PREVIEW_EXT
+
+
 def is_inline_previewable(ext: str) -> bool:
-    return ext.lower().lstrip(".") in INLINE_PREVIEW_EXT
+    ext = ext.lower().lstrip(".")
+    if ext in DIRECT_PREVIEW_EXT:
+        return True
+    if ext in OFFICE_PREVIEW_EXT:
+        return office_preview_available()
+    return False
+
+
+def convert_to_pdf(source: Path, out_dir: Path) -> Path:
+    """Render ``source`` (doc/docx/xls/xlsx/ppt/pptx) to a PDF in ``out_dir``
+    via headless LibreOffice, and return the produced file's path.
+    """
+    binary = settings.office_preview_binary
+    if shutil.which(binary) is None:
+        raise ConversionError(
+            "서버에 LibreOffice(soffice)가 설치되어 있지 않아 미리보기를 만들 수 없습니다. "
+            "다운로드 후 확인하세요."
+        )
+    # LibreOffice headless shares one profile per user by default, which two
+    # concurrent conversions will corrupt/deadlock over. -env:UserInstallation
+    # points each invocation at its own throwaway profile inside out_dir
+    # (itself a fresh temp directory per call), so requests never collide.
+    # Path.as_uri() (not a hand-built "file://" + as_posix()) is what makes
+    # this correct on Windows too, where a bare as_posix() omits the leading
+    # slash the file:// scheme needs (verified against a real soffice.exe).
+    profile_dir = out_dir / "lo-profile"
+    try:
+        result = subprocess.run(
+            [
+                binary,
+                "--headless",
+                "--norestore",
+                f"-env:UserInstallation={profile_dir.as_uri()}",
+                "--convert-to",
+                "pdf",
+                "--outdir",
+                str(out_dir),
+                str(source),
+            ],
+            capture_output=True,
+            timeout=settings.office_preview_timeout_seconds,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise ConversionError(
+            "문서를 PDF로 변환하는 데 시간이 너무 오래 걸립니다. 다운로드 후 확인하세요."
+        ) from exc
+
+    produced = out_dir / f"{source.stem}.pdf"
+    if result.returncode != 0 or not produced.is_file():
+        detail = result.stderr.decode("utf-8", "ignore").strip()[:300]
+        raise ConversionError(
+            "문서를 PDF로 변환하지 못했습니다. 다운로드 후 확인하세요."
+            + (f" ({detail})" if detail else "")
+        )
+    return produced

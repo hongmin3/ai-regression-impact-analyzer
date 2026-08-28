@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
+import type { DragEvent } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { api, sha256Hex } from '../api'
+import { api, parseFileName, sha256Hex, todayIso } from '../api'
 import {
   Alert,
   Card,
@@ -37,7 +38,7 @@ export default function DocumentDetail() {
   const [uploading, setUploading] = useState(false)
   const [editingDoc, setEditingDoc] = useState(false)
   const [editingVersion, setEditingVersion] = useState<Version | null>(null)
-  const [previewing, setPreviewing] = useState<Version | null>(null)
+  const [previewVersionId, setPreviewVersionId] = useState<string | null>(null)
   const [confirm, setConfirm] = useState<{
     title: string
     message: string
@@ -66,6 +67,19 @@ export default function DocumentDetail() {
     void load()
   }, [load])
 
+  useEffect(() => {
+    if (!doc) return
+    setPreviewVersionId((prev) => {
+      if (prev && doc.versions.some((v) => v.id === prev)) return prev
+      const current = doc.versions.find(
+        (v) => v.id === doc.current_version_id && v.can_preview,
+      )
+      if (current) return current.id
+      const firstPreviewable = doc.versions.find((v) => v.can_preview)
+      return firstPreviewable ? firstPreviewable.id : null
+    })
+  }, [doc])
+
   async function act(fn: () => Promise<void>, message: string) {
     setBusyAction(true)
     setError(null)
@@ -86,6 +100,7 @@ export default function DocumentDetail() {
   if (!doc) return <Loading />
 
   const archived = doc.status === 'archived'
+  const previewVersion = doc.versions.find((v) => v.id === previewVersionId) ?? null
 
   return (
     <>
@@ -216,6 +231,40 @@ export default function DocumentDetail() {
         </div>
       </div>
 
+      <Card
+        title="매뉴얼 뷰어"
+        sub={
+          previewVersion
+            ? `${previewVersion.version ?? previewVersion.revision} · ${previewVersion.stored_file.original_file_name}`
+            : undefined
+        }
+      >
+        {previewVersion ? (
+          <>
+            <div className="viewer-toolbar">
+              <a className="btn btn-sm" href={api.downloadUrl(doc.id, previewVersion.id)}>
+                다운로드
+              </a>
+              {previewVersion.id !== doc.current_version_id && (
+                <span className="faint small">
+                  Current 버전이 아닌 다른 버전을 보고 있습니다. 아래 이력에서 전환할 수
+                  있습니다.
+                </span>
+              )}
+            </div>
+            <iframe
+              className="preview-frame"
+              src={api.previewUrl(doc.id, previewVersion.id)}
+              title="manual viewer"
+            />
+          </>
+        ) : (
+          <Empty title="미리보기를 지원하지 않는 문서입니다">
+            이 파일 형식은 뷰어로 열 수 없습니다. "다운로드" 로 확인하세요.
+          </Empty>
+        )}
+      </Card>
+
       <Card title="Revision History" sub={`${doc.versions.length}건 — 최신순`}>
         {doc.versions.length === 0 ? (
           <Empty title="아직 업로드된 버전이 없습니다">
@@ -309,10 +358,11 @@ export default function DocumentDetail() {
                     {v.can_preview && (
                       <button
                         type="button"
-                        className="btn-sm"
-                        onClick={() => setPreviewing(v)}
+                        className={v.id === previewVersionId ? 'btn-sm btn-primary' : 'btn-sm'}
+                        disabled={v.id === previewVersionId}
+                        onClick={() => setPreviewVersionId(v.id)}
                       >
-                        미리보기
+                        {v.id === previewVersionId ? '뷰어에 표시 중' : '뷰어로 보기'}
                       </button>
                     )}
                     {!v.is_current && v.status === 'active' && (
@@ -437,30 +487,6 @@ export default function DocumentDetail() {
         />
       )}
 
-      {previewing && (
-        <Modal
-          title={`미리보기 — ${previewing.stored_file.original_file_name}`}
-          onClose={() => setPreviewing(null)}
-          wide
-          footer={
-            <>
-              <a className="btn" href={api.downloadUrl(doc.id, previewing.id)}>
-                다운로드
-              </a>
-              <button type="button" onClick={() => setPreviewing(null)}>
-                닫기
-              </button>
-            </>
-          }
-        >
-          <iframe
-            className="preview-frame"
-            src={api.previewUrl(doc.id, previewing.id)}
-            title="document preview"
-          />
-        </Modal>
-      )}
-
       {confirm && (
         <ConfirmDialog
           title={confirm.title}
@@ -497,12 +523,13 @@ function UploadForm({
   const [version, setVersion] = useState('')
   const [documentNumber, setDocumentNumber] = useState('')
   const [language, setLanguage] = useState('')
-  const [revisionDate, setRevisionDate] = useState('')
+  const [revisionDate, setRevisionDate] = useState(todayIso())
   const [revisionDescription, setRevisionDescription] = useState('')
   const [comment, setComment] = useState('')
   const [setAsCurrent, setSetAsCurrent] = useState(true)
   const [duplicates, setDuplicates] = useState<DuplicateFileInfo[] | null>(null)
   const [hashing, setHashing] = useState(false)
+  const [dragActive, setDragActive] = useState(false)
   const { busy, error, setError, onSubmit } = useAsyncAction()
 
   const maxBytes = settings.max_upload_mb * 1024 * 1024
@@ -527,6 +554,16 @@ function UploadForm({
       return
     }
 
+    // Best-effort guess from the file name. Formats are never enforced (see the
+    // hint text below), so anything not found is simply left blank for the user
+    // to fill in -- except the Revision Date, which defaults to today.
+    const guess = parseFileName(selected.name)
+    setVersion(guess.version ?? '')
+    setRevision(guess.revision ?? '')
+    setDocumentNumber(guess.documentNumber ?? '')
+    setLanguage(guess.language ?? '')
+    setRevisionDate(guess.revisionDate ?? todayIso())
+
     // Hash locally so the duplicate warning appears before the bytes are sent.
     setHashing(true)
     try {
@@ -537,6 +574,12 @@ function UploadForm({
     } finally {
       setHashing(false)
     }
+  }
+
+  function onDrop(e: DragEvent<HTMLLabelElement>) {
+    e.preventDefault()
+    setDragActive(false)
+    void pick(e.dataTransfer.files?.[0] ?? null)
   }
 
   const submit = onSubmit(async () => {
@@ -587,16 +630,33 @@ function UploadForm({
           label="파일 *"
           hint={`최대 ${settings.max_upload_mb} MB · 허용 확장자: ${settings.allowed_extensions.join(', ')}`}
         >
-          <input
-            type="file"
-            onChange={(e) => void pick(e.target.files?.[0] ?? null)}
-            required
-          />
+          <label
+            className={dragActive ? 'dropzone is-active' : 'dropzone'}
+            onDragOver={(e) => {
+              e.preventDefault()
+              setDragActive(true)
+            }}
+            onDragLeave={(e) => {
+              e.preventDefault()
+              setDragActive(false)
+            }}
+            onDrop={onDrop}
+          >
+            <input
+              type="file"
+              onChange={(e) => void pick(e.target.files?.[0] ?? null)}
+              required
+            />
+            <span className="dropzone-text">
+              {file
+                ? `${file.name} · ${fmtBytes(file.size)}`
+                : '파일을 여기로 끌어다 놓거나 클릭해서 선택하세요'}
+            </span>
+          </label>
         </Field>
-        {file && (
+        {file && hashing && (
           <p className="small muted" style={{ marginTop: -6 }}>
-            {file.name} · {fmtBytes(file.size)}
-            {hashing && ' · SHA-256 계산 중...'}
+            SHA-256 계산 중...
           </p>
         )}
 
@@ -666,7 +726,8 @@ function UploadForm({
 
         <p className="small faint" style={{ marginTop: -4 }}>
           Version 과 Revision 형식은 시스템이 강제하지 않습니다. 문서에 적힌 값을 그대로
-          입력하세요. 둘 중 하나는 필수입니다.
+          입력하세요. 둘 중 하나는 필수입니다. 파일명에서 추정 가능한 값은 자동으로
+          채워지며, 다르면 직접 수정하면 됩니다.
         </p>
 
         <Field label="Revision Description" hint="이번 개정에서 변경된 내용">

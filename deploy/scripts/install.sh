@@ -18,6 +18,8 @@
 #                  (default: none -- the site answers on the host's bare IP)
 #   SKIP_UFW=1     do not add the firewall rule
 #   SKIP_NGINX=1   do not install/configure nginx
+#   SKIP_OFFICE_PREVIEW=1  do not install LibreOffice (doc/xls/ppt preview
+#                          then falls back to download-only, same as today)
 
 set -Eeuo pipefail
 
@@ -62,6 +64,13 @@ for pkg in python3-venv python3-pip rsync; do
 done
 if [[ "${SKIP_NGINX:-0}" != "1" ]]; then
     dpkg -s nginx >/dev/null 2>&1 || NEEDED+=(nginx)
+fi
+if [[ "${SKIP_OFFICE_PREVIEW:-0}" != "1" ]]; then
+    # Writer/Calc/Impress cover doc(x)/xls(x)/ppt(x); the full `libreoffice`
+    # meta-package pulls in far more (Draw, Base, ...) than preview needs.
+    for pkg in libreoffice-writer libreoffice-calc libreoffice-impress; do
+        dpkg -s "$pkg" >/dev/null 2>&1 || NEEDED+=("$pkg")
+    done
 fi
 if ((${#NEEDED[@]})); then
     log "설치: ${NEEDED[*]}"
@@ -231,4 +240,6 @@ cat <<EOF
   DATA_ROOT  $DATA_ROOT
   DB         $DB_NAME (role: $DB_USER)
   PORT       127.0.0.1:$BACKEND_PORT  (외부는 nginx 80만 노출)
+
+오피스 문서(doc/xls/ppt) 미리보기: $(command -v soffice >/dev/null && echo "사용 가능 (LibreOffice 설치됨)" || echo "사용 불가 -- 다운로드로만 확인 가능")
 EOF

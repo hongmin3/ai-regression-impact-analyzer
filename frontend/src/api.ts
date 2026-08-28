@@ -269,3 +269,113 @@ export async function sha256Hex(file: File): Promise<string | null> {
     return null
   }
 }
+
+// --- best-effort metadata guess from a file name --------------------------- //
+// Revision/Version/Document Number formats are never enforced anywhere in this
+// system (see the upload form's own hint text), so this is a heuristic, not a
+// parser for one true format. Tune the regexes once real file-naming samples
+// from this deployment are available.
+export interface ParsedFileMeta {
+  version: string | null
+  revision: string | null
+  documentNumber: string | null
+  language: string | null
+  revisionDate: string | null
+}
+
+const LANGUAGE_CODES = new Set([
+  'KO', 'KR', 'EN', 'US', 'JA', 'JP', 'ZH', 'CN', 'TW', 'DE', 'FR', 'ES', 'IT', 'RU', 'VI', 'TH', 'PT',
+])
+
+// NOT \b: JS treats '_' as a word character, so \b fails to separate "_KO" or
+// "_20260315" -- exactly the underscore-joined style real file names use.
+// "boundary" here means start/end of string or any non-alphanumeric char.
+const NON_ALNUM = 'A-Za-z0-9'
+
+function boundedPattern(core: string): RegExp {
+  return new RegExp(`(?:^|[^${NON_ALNUM}])(${core})(?=$|[^${NON_ALNUM}])`, 'i')
+}
+
+/** Find `core` (bounded on both sides, see `boundedPattern`) in `text`, cut
+ *  the match out (replaced by a space so surrounding tokens don't fuse), and
+ *  return the matched text or null. Search-and-remove instead of splitting
+ *  into tokens up front, because real file names glue fields together with
+ *  '.' as often as with '_' or '-' (e.g. "...Manual.V1.0.12W1_KO.pdf" -- the
+ *  version sits right after a dot, not a token boundary). */
+function extract(text: string, core: string): { match: string | null; rest: string } {
+  const m = text.match(boundedPattern(core))
+  if (!m || m.index === undefined) return { match: null, rest: text }
+  // group 1 (the real value) may be preceded by a consumed boundary char, so
+  // its start can be 0 or 1 past m.index -- m[0] vs m[1] length says which.
+  const start = m.index + (m[0].length - m[1].length)
+  const end = start + m[1].length
+  const rest = text.slice(0, start) + ' ' + text.slice(end)
+  return { match: m[1], rest }
+}
+
+export function parseFileName(fileName: string): ParsedFileMeta {
+  let text = fileName.replace(/\.[^./\\]+$/, '')
+
+  const result: ParsedFileMeta = {
+    version: null,
+    revision: null,
+    documentNumber: null,
+    language: null,
+    revisionDate: null,
+  }
+
+  const dateMatch = text.match(boundedPattern('(20\\d{2})[.-]?(\\d{2})[.-]?(\\d{2})'))
+  if (dateMatch && dateMatch.index !== undefined) {
+    const [whole, dateText, y, m, d] = dateMatch
+    result.revisionDate = `${y}-${m}-${d}`
+    const start = dateMatch.index + (whole.length - dateText.length)
+    text = text.slice(0, start) + ' ' + text.slice(start + dateText.length)
+  }
+
+  const version = extract(text, 'v\\d[\\d.]*[a-z0-9]*')
+  if (version.match) {
+    result.version = version.match
+    text = version.rest
+  }
+
+  const revLong = extract(text, 'rev\\.?\\s?[a-z0-9.]+')
+  const revision = revLong.match !== null ? revLong : extract(text, 'r\\d+[a-z]?')
+  if (revision.match) {
+    result.revision = revision.match.trim()
+    text = revision.rest
+  }
+
+  const language = extract(text, [...LANGUAGE_CODES].join('|'))
+  if (language.match) {
+    result.language = language.match.toUpperCase()
+    text = language.rest
+  }
+
+  // A prefix-dash-digits code (e.g. "OM-80017") is a common document-number
+  // shape, but the dash is also a token separator -- check for it as one
+  // bounded unit before falling back to plain tokens.
+  const docCode = extract(text, '[a-z]{1,6}-\\d{2,}[a-z0-9-]*')
+  if (docCode.match) {
+    result.documentNumber = docCode.match
+    text = docCode.rest
+  } else {
+    // Whatever survives: the first leftover token that mixes letters and
+    // digits is the best guess at a document number. Pure-word tokens
+    // (product / document names) and pure-digit tokens are left alone --
+    // too likely to be noise rather than an actual document number.
+    const leftoverTokens = text.split(/[^A-Za-z0-9]+/).filter(Boolean)
+    const docToken = leftoverTokens.find(
+      (t) => t.length >= 4 && /[0-9]/.test(t) && /[a-z]/i.test(t),
+    )
+    if (docToken) result.documentNumber = docToken
+  }
+
+  return result
+}
+
+export function todayIso(): string {
+  const now = new Date()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+  return `${now.getFullYear()}-${month}-${day}`
+}
