@@ -1,0 +1,28 @@
+app:
+  name: "AI Regression Impact Analyzer"
+  host: "0.0.0.0"
+  port: 12000
+  locale: "ko_KR"
+
+storage:
+  database_url: "sqlite:///data/app.db"
+  upload_dir: "data/uploads"
+  specification_dir: "data/specifications"
+  testcase_dir: "data/testcases"
+  index_dir: "data/indexes"
+  report_dir: "output/reports"
+  export_dir: "output/exports"
+  log_dir: "output/logs"
+
+retrieval:
+  engine: "bm25"
+  specification_top_k: 8
+  candidate_limit: 150
+
+analysis:
+  recommended_confidence: 0.80
+  review_confidence: 0.60
+  max_retries: 3
+  retry_min_seconds: 1
+  retry_max_seconds: 10
+  cache_enabled: true

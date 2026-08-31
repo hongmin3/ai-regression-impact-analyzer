@@ -1,0 +1,25 @@
+# Akela runtime cache (generated per run, not source of truth)
+akela/runs/
+.akela/
+
+# Common
+__pycache__/
+*.pyc
+.venv/
+node_modules/
+.env
+.env.*
+!.env.example
+.deploy.env
+data/uploads/
+data/specifications/
+data/testcases/
+data/indexes/
+data/*.db
+output/reports/
+output/exports/
+output/logs/
+*.log
+app.pid
+output-bootstrap.log
+akela/.cache/
