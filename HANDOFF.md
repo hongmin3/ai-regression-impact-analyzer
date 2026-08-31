@@ -34,10 +34,13 @@ SW 변경사항과 제품 사양서/Manual(PDF 또는 Word `.docx`), Test Case E
 - 실제 TC ID 및 Specification Chunk ID 교차검증
 - Confidence Threshold 분류
 - SQLite Metadata/Cache
-- Responsive HTML Report와 CSV Export
+- Responsive HTML Report와 CSV/XLSX Export
+- SQLite `analyses` 기반 Persistent Job 상태와 분석 이력/Impact 집계 화면
+- 서버 재기동 시 완료 결과는 유지하고 QUEUED/RUNNING 작업은 중단 실패로 명시
+- Gemini token usage 파싱·Logging 및 Mock 검증
 - Gemini Key를 `secrets.txt` / `secrets.json` / `.env` / OS 환경변수 어디에 넣어도 인식 (우선순위 순)
 - `/config/status`, `/config/reload`로 Key 설정 여부 확인 및 재시작 없는 재적용
-- 로컬 및 서버 자동 테스트 `25 passed`
+- 로컬 자동 테스트 `29 passed` (이번 변경 서버 배포 전)
 - 2026-08-31 서버 배포 완료, 기존 PID `1208181`은 재시작하지 않았으므로 새 기능은 다음 정상 기동부터 활성화
 - GitHub Public repository push 완료
 - Ubuntu 포트 `12000`에서 임시 사용자 프로세스로 실행 확인
@@ -48,12 +51,11 @@ SW 변경사항과 제품 사양서/Manual(PDF 또는 Word `.docx`), Test Case E
 
 1. 사용자가 서버 `secrets.txt`에 `GEMINI_API_KEY` 입력 (로컬은 `.env`에 이미 값이 있어 동작 중)
 2. 실제 사양서/TC/변경 PDF 또는 Word `.docx`로 Gemini End-to-End 검증
-3. Gemini 응답 토큰 usage 파싱/Logging과 XLSX Export의 집중 Mock 테스트 보강 (기본 구현은 포함됨)
-4. Persistent Job 상태 저장 — Storage 메서드는 추가됐으나 `app/web/routes.py`의 `jobs: dict`가 여전히 메모리만 사용한다.
-7. UI에서 상세 Candidate/Impact 집계 화면 강화 — 미착수. 분석 이력 목록 화면이 없다.
-8. TC 컬럼 매핑 설정 UI 추가 — 미착수
-9. 사용자 승인 후 systemd 등록
-10. 네트워크 접근 정책 담당자 확인 후 팀원 접속 검증
+3. 실제 Gemini 응답의 usage metadata 필드가 SDK 버전과 일치하는지 E2E 확인
+4. 분석 이력의 검색·필터·페이지네이션 보강
+5. TC 컬럼 매핑 설정 UI 추가 — 미착수
+6. 사용자 승인 후 systemd 등록
+7. 네트워크 접근 정책 담당자 확인 후 팀원 접속 검증
 
 ## 6. systemd 승인 대기안
 
@@ -131,7 +133,6 @@ SSH 비밀번호는 어떤 파일에도 저장하지 않는다. 기존 SSH key/a
 
 - 실제 Gemini API Key 기반 E2E는 아직 수행되지 않았다.
 - `akela` CLI가 개발 PC에 설치되어 있지 않아 `akela compile` / `akela log`를 실행할 수 없다. 직전 slice는 knowledge 3개 섹션이 전부 `general-scope`로 dropped되어 비어 있다. scoping은 보류 결정.
-- 현재 작업 상태는 프로세스 메모리에 보관된다.
-- XLSX가 아닌 CSV Export만 제공한다.
+- 완료된 분석과 상태는 SQLite에 저장되지만 BackgroundTasks 자체는 재시작 후 재개되지 않는다.
 - Specification Index는 등록 시 Chunk 수를 기록하지만 직렬화된 BM25 인덱스 재사용은 추가 개선이 필요하다.
 - FastAPI BackgroundTasks는 대규모 동시 작업용 Queue가 아니다.

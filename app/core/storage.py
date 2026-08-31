@@ -92,6 +92,16 @@ class Storage:
             values.append(value)
         return values
 
+    def fail_incomplete_analyses(self, error: str = "서버 재시작으로 분석이 중단되었습니다.") -> int:
+        """A process restart cannot resume in-memory BackgroundTasks safely."""
+        now = datetime.now(timezone.utc).isoformat()
+        with self.connect() as db:
+            cursor = db.execute(
+                "UPDATE analyses SET status='FAILED',error=?,updated_at=? WHERE status IN ('QUEUED','RUNNING')",
+                (error, now),
+            )
+            return cursor.rowcount
+
     def cache_get(self, key: str) -> dict | None:
         with self.connect() as db:
             row = db.execute("SELECT response_json FROM ai_cache WHERE cache_key=?", (key,)).fetchone()

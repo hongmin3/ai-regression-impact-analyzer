@@ -16,7 +16,6 @@ from app.parsers.document_parser import parse_document
 router = APIRouter()
 templates = Jinja2Templates(directory=str(get_settings().root / "app" / "web" / "templates"))
 storage = Storage()
-jobs: dict[str, dict] = {}
 
 
 def _save_upload(upload: UploadFile, directory: Path, allowed: set[str]) -> Path:
@@ -39,6 +38,20 @@ def knowledge(request: Request):
     return templates.TemplateResponse(request, "knowledge.html", {"specs": storage.list_documents("specification"), "testcases": storage.list_documents("testcase")})
 
 
+@router.get("/analyses", response_class=HTMLResponse)
+def analysis_history(request: Request):
+    analyses = storage.list_analyses()
+    for item in analyses:
+        result = item.get("result") or {}
+        decisions = result.get("decisions") or []
+        item["recommended_count"] = sum(bool(decision.get("recommended")) for decision in decisions)
+        item["impact_counts"] = {
+            impact: sum(decision.get("impact") == impact for decision in decisions)
+            for impact in ("HIGH", "MEDIUM", "LOW", "NONE")
+        }
+    return templates.TemplateResponse(request, "analyses.html", {"analyses": analyses})
+
+
 @router.post("/knowledge/specification")
 def register_specification(file: UploadFile = File(...), product: str = Form(...), version: str = Form(""), revision: str = Form("")):
     settings = get_settings()
@@ -57,11 +70,11 @@ def register_testcase(file: UploadFile = File(...), product: str = Form(...), ve
 
 def _run_job(job_id: str, change: Path, specification: Path, testcase: Path) -> None:
     try:
-        jobs[job_id] = {"status": "RUNNING"}
-        result = RegressionAnalyzer().run(change, specification, testcase)
-        jobs[job_id] = {"status": "DONE", "result": result.model_dump(mode="json")}
+        storage.update_analysis(job_id, "RUNNING")
+        result = RegressionAnalyzer().run(change, specification, testcase, analysis_id=job_id)
+        storage.update_analysis(job_id, "DONE", result=result.model_dump(mode="json"))
     except Exception as exc:
-        jobs[job_id] = {"status": "FAILED", "error": str(exc)}
+        storage.update_analysis(job_id, "FAILED", error=str(exc))
 
 
 @router.post("/analyses")
@@ -72,16 +85,17 @@ def start_analysis(background_tasks: BackgroundTasks, change_file: UploadFile = 
         raise HTTPException(404, "선택한 사양서 또는 TC를 찾을 수 없습니다.")
     change = _save_upload(change_file, get_settings().path("storage.upload_dir"), {".pdf", ".docx"})
     job_id = uuid.uuid4().hex[:12]
-    jobs[job_id] = {"status": "QUEUED"}
+    storage.create_analysis(job_id)
     background_tasks.add_task(_run_job, job_id, change, Path(specification["path"]), Path(testcase["path"]))
     return {"job_id": job_id, "status_url": f"/analyses/{job_id}"}
 
 
 @router.get("/analyses/{job_id}")
 def job_status(job_id: str):
-    if job_id not in jobs:
+    job = storage.get_analysis(job_id)
+    if not job:
         raise HTTPException(404, "분석 작업을 찾을 수 없습니다.")
-    return jobs[job_id]
+    return job
 
 
 @router.get("/config/status")

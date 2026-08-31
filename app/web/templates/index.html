@@ -16,7 +16,7 @@
 </section>
 <script>
 const f=document.querySelector('#analysis-form'),s=document.querySelector('#status');
-f.addEventListener('submit',async e=>{e.preventDefault();s.textContent='업로드 중...';const r=await fetch('/analyses',{method:'POST',body:new FormData(f)});const d=await r.json();if(!r.ok){s.textContent=d.detail||'실패';return}const timer=setInterval(async()=>{const q=await(await fetch(d.status_url)).json();s.textContent='상태: '+q.status;if(q.status==='DONE'){clearInterval(timer);const id=q.result.analysis_id;s.innerHTML=`완료 · 추천 ${q.result.decisions.filter(x=>x.recommended).length}건 · <a href="/reports/regression-${id}.html" target="_blank">HTML Report</a> · <a href="/exports/regression-${id}.csv">CSV Export</a>`}if(q.status==='FAILED'){clearInterval(timer);s.textContent='실패: '+q.error}},1200)});
+f.addEventListener('submit',async e=>{e.preventDefault();s.textContent='업로드 중...';const r=await fetch('/analyses',{method:'POST',body:new FormData(f)});const d=await r.json();if(!r.ok){s.textContent=d.detail||'실패';return}const timer=setInterval(async()=>{const q=await(await fetch(d.status_url)).json();s.textContent='상태: '+q.status;if(q.status==='DONE'){clearInterval(timer);const id=q.result.analysis_id;s.innerHTML=`완료 · 추천 ${q.result.decisions.filter(x=>x.recommended).length}건 · <a href="/reports/regression-${id}.html" target="_blank">HTML Report</a> · <a href="/exports/regression-${id}.csv">CSV</a> · <a href="/exports/regression-${id}.xlsx">XLSX</a>`}if(q.status==='FAILED'){clearInterval(timer);s.textContent='실패: '+q.error}},1200)});
 </script>
 <script>
 const kb=document.querySelector('#keystatus'),kt=kb.querySelector('span');

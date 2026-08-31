@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block content %}
+<section>
+  <h2>분석 이력</h2>
+  {% if analyses %}
+  <div class="table-wrap"><table class="history">
+    <thead><tr><th>시각</th><th>상태</th><th>변경 문서</th><th>Candidate</th><th>추천</th><th>Impact</th><th>결과</th></tr></thead>
+    <tbody>{% for item in analyses %}<tr>
+      <td>{{ item.created_at[:19].replace('T', ' ') }}</td>
+      <td><span class="badge {{ item.status }}">{{ item.status }}</span></td>
+      <td>{{ item.result.change_file if item.result else '-' }}</td>
+      <td>{{ item.result.candidate_tc if item.result else '-' }}</td>
+      <td>{{ item.recommended_count if item.result else '-' }}</td>
+      <td>{% if item.result %}H {{ item.impact_counts.HIGH }} · M {{ item.impact_counts.MEDIUM }} · L {{ item.impact_counts.LOW }}{% else %}-{% endif %}</td>
+      <td>{% if item.status == 'DONE' %}<a href="/reports/regression-{{ item.id }}.html" target="_blank">Report</a> · <a href="/exports/regression-{{ item.id }}.csv">CSV</a> · <a href="/exports/regression-{{ item.id }}.xlsx">XLSX</a>{% elif item.error %}{{ item.error }}{% else %}-{% endif %}</td>
+    </tr>{% endfor %}</tbody>
+  </table></div>
+  {% else %}<p>저장된 분석 이력이 없습니다.</p>{% endif %}
+</section>
+{% endblock %}

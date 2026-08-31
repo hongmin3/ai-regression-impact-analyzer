@@ -7,7 +7,7 @@ SW 변경사항과 제품 사양서/Manual(PDF 또는 Word `.docx`), Test Case E
 ```text
 Change PDF/DOCX → Rule Change Analysis → Specification BM25 Retrieval
            → TC Candidate Selection → Gemini Semantic Decision
-           → Schema/Reference/Confidence Validation → HTML + CSV
+           → Schema/Reference/Confidence Validation → HTML + CSV + XLSX
 ```
 
 파싱·중복 제거·검색·검증·집계·Report 생성은 Python Rule Engine이 수행합니다. 의미적인 변경 영향, Regression 필요성, 검증 포인트만 Gemini가 판단합니다. 사양서 전체나 TC 전체를 Gemini에 보내지 않습니다.
@@ -61,7 +61,8 @@ cd /home/ubuntu/ai-regression-impact-analyzer
 1. `Knowledge` 메뉴에서 제품명, Version, Revision과 사양서/Manual PDF 또는 Word `.docx`를 등록합니다.
 2. 제품명, Version, TC Set Name과 `.xlsx` Test Case를 등록합니다.
 3. `분석`에서 변경사항 PDF 또는 Word `.docx`와 등록된 사양서·TC를 선택합니다.
-4. `분석 실행` 후 HTML Report를 열거나 CSV를 내려받습니다.
+4. `분석 실행` 후 HTML Report를 열거나 CSV/XLSX를 내려받습니다.
+5. `분석 이력` 메뉴에서 서버 재시작 후에도 완료된 결과와 Impact 집계를 다시 확인합니다.
 
 레거시 Word `.doc` 형식은 지원하지 않으므로 Word에서 `.docx`로 저장한 뒤 등록합니다. TC Excel은 `TC ID`, `Category`, `Feature`, `Precondition`, `Step`, `Expected Result`, `Result`, `Remark`와 일반적인 한글/영문 별칭을 인식합니다. `TC ID`는 필수입니다.
 
@@ -91,7 +92,7 @@ Unit Test는 Gemini Mock Response를 사용하므로 API 비용이 없습니다.
 - 비밀정보: `secrets.txt` 또는 `secrets.json` (`.env`도 계속 지원)
 - 앱 DB: `data/app.db`
 - 업로드: `data/uploads`, `data/specifications`, `data/testcases`
-- 보고서/CSV: `output/reports`, `output/exports`
+- 보고서/CSV/XLSX: `output/reports`, `output/exports`
 - 로그: `output/logs/app.log`
 
 Confidence, Top-K, Candidate 수, Retry 횟수는 `config.yaml`에서 변경합니다.
