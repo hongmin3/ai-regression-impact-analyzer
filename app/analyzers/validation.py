@@ -29,6 +29,28 @@ def validate_decisions(decisions: list[ImpactDecision], cases: list[TestCase], c
     return result
 
 
+def attach_specification_references(decisions: list[ImpactDecision], chunks: list[SpecificationChunk], doc_labels: dict[str, str]) -> list[ImpactDecision]:
+    """chunk_id 같은 내부 참조를 사람이 읽을 수 있는 사양서 설명으로 바꾼다.
+
+    Gemini에게 맡기지 않고 실제 chunk 메타데이터로만 조립하므로 환각 위험이 없다.
+    """
+    chunk_by_id = {chunk.chunk_id: chunk for chunk in chunks}
+    for decision in decisions:
+        decision.specification_reference = ""
+        for ref in decision.relevant_specifications:
+            chunk = chunk_by_id.get(ref)
+            if not chunk:
+                continue
+            parts = [doc_labels.get(chunk.document_id, chunk.document_id)]
+            heading = chunk.heading.strip()
+            if heading:
+                parts.append(heading[:60])
+            parts.append(f"p.{chunk.page}")
+            decision.specification_reference = " · ".join(parts)
+            break
+    return decisions
+
+
 def validate_draft_test_cases(drafts: list[DraftTestCase], chunks: list[SpecificationChunk], limit: int = 20) -> list[DraftTestCase]:
     valid_refs = {chunk.chunk_id for chunk in chunks}
     for draft in drafts:

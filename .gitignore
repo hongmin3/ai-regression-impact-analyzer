@@ -16,6 +16,8 @@ data/specifications/
 data/testcases/
 data/indexes/
 data/*.db
+data/spec_sync_state.json
+data/spec_sync.lock
 output/reports/
 output/exports/
 output/generated_tc/

@@ -5,6 +5,18 @@
 <section>
   <label>제품별로 보기<select id="product-filter"><option value="">전체 제품</option>{% for p in products %}<option value="{{ p }}">{{ p }}</option>{% endfor %}</select></label>
 </section>
+<section>
+  <h2>동기화 상태</h2>
+  <div class="sync-status">
+    <div>
+      <b>[VXvue 사양서]</b>
+      마지막 동기화: {% if spec_sync %}<span data-utc-time="{{ spec_sync.synced_at }}">{{ spec_sync.synced_at }}</span>{% else %}없음 (수동 등록만 사용됨){% endif %}
+      · 상태: {{ spec_sync.status if spec_sync else '-' }}
+      {% if spec_sync and spec_sync.detail %}<br><small>{{ spec_sync.detail }}</small>{% endif %}
+    </div>
+    <p class="hint">Windows PC의 작업 스케줄러가 매주 월요일 07:30(KST)에 <code>scripts/sync_vxvue_spec.py</code>를 자동 실행합니다. 지금 바로 실행하려면 그 PC에서 같은 명령을 직접 실행하세요.</p>
+  </div>
+</section>
 <div class="grid">
   <section>
     <h2>사양서 / Manual 등록</h2>

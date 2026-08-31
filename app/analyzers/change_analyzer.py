@@ -3,8 +3,26 @@ from __future__ import annotations
 import re
 
 from app.core.schemas import ChangeAnalysis
+from app.retrieval.bm25_retriever import BM25Retriever
 
 RISK_WORDS = ("저장", "설정", "호환", "마이그레이션", "DICOM", "인터페이스", "삭제", "변환", "workflow", "database", "UI")
+
+
+def trim_by_relevance(text: str, query: str, top_k: int = 40) -> str:
+    """변경 문서가 크고 사용자 요청(query)이 있을 때, BM25로 관련성 높은 줄만 추려 Gemini에
+    보낼 텍스트 양(=토큰)을 줄인다. 이미 top_k줄 이하로 짧으면 원문을 그대로 둔다.
+
+    원본 등장 순서를 유지해 문맥이 뒤섞이지 않게 한다.
+    """
+    if not text or not query:
+        return text
+    lines = [line for line in text.splitlines() if len(line.strip()) > 2]
+    if len(lines) <= top_k:
+        return text
+    indexed = list(enumerate(lines))
+    results = BM25Retriever(indexed, lambda item: item[1]).search(query, top_k)
+    kept_indices = sorted(index for (index, _line), _score in results)
+    return "\n".join(lines[index] for index in kept_indices)
 
 
 def _normalize(text: str) -> str:

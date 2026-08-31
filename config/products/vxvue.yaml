@@ -1,0 +1,23 @@
+# VXvue 제품의 지식 동기화 설정. 이 파일은 제품 마스터 데이터(SQLite products 테이블)를
+# 대체하지 않는다 — "이 제품을 어떻게 동기화할지"만 담는다.
+product: VXvue
+version: "1.0"
+
+specification:
+  # alm_crawler: 별도 프로젝트(ALM 사양서 최신화 크롤링)가 Polarion에서 이미 수집한 PDF를 읽기만 한다.
+  source: alm_crawler
+  # 크롤러 프로젝트의 output 폴더. 크롤러 코드/설정은 건드리지 않고 이 경로만 읽는다.
+  crawler_output_dir: "C:/Users/2024980/Documents/자동화/ALM 사양서 최신화 크롤링/output"
+  filename_patterns:
+    - "(사양서) VXvue 사양서*.pdf"
+    - "(사양서) Licence Manager SRS 사양서*.pdf"
+
+testcase:
+  # 현재는 자동 동기화 없이 Knowledge 화면에서 수동 등록한다 (SharePoint 연동은 보류).
+  source: manual
+
+sync:
+  # 이 PC에 이미 등록된 ALM 크롤러 작업 스케줄러(VXvue_SRS_Spec_Automation, 매주 월 07:00 KST)보다
+  # 30분 늦게 실행해 크롤러가 끝날 시간을 확보한다.
+  day_of_week: "mon"
+  schedule_time: "07:30"

@@ -1,11 +1,29 @@
-from app.analyzers.change_analyzer import analyze_change_rules
+from app.analyzers.change_analyzer import analyze_change_rules, trim_by_relevance
 from app.analyzers.tc_candidate_selector import select_candidates
-from app.analyzers.validation import classify_confidence, validate_decisions, validate_draft_test_cases
+from app.analyzers.validation import attach_specification_references, classify_confidence, validate_decisions, validate_draft_test_cases
 from app.core.schemas import DraftTestCase, EvidenceLevel, Impact, ImpactDecision, RevisionMark, SpecificationChunk, TestCase
 
 
 def decision(confidence: float) -> ImpactDecision:
     return ImpactDecision(tc_id="TC-1", impact=Impact.HIGH, confidence=confidence, direct_impact=True, regression_needed=True, reason="설정 저장 변경", relevant_specifications=["spec-p1-0"], verification_points=["재실행"], recommended=True)
+
+
+def test_trim_by_relevance_keeps_short_text_untouched():
+    text = "로그인 화면 변경\nDICOM 전송 변경"
+    assert trim_by_relevance(text, "로그인", top_k=60) == text
+
+
+def test_trim_by_relevance_shrinks_large_text_to_relevant_lines():
+    unrelated = [f"관련 없는 설정 항목 {i}" for i in range(100)]
+    text = "\n".join(unrelated + ["로그인 화면에 지문 인증 옵션을 추가한다."])
+    trimmed = trim_by_relevance(text, "지문 인증 로그인", top_k=10)
+    assert "지문 인증 옵션" in trimmed
+    assert len(trimmed.splitlines()) <= 10
+
+
+def test_trim_by_relevance_no_query_returns_original():
+    text = "\n".join(f"line {i}" for i in range(100))
+    assert trim_by_relevance(text, "", top_k=10) == text
 
 
 def test_candidate_search():
@@ -69,6 +87,22 @@ def test_user_notes_take_priority_position_over_document_lines():
     change = "Display 설정 저장 방식을 변경한다."
     result = analyze_change_rules(change, user_notes="로그인 기능만 집중 확인")
     assert result.changed_features[0] == "로그인 기능만 집중 확인"
+
+
+def test_attach_specification_references_builds_human_readable_label():
+    chunks = [SpecificationChunk(chunk_id="abc123-p348-0", document_id="abc123", page=348, heading="DAP Communication", text="...")]
+    doc_labels = {"abc123": "VXvue 사양서3"}
+    decisions = [decision(.9).model_copy(update={"relevant_specifications": ["abc123-p348-0"]})]
+
+    result = attach_specification_references(decisions, chunks, doc_labels)
+
+    assert result[0].specification_reference == "VXvue 사양서3 · DAP Communication · p.348"
+
+
+def test_attach_specification_references_blank_when_no_match():
+    decisions = [decision(.9).model_copy(update={"relevant_specifications": []})]
+    result = attach_specification_references(decisions, [], {})
+    assert result[0].specification_reference == ""
 
 
 def test_evidence_level_and_revision_mark_defaults():

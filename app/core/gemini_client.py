@@ -9,7 +9,7 @@ from google.genai import types
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from app.core.config import get_settings
-from app.core.schemas import ChangeAnalysis, DraftTestCase, GeminiAnalysisResponse, ImpactDecision, SpecificationChunk, TestCase
+from app.core.schemas import ChangeAnalysis, ChangeItem, DraftTestCase, GeminiAnalysisResponse, ImpactDecision, SpecificationChunk, TestCase
 from app.core.storage import Storage
 
 SYSTEM_INSTRUCTION = """당신은 QA Regression Semantic Decision Engine이다.
@@ -35,7 +35,20 @@ changed_features 중 제공된 test_cases 어디에서도 검증하지 않는 �
 이미 어떤 test_case가 다루고 있는 changed_feature는 draft_test_cases에 넣지 않는다.
 draft_test_cases의 각 필드는 changed_feature 원문이나 제공된 specifications 근거로만 채우고,
 근거가 없는 필드는 반드시 문자열 "확인 필요"만 쓴다. 팝업 문구, UI 위치, 예외 동작 등을 임의로 만들지 않는다.
-evidence_chunk_ids에는 제공된 specifications의 chunk_id만 사용한다."""
+evidence_chunk_ids에는 제공된 specifications의 chunk_id만 사용한다.
+
+change_items는 changed_features(원문에서 그대로 뽑은 줄들)를 사용자가 읽기 좋은 의미 단위로 묶은 것이다.
+서로 다른 변경/이슈를 하나로 합치지 말고, 같은 변경에 속한 줄들만 하나의 change_items 항목으로 묶는다.
+각 필드는 changed_features/user_notes 원문에 있는 내용만 옮기거나 요약하며, 원문에 없는 조건·수치·원인·수정
+내용을 새로 만들어내지 않는다. 해당 정보가 원문에 없으면 그 필드는 빈 문자열 또는 빈 리스트로 둔다.
+- feature: 무엇이 바뀌었는지 한 줄 요약
+- related_modules: 원문에 명시된 제품/모듈명만 (추정 금지)
+- change_type: 원문 표현을 바탕으로 "기능 개선"/"결함 수정"/"신규 기능" 등 가장 가까운 것 하나, 판단 불가하면 빈 문자열
+- issue/problem/cause/fix: 이슈 설명/기존 문제/원인/수정 내용이 원문에 있을 때만 채움
+- preconditions/reproduction_steps: 원문에 조건·재현 절차가 명시된 경우만
+- impact_area: 이 변경이 영향을 줄 수 있는 기능 영역(원문 또는 specifications 근거 기반)
+specification_reference와 evidence_level/revision_mark를 제외한 나머지 ImpactDecision 필드는 그대로 채우고,
+specification_reference는 항상 빈 문자열로 남긴다 (이후 파이프라인이 채운다)."""
 
 
 class GeminiClient:
@@ -46,6 +59,7 @@ class GeminiClient:
         self.request_count = 0
         self.token_usage: dict[str, int] = {}
         self.draft_test_cases: list[DraftTestCase] = []
+        self.change_items: list[ChangeItem] = []
 
     @retry(retry=retry_if_exception_type((TimeoutError, ConnectionError)), stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=10), reraise=True)
     def _request(self, prompt: str) -> dict:
@@ -63,6 +77,11 @@ class GeminiClient:
                 response_mime_type="application/json",
                 response_schema=GeminiAnalysisResponse,
                 temperature=0.1,
+                # 후보 TC가 많으면(예: candidate_limit=150) 응답 JSON이 커서 기본 한도에 잘릴 수 있어 명시적으로 올린다.
+                max_output_tokens=65536,
+                # Gemini 2.5의 내부 thinking 토큰이 max_output_tokens 예산을 함께 소비해 JSON이 잘리는
+                # 문제가 있었다. 구조화된 추출 작업이라 별도 추론 과정이 필요 없으므로 비활성화한다.
+                thinking_config=types.ThinkingConfig(thinking_budget=0),
             ),
         )
         usage = getattr(response, "usage_metadata", None)
@@ -71,8 +90,18 @@ class GeminiClient:
             "candidate_tokens": int(getattr(usage, "candidates_token_count", 0) or 0),
             "total_tokens": int(getattr(usage, "total_token_count", 0) or 0),
         }
-        payload = json.loads(response.text or "{}")
-        return {"decisions": payload.get("decisions", []), "draft_test_cases": payload.get("draft_test_cases", []), "token_usage": token_usage}
+        finish_reason = getattr(getattr(response, "candidates", [None])[0], "finish_reason", None)
+        try:
+            payload = json.loads(response.text or "{}")
+        except json.JSONDecodeError as exc:
+            hint = " (MAX_TOKENS로 잘렸을 가능성이 높습니다 — retrieval.candidate_limit을 낮춰보세요.)" if str(finish_reason) == "MAX_TOKENS" else ""
+            raise RuntimeError(f"Gemini 응답이 완전한 JSON이 아닙니다{hint}: {exc}") from exc
+        return {
+            "decisions": payload.get("decisions", []),
+            "draft_test_cases": payload.get("draft_test_cases", []),
+            "change_items": payload.get("change_items", []),
+            "token_usage": token_usage,
+        }
 
     def analyze(self, change: ChangeAnalysis, cases: list[TestCase], chunks: list[SpecificationChunk]) -> list[ImpactDecision]:
         payload = {
@@ -89,4 +118,5 @@ class GeminiClient:
         self.token_usage = {key: int(value) for key, value in raw.get("token_usage", {}).items()}
         values = raw.get("decisions", raw if isinstance(raw, list) else [])
         self.draft_test_cases = [DraftTestCase.model_validate(item) for item in raw.get("draft_test_cases", [])]
+        self.change_items = [ChangeItem.model_validate(item) for item in raw.get("change_items", [])]
         return [ImpactDecision.model_validate(item) for item in values]

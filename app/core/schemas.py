@@ -7,6 +7,18 @@ from pathlib import Path
 from pydantic import BaseModel, Field, field_validator
 
 
+ANALYSIS_STAGES: tuple[str, ...] = (
+    "입력 문서 분석",
+    "변경사항 추출",
+    "최신 사양서 조회",
+    "TC 후보 검색",
+    "AI 영향도 분석",
+    "Regression TC 선정",
+    "신규 TC 초안 검증",
+    "HTML 결과 생성",
+)
+
+
 class Impact(str, Enum):
     HIGH = "HIGH"
     MEDIUM = "MEDIUM"
@@ -36,9 +48,28 @@ class RevisionMark(str, Enum):
     UNVERIFIED = "UNVERIFIED"
 
 
+class ChangeItem(BaseModel):
+    """의미 단위로 묶은 변경사항 1건. 사용자 보고서의 Change Summary에 그대로 렌더링된다.
+
+    모든 필드는 changed_features 원문 근거로만 채운다 (근거 없으면 빈 문자열/빈 리스트).
+    """
+
+    feature: str = ""
+    related_modules: list[str] = Field(default_factory=list)
+    change_type: str = ""
+    issue: str = ""
+    preconditions: list[str] = Field(default_factory=list)
+    reproduction_steps: list[str] = Field(default_factory=list)
+    problem: str = ""
+    cause: str = ""
+    fix: str = ""
+    impact_area: str = ""
+
+
 class ChangeAnalysis(BaseModel):
     user_notes: str = ""
     changed_features: list[str] = Field(default_factory=list)
+    change_items: list[ChangeItem] = Field(default_factory=list)
     purpose: str = ""
     ui_changes: list[str] = Field(default_factory=list)
     interface_changes: list[str] = Field(default_factory=list)
@@ -101,6 +132,7 @@ class ImpactDecision(BaseModel):
     regression_needed: bool = False
     reason: str
     relevant_specifications: list[str] = Field(default_factory=list)
+    specification_reference: str = ""
     verification_points: list[str] = Field(default_factory=list)
     recommended: bool = False
     manual_review_required: bool = False
@@ -112,6 +144,7 @@ class ImpactDecision(BaseModel):
 class GeminiAnalysisResponse(BaseModel):
     decisions: list[ImpactDecision]
     draft_test_cases: list[DraftTestCase] = Field(default_factory=list)
+    change_items: list[ChangeItem] = Field(default_factory=list)
 
 
 class AnalysisResult(BaseModel):
@@ -128,6 +161,8 @@ class AnalysisResult(BaseModel):
     token_usage: dict[str, int] = Field(default_factory=dict)
     report_path: Path | None = None
     draft_tc_path: Path | None = None
+    spec_sync: dict | None = None
+    tc_sync: dict | None = None
 
     @property
     def recommended_count(self) -> int:

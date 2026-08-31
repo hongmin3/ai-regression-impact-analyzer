@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from app.core.config import get_settings
+from app.core.schemas import ANALYSIS_STAGES
 
 
 class Storage:
@@ -44,7 +45,22 @@ class Storage:
                     id INTEGER PRIMARY KEY AUTOINCREMENT, product TEXT NOT NULL, version TEXT NOT NULL,
                     created_at TEXT NOT NULL, UNIQUE(product, version)
                 );
+                CREATE TABLE IF NOT EXISTS sync_log (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT, product TEXT NOT NULL, kind TEXT NOT NULL,
+                    source TEXT NOT NULL, synced_at TEXT NOT NULL, status TEXT NOT NULL, detail TEXT NOT NULL DEFAULT ''
+                );
             """)
+            # analyses는 기존 배포에 이미 존재할 수 있어 ADD COLUMN으로 안전하게 확장한다 (SQLite는 컬럼 추가만 지원).
+            existing = {row["name"] for row in db.execute("PRAGMA table_info(analyses)")}
+            for column, ddl in (
+                ("stage", "TEXT"),
+                ("stage_index", "INTEGER"),
+                ("stage_total", "INTEGER"),
+                ("started_at", "TEXT"),
+                ("stage_updated_at", "TEXT"),
+            ):
+                if column not in existing:
+                    db.execute(f"ALTER TABLE analyses ADD COLUMN {column} {ddl}")
             now = datetime.now(timezone.utc).isoformat()
             for name in self.DEFAULT_PRODUCTS:
                 db.execute("INSERT OR IGNORE INTO products(name,created_at) VALUES(?,?)", (name, now))
@@ -111,8 +127,16 @@ class Storage:
         now = datetime.now(timezone.utc).isoformat()
         with self.connect() as db:
             db.execute(
-                "INSERT OR REPLACE INTO analyses(id,status,result_json,error,created_at,updated_at) VALUES(?,?,?,?,?,?)",
-                (analysis_id, status, None, None, now, now),
+                "INSERT OR REPLACE INTO analyses(id,status,result_json,error,created_at,updated_at,stage,stage_index,stage_total,started_at,stage_updated_at) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                (analysis_id, status, None, None, now, now, "대기 중", 0, len(ANALYSIS_STAGES), now, now),
+            )
+
+    def update_stage(self, analysis_id: str, index: int, name: str) -> None:
+        with self.connect() as db:
+            db.execute(
+                "UPDATE analyses SET stage=?, stage_index=?, stage_total=?, stage_updated_at=? WHERE id=?",
+                (name, index, len(ANALYSIS_STAGES), datetime.now(timezone.utc).isoformat(), analysis_id),
             )
 
     def update_analysis(self, analysis_id: str, status: str, result: dict | None = None, error: str | None = None) -> None:
@@ -178,3 +202,32 @@ class Storage:
     def cache_set(self, key: str, value: dict) -> None:
         with self.connect() as db:
             db.execute("INSERT OR REPLACE INTO ai_cache VALUES(?,?,?)", (key, json.dumps(value, ensure_ascii=False), datetime.now(timezone.utc).isoformat()))
+
+    def sync_start(self, product: str, kind: str, source: str) -> int:
+        with self.connect() as db:
+            cursor = db.execute(
+                "INSERT INTO sync_log(product,kind,source,synced_at,status,detail) VALUES(?,?,?,?,?,?)",
+                (product, kind, source, datetime.now(timezone.utc).isoformat(), "RUNNING", ""),
+            )
+            return int(cursor.lastrowid)
+
+    def sync_finish(self, sync_id: int, status: str, detail: str = "") -> None:
+        with self.connect() as db:
+            db.execute(
+                "UPDATE sync_log SET status=?, detail=?, synced_at=? WHERE id=?",
+                (status, detail, datetime.now(timezone.utc).isoformat(), sync_id),
+            )
+
+    def is_sync_running(self, product: str, kind: str) -> bool:
+        with self.connect() as db:
+            row = db.execute(
+                "SELECT status FROM sync_log WHERE product=? AND kind=? ORDER BY id DESC LIMIT 1", (product, kind)
+            ).fetchone()
+        return bool(row) and row["status"] == "RUNNING"
+
+    def latest_sync(self, product: str, kind: str) -> dict | None:
+        with self.connect() as db:
+            row = db.execute(
+                "SELECT * FROM sync_log WHERE product=? AND kind=? ORDER BY id DESC LIMIT 1", (product, kind)
+            ).fetchone()
+        return dict(row) if row else None

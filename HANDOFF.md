@@ -44,11 +44,25 @@ SW 변경사항과 제품 사양서/Manual(PDF 또는 Word `.docx`), Test Case E
 - **실제 서로 다른 문서로 업무 정확도 E2E 검증 완료** (2026-08-31): 기준 사양서 260824(txt→docx 변환, 실사용자 이력) vs 변경문서 260831 PDF(실제 개정판). diff 수정 전 changed_features 20건 중 19건이 실제로는 미변경 문장이었던 것을 확인 → diff 수정 후 3건(모두 진짜 변경)으로 정상화, 추천 29→18건, 토큰 69,737→55,284
 - Gemini Key를 `secrets.txt` / `secrets.json` / `.env` / OS 환경변수 어디에 넣어도 인식 (우선순위 순)
 - `/config/status`, `/config/reload`로 Key 설정 여부 확인 및 재시작 없는 재적용
-- 로컬 자동 테스트 `37 passed` (서버 측은 최신 코드 배포 후 재검증 필요)
+- 로컬 자동 테스트 `59 passed` (2026-08-31 고도화분 포함, 실제 Gemini API로 SSE 진행상태/change_items/신규 스키마 모두 검증 완료)
 - 2026-08-31 서버 배포 완료(구버전 기준), 기존 PID `1208181`은 재시작하지 않았으므로 이번 세션에서 추가된 기능은 아직 서버에 반영되지 않음 — 재배포 필요
 - GitHub Public repository push 완료
 - Ubuntu 포트 `12000`: `ufw allow 12000/tcp` 적용 후 개발 PC 접속 정상화 (`SECURITY.md` 참고)
+- **2026-08-31 고도화 (진행 상태/보고서/사양서 동기화, 상세는 `docs/AUTOMATION.md`)**:
+  - 분석 진행 상태를 SSE(`GET /analyses/{id}/stream`)로 실시간 전달. `RegressionAnalyzer._execute`의 실제 8단계(입력 문서 분석→변경사항 추출→최신 사양서 조회→TC 후보 검색→AI 영향도 분석→Regression TC 선정→신규 TC 초안 검증→HTML 결과 생성)만 기준으로 진행률을 계산하며, AI 응답을 기다리는 동안 임의로 퍼센트를 올리지 않음. 실패 시 실패 단계와 실제 오류 메시지 표시 (실제 Gemini 503 장애로 검증됨)
+  - HTML 결과 보고서를 `app/reports/html_report.py`의 f-string에서 `app/web/templates/report.html` Jinja2 템플릿으로 전환하고, Analysis Overview/Change Summary(의미 단위 그룹핑)/Impact Analysis/Recommended Regression TC(5열 단순화)/Additional Verification Recommendations/AI 판단 주의사항 6단계로 재구성. Evidence Level·Revision Mark·원문 그대로의 chunk_id는 사용자 화면에서 제거하고 XLSX에만 유지, `relevant_specifications` 대신 사람이 읽는 `specification_reference`(예: "VXvue 사양서3 · DAP Communication · p.348")를 코드에서 조립(환각 없음). "Manual Review Required" 섹션과 "(VXvue TC 설계 가이드 Rev.1.7 §1.2.1)" 인용 문구 삭제
+  - CSV Export 제거, XLSX만 유지(요청 사항 확인 후 결정)
+  - VXvue 사양서 자동 동기화: 별도 프로젝트("ALM 사양서 최신화 크롤링", Polarion REST API로 이미 인증됨)의 `output/<날짜>/pdf/`만 읽어(그 프로젝트 코드/설정 미변경) `data/specifications/vxvue/{original,normalized}/<날짜>/`에 원본 보존 + 텍스트 정규화 후 기존 Knowledge API로 등록 (`app/sync/vxvue_spec.py`, `scripts/sync_vxvue_spec.py`, `config/products/vxvue.yaml`). 파일명·크기·수정시각 비교로 변경분만 갱신, 실패해도 기존 등록 데이터는 보존. 앱 내부 `BackgroundScheduler`(신규 systemd 없음, `app/core/scheduler.py`)로 매일 예약 실행 시도 + `/knowledge`의 "지금 동기화" 버튼으로 수동 실행. 실제 업로드/재실행 idempotency 검증 완료
+  - TC는 SharePoint 자동 연동 대신 기존 수동 업로드를 유지하기로 사용자가 결정(개인 SSO 비밀번호 저장 방식은 보안·회사 정책상 채택하지 않음) — Azure AD App Registration 기반 재검토 방법은 `docs/AUTOMATION.md` §4에 문서화만 해둠
 - 2026-08-31 사용자 승인 후 서버 프로세스 재시작 완료: 구 PID `1208181`(예전 코드, `GET /analyses` 405) → 신 PID `1214754`(이번 세션 변경분 전체 반영). 동일한 방식(일반 사용자 nohup 프로세스, 포트 `12000`)으로 재시작했고 다른 서비스(5000/5001/5002/5003/8000/10000/18800)는 그대로 유지 확인. stdout/stderr는 `output/logs/uvicorn.out`에 기록
+- **2026-08-31 추가 고도화 2차분**:
+  - 분석 화면에서 변경사항 문서를 여러 개 동시 첨부 가능 (`change_files`, `RegressionAnalyzer.run`/`run_for_product`가 `list[Path]`를 받음). 여러 문서의 텍스트를 합쳐 하나의 change_text로 diff·분석
+  - 사용자 요청 사항(notes)이 있으면 변경 문서 전체를 Gemini에 보내지 않고, BM25로 요청과 관련성 높은 줄만 추려 보내는 RAG 토큰 절약 적용 (`app/analyzers/change_analyzer.py::trim_by_relevance`, `retrieval.change_text_top_lines` 설정으로 상한 조절, 문서가 짧으면 그대로 전체 사용)
+  - VXvue 사양서 동기화 시 같은 문서의 이전 리비전(파일명에서 `(YYMMDD)` 날짜만 다른 동일 문서)을 자동 감지해 신규 등록 후 삭제 — Knowledge에 과거 리비전이 계속 쌓이지 않음 (`app/sync/vxvue_spec.py::_replace_stale_revisions`)
+  - `/knowledge` 화면의 "사양서 지금 동기화" 버튼과 알림음 제거 — 실제 자동 실행은 Windows 작업 스케줄러가 전담하고, 화면에는 마지막 동기화 결과만 표시(수동 트리거 엔드포인트 자체는 CLI/스크립트 용도로 유지)
+  - VXvue 사양서 동기화 스케줄을 매일 07:00에서 **매주 월요일 07:30(KST)**로 변경 — 같은 PC에 이미 등록된 ALM 크롤러 작업(`VXvue_SRS_Spec_Automation`, 매주 월 07:00)이 끝날 시간을 확보하기 위해 정확히 30분 뒤로 맞춤 (`config/products/vxvue.yaml`의 `sync.day_of_week`/`sync.schedule_time`, `app/core/scheduler.py`)
+  - **Windows 작업 스케줄러에 실제 등록 완료**: 작업명 `AIRegressionAnalyzer_VXvueSpecSync`, 매주 월요일 07:30 KST, `LogonType=S4U`(비밀번호 저장 없이 비로그인 상태에서도 실행), `StartWhenAvailable=True`(PC가 꺼져 있거나 잠겨 있어도 켜지는 즉시 실행) — 기존 ALM 크롤러 작업과 동일한 패턴을 그대로 따름. `Get-ScheduledTask -TaskName AIRegressionAnalyzer_VXvueSpecSync`로 확인 가능
+  - Gemini 2.5 계열의 내부 thinking 토큰이 `max_output_tokens` 예산을 함께 소비해 대규모 후보(예: `candidate_limit=150`) 분석 시 구조화 JSON 응답이 중간에 잘리는 문제를 실제 대용량 다중 PDF E2E 테스트로 재현·확인. `max_output_tokens=65536` + `thinking_config=ThinkingConfig(thinking_budget=0)`로 수정해 해결 확인(`app/core/gemini_client.py`) — 이 작업은 별도 추론 과정 없이 근거 기반 구조화 추출만 하므로 thinking 비활성화가 안전함
 
 ## 5. 현재 남은 작업
 
@@ -60,6 +74,7 @@ SW 변경사항과 제품 사양서/Manual(PDF 또는 Word `.docx`), Test Case E
 4. 자동 탐지로 해결되지 않는 TC용 수동 컬럼/시트 매핑 UI 추가 — 아직 미착수
 5. BM25 인덱스 직렬화 및 재사용 — 아직 미착수
 6. 사용자 승인 후 최신 서버 코드 활성화 또는 systemd 등록 → **완료**: 세션 중 여러 차례 배포+재시작 승인받아 진행함(현재 PID는 최신). systemd 전환 자체는 별도 승인 대기
+6-b. VXvue 사양서 동기화 Windows 작업 스케줄러 등록 → **완료** (`AIRegressionAnalyzer_VXvueSpecSync`, 매주 월 07:30 KST)
 7. ~~네트워크 접근 정책 담당자 확인 후 팀원 접속 검증~~ → 2026-08-31 `ufw allow 12000/tcp`로 개발 PC 접속은 해결. 다른 팀원 PC 접속 검증만 남음
 8. Gemini 일일 토큰 사용량 상한 안전장치 → **완료** (`config.yaml` `analysis.daily_token_limit`, `/config/status`에 사용량 노출)
 9. Knowledge 문서 삭제 기능 → **완료** (`/knowledge/delete/{id}`)

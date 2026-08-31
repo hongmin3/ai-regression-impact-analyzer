@@ -5,7 +5,13 @@ function bindDropzones(root) {
     zone.dataset.bound = '1';
     const label = zone.dataset.placeholder || zone.textContent;
     const refresh = () => {
-      zone.textContent = input.files[0] ? input.files[0].name : label;
+      if (!input.files.length) {
+        zone.textContent = label;
+      } else if (input.files.length === 1) {
+        zone.textContent = input.files[0].name;
+      } else {
+        zone.textContent = `${input.files.length}개 파일 선택됨 (${Array.from(input.files).map((f) => f.name).join(', ')})`;
+      }
     };
     zone.addEventListener('click', () => input.click());
     input.addEventListener('change', refresh);

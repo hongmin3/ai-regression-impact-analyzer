@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import asyncio
+import json
 import shutil
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
 from app.analyzers.regression_analyzer import RegressionAnalyzer
@@ -71,6 +73,7 @@ def knowledge(request: Request):
             "testcase_groups": _grouped_by_product_version("testcase"),
             "products": storage.list_products(),
             "versions_by_product": _versions_by_product(),
+            "spec_sync": storage.latest_sync("VXvue", "specification"),
         },
     )
 
@@ -126,6 +129,41 @@ def delete_document(document_id: int):
     return RedirectResponse("/knowledge", status_code=303)
 
 
+@router.get("/knowledge/documents")
+def list_documents_json(kind: str, product: str):
+    """동기화 스크립트가 원격 서버의 기존 등록 문서를 조회하기 위한 최소 JSON API."""
+    return [{"id": doc["id"], "name": doc["name"]} for doc in storage.active_documents(kind, product)]
+
+
+@router.post("/knowledge/sync-log")
+def record_sync_log(product: str = Form(...), kind: str = Form(...), source: str = Form(...), status: str = Form(...), detail: str = Form("")):
+    """원격에서 실행된 동기화 스크립트(scripts/sync_vxvue_spec.py 등)가 결과를 보고하는 용도."""
+    sync_id = storage.sync_start(product, kind, source)
+    storage.sync_finish(sync_id, status, detail)
+    return {"ok": True}
+
+
+@router.post("/knowledge/sync/specification")
+def trigger_specification_sync():
+    from app.sync.vxvue_spec import is_available_on_this_host
+    from app.sync.vxvue_spec import run as run_spec_sync
+
+    product = "VXvue"
+    if storage.is_sync_running(product, "specification"):
+        raise HTTPException(409, "이미 사양서 동기화가 진행 중입니다.")
+    if not is_available_on_this_host():
+        raise HTTPException(400, "이 서버에서는 ALM 크롤러 output 폴더에 접근할 수 없습니다. 크롤러가 있는 Windows PC에서 scripts/sync_vxvue_spec.py를 실행하세요.")
+    sync_id = storage.sync_start(product, "specification", "alm_crawler")
+    try:
+        port = get_settings().get("app.port", 12000)
+        result = run_spec_sync(f"http://127.0.0.1:{port}")
+        storage.sync_finish(sync_id, result["status"], result["detail"])
+        return result
+    except Exception as exc:
+        storage.sync_finish(sync_id, "FAILED", str(exc))
+        raise HTTPException(500, f"동기화 실패: {exc}")
+
+
 @router.get("/knowledge/download/{document_id}")
 def download_document(document_id: int):
     document = storage.get_document(document_id)
@@ -137,30 +175,30 @@ def download_document(document_id: int):
     return FileResponse(path, filename=document["name"])
 
 
-def _run_job(job_id: str, change: Path | None, product: str, notes: str) -> None:
+def _run_job(job_id: str, changes: list[Path], product: str, notes: str) -> None:
     try:
         storage.update_analysis(job_id, "RUNNING")
-        result = RegressionAnalyzer().run_for_product(change, product, analysis_id=job_id, user_notes=notes)
+        result = RegressionAnalyzer().run_for_product(changes, product, analysis_id=job_id, user_notes=notes)
         storage.update_analysis(job_id, "DONE", result=result.model_dump(mode="json"))
     except Exception as exc:
         storage.update_analysis(job_id, "FAILED", error=str(exc))
 
 
 @router.post("/analyses")
-def start_analysis(background_tasks: BackgroundTasks, product: str = Form(...), notes: str = Form(""), change_file: UploadFile | None = File(None)):
+def start_analysis(background_tasks: BackgroundTasks, product: str = Form(...), notes: str = Form(""), change_files: list[UploadFile] = File(default=[])):
     notes = notes.strip()
-    has_file = bool(change_file and change_file.filename)
-    if not has_file and not notes:
+    uploads = [f for f in change_files if f and f.filename]
+    if not uploads and not notes:
         raise HTTPException(400, "변경문서를 첨부하거나 요청 사항을 입력하세요.")
     token_status = daily_token_status()
     if token_status["exceeded"]:
         raise HTTPException(429, f"오늘 Gemini 누적 토큰 사용량({token_status['used']:,})이 설정한 한도({token_status['limit']:,})를 초과해 분석을 실행할 수 없습니다. config.yaml의 analysis.daily_token_limit을 조정하세요.")
     if not storage.active_documents("specification", product) or not storage.active_documents("testcase", product):
         raise HTTPException(404, f"'{product}' 제품에 등록된 사양서 또는 TC가 없습니다. Knowledge 메뉴에서 먼저 등록하세요.")
-    change = _save_upload(change_file, get_settings().path("storage.upload_dir"), {".pdf", ".docx"}) if has_file else None
+    changes = [_save_upload(f, get_settings().path("storage.upload_dir"), {".pdf", ".docx"}) for f in uploads]
     job_id = uuid.uuid4().hex[:12]
     storage.create_analysis(job_id)
-    background_tasks.add_task(_run_job, job_id, change, product, notes)
+    background_tasks.add_task(_run_job, job_id, changes, product, notes)
     return {"job_id": job_id, "status_url": f"/analyses/{job_id}"}
 
 
@@ -170,6 +208,30 @@ def job_status(job_id: str):
     if not job:
         raise HTTPException(404, "분석 작업을 찾을 수 없습니다.")
     return job
+
+
+@router.get("/analyses/{job_id}/stream")
+async def job_status_stream(job_id: str):
+    """SSE로 실제 backend 단계 진행 상황을 push한다. 가짜 percentage는 계산하지 않는다 —
+    stage_index/stage_total은 RegressionAnalyzer._execute가 실제로 지나간 단계만 기록한다."""
+    if not storage.get_analysis(job_id):
+        raise HTTPException(404, "분석 작업을 찾을 수 없습니다.")
+
+    async def event_source():
+        last_payload = None
+        while True:
+            job = storage.get_analysis(job_id)
+            if not job:
+                break
+            payload = json.dumps(job, ensure_ascii=False, default=str)
+            if payload != last_payload:
+                yield f"data: {payload}\n\n"
+                last_payload = payload
+            if job["status"] in ("DONE", "FAILED"):
+                break
+            await asyncio.sleep(0.7)
+
+    return StreamingResponse(event_source(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
 @router.get("/config/status")

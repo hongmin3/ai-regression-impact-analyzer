@@ -61,6 +61,43 @@ def test_job_status_reads_persisted_analysis(monkeypatch, tmp_path):
     assert response.json()["result"]["analysis_id"] == "restored"
 
 
+def test_create_analysis_initializes_stage_tracking(tmp_path):
+    storage = Storage(tmp_path / "app.db")
+    storage.create_analysis("job-stage")
+
+    job = storage.get_analysis("job-stage")
+
+    assert job["stage"] == "대기 중"
+    assert job["stage_index"] == 0
+    assert job["stage_total"] == 8
+    assert job["started_at"]
+
+
+def test_update_stage_advances_progress(tmp_path):
+    storage = Storage(tmp_path / "app.db")
+    storage.create_analysis("job-stage-2")
+
+    storage.update_stage("job-stage-2", 3, "TC 후보 검색")
+    job = storage.get_analysis("job-stage-2")
+
+    assert job["stage"] == "TC 후보 검색"
+    assert job["stage_index"] == 3
+
+
+def test_sync_log_tracks_running_and_finish(tmp_path):
+    storage = Storage(tmp_path / "app.db")
+    assert storage.is_sync_running("VXvue", "specification") is False
+
+    sync_id = storage.sync_start("VXvue", "specification", "alm_crawler")
+    assert storage.is_sync_running("VXvue", "specification") is True
+
+    storage.sync_finish(sync_id, "SUCCESS", "3 files updated")
+    assert storage.is_sync_running("VXvue", "specification") is False
+    latest = storage.latest_sync("VXvue", "specification")
+    assert latest["status"] == "SUCCESS"
+    assert latest["detail"] == "3 files updated"
+
+
 def test_active_documents_keeps_multiple_distinct_documents(tmp_path):
     storage = Storage(tmp_path / "app.db")
     storage.add_document("specification", "VXvue", "1.0", "Rev.1", "사양서1.pdf", tmp_path / "s1.pdf")
@@ -70,6 +107,38 @@ def test_active_documents_keeps_multiple_distinct_documents(tmp_path):
     docs = storage.active_documents("specification", "VXvue")
 
     assert {d["name"] for d in docs} == {"사양서1.pdf", "사양서2.pdf", "사양서3.pdf"}
+
+
+def test_record_sync_log_endpoint(monkeypatch, tmp_path):
+    persisted = Storage(tmp_path / "app.db")
+    monkeypatch.setattr(routes, "storage", persisted)
+
+    response = TestClient(app).post("/knowledge/sync-log", data={"product": "VXvue", "kind": "specification", "source": "alm_crawler", "status": "SUCCESS", "detail": "3 files"})
+
+    assert response.status_code == 200
+    latest = persisted.latest_sync("VXvue", "specification")
+    assert latest["status"] == "SUCCESS"
+
+
+def test_trigger_specification_sync_blocked_when_unavailable(monkeypatch, tmp_path):
+    persisted = Storage(tmp_path / "app.db")
+    monkeypatch.setattr(routes, "storage", persisted)
+    import app.sync.vxvue_spec as vxvue_spec
+    monkeypatch.setattr(vxvue_spec, "is_available_on_this_host", lambda *a, **k: False)
+
+    response = TestClient(app).post("/knowledge/sync/specification")
+
+    assert response.status_code == 400
+
+
+def test_trigger_specification_sync_blocked_when_already_running(monkeypatch, tmp_path):
+    persisted = Storage(tmp_path / "app.db")
+    persisted.sync_start("VXvue", "specification", "alm_crawler")
+    monkeypatch.setattr(routes, "storage", persisted)
+
+    response = TestClient(app).post("/knowledge/sync/specification")
+
+    assert response.status_code == 409
 
 
 def test_start_analysis_requires_file_or_notes():
@@ -124,7 +193,7 @@ def test_start_analysis_blocked_when_daily_token_limit_exceeded(monkeypatch, tmp
     monkeypatch.setattr(routes, "storage", persisted)
     routes.get_settings().raw.setdefault("analysis", {})["daily_token_limit"] = 500
     try:
-        response = TestClient(app).post("/analyses", files={"change_file": ("c.pdf", b"%PDF-", "application/pdf")}, data={"product": "VXvue"})
+        response = TestClient(app).post("/analyses", files={"change_files": ("c.pdf", b"%PDF-", "application/pdf")}, data={"product": "VXvue"})
         assert response.status_code == 429
     finally:
         routes.get_settings().raw["analysis"]["daily_token_limit"] = 0
