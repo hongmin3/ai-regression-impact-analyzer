@@ -74,13 +74,6 @@ class Storage:
                 (product, version, datetime.now(timezone.utc).isoformat()),
             )
 
-    def next_revision(self, kind: str, product: str, version: str) -> str:
-        with self.connect() as db:
-            row = db.execute(
-                "SELECT COUNT(*) AS n FROM documents WHERE kind=? AND product=? AND version=?", (kind, product, version)
-            ).fetchone()
-        return f"Rev.{int(row['n']) + 1}"
-
     def active_documents(self, kind: str, product: str) -> list[dict]:
         """제품에 등록된 모든 문서를 반환한다.
 

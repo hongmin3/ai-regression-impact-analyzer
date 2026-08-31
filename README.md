@@ -21,7 +21,7 @@ Change Document → Rule 기반 Change 추출(기준 사양서 diff) → BM25 Sp
 - 근거 수준(Evidence Level)·원본 개정 표시 확인 여부를 결과에 구조화
 - 기존 TC로 커버되지 않는 변경에 대한 신규 TC 초안 자동 생성
 - 분석 1건당 Gemini 호출 1회 + 동일 입력 재분석 시 캐시로 비용 없음, 일일 토큰 한도 설정 지원
-- 제품/버전/리비전 이력 관리, 분석 이력·Impact 집계 대시보드
+- 제품/버전별 지식 문서 관리(등록·삭제), 분석 이력·Impact 집계 대시보드
 
 ## Tech Stack
 

@@ -17,17 +17,16 @@
       </label>
       <button>등록</button>
     </form>
-    <p class="hint">Revision은 같은 제품·버전에 등록할 때마다 자동으로 올라갑니다 (Rev.1, Rev.2 ...). 사양서1~5처럼 서로 다른 문서를 여러 개 등록해도 이전 문서를 대체하지 않고 모두 분석 대상에 포함됩니다.</p>
+    <p class="hint">사양서1~5처럼 서로 다른 문서를 같은 제품·버전에 여러 개 등록해도 이전 문서를 대체하지 않고 모두 분석 대상에 포함됩니다.</p>
     {% for group in spec_groups %}
-    <div class="revision-group" data-product="{{ group.product }}">
+    <div class="doc-group" data-product="{{ group.product }}">
       <h3>{{ group.product }} · {{ group.version }}</h3>
       <ul>
         {% for doc in group.documents %}
         <li>
-          <span class="badge {{ 'latest' if loop.first else 'legacy' }}">{{ doc.revision }}{{ ' · 최근 등록' if loop.first else '' }}</span>
           {{ doc.name }} <small>(<span data-utc-time="{{ doc.created_at }}">{{ doc.created_at[:19].replace('T', ' ') }} UTC</span>)</small>
           <a href="/knowledge/download/{{ doc.id }}">다운로드</a>
-          <form method="post" action="/knowledge/delete/{{ doc.id }}" class="inline-form" onsubmit="return confirm({{ (doc.name ~ ' 파일을 삭제할까요? 되돌릴 수 없습니다.') | tojson }})">
+          <form method="post" action="/knowledge/delete/{{ doc.id }}" class="inline-form delete-form" data-confirm="{{ doc.name }} 파일을 삭제할까요? 되돌릴 수 없습니다.">
             <button type="submit" class="btn-danger-link">삭제</button>
           </form>
         </li>
@@ -47,17 +46,16 @@
       </label>
       <button>등록</button>
     </form>
-    <p class="hint">Revision은 같은 제품·버전에 등록할 때마다 자동으로 올라갑니다 (Rev.1, Rev.2 ...). 사양서1~5처럼 서로 다른 문서를 여러 개 등록해도 이전 문서를 대체하지 않고 모두 분석 대상에 포함됩니다.</p>
+    <p class="hint">사양서1~5처럼 서로 다른 문서를 같은 제품·버전에 여러 개 등록해도 이전 문서를 대체하지 않고 모두 분석 대상에 포함됩니다.</p>
     {% for group in testcase_groups %}
-    <div class="revision-group" data-product="{{ group.product }}">
+    <div class="doc-group" data-product="{{ group.product }}">
       <h3>{{ group.product }} · {{ group.version }}</h3>
       <ul>
         {% for doc in group.documents %}
         <li>
-          <span class="badge {{ 'latest' if loop.first else 'legacy' }}">{{ doc.revision }}{{ ' · 최근 등록' if loop.first else '' }}</span>
           {{ doc.name }} <small>(<span data-utc-time="{{ doc.created_at }}">{{ doc.created_at[:19].replace('T', ' ') }} UTC</span>)</small>
           <a href="/knowledge/download/{{ doc.id }}">다운로드</a>
-          <form method="post" action="/knowledge/delete/{{ doc.id }}" class="inline-form" onsubmit="return confirm({{ (doc.name ~ ' 파일을 삭제할까요? 되돌릴 수 없습니다.') | tojson }})">
+          <form method="post" action="/knowledge/delete/{{ doc.id }}" class="inline-form delete-form" data-confirm="{{ doc.name }} 파일을 삭제할까요? 되돌릴 수 없습니다.">
             <button type="submit" class="btn-danger-link">삭제</button>
           </form>
         </li>
@@ -78,11 +76,17 @@ document.querySelectorAll('input[name=product]').forEach(inp => inp.addEventList
 const productFilter = document.querySelector('#product-filter');
 function applyProductFilter() {
   const selected = productFilter.value;
-  document.querySelectorAll('.revision-group').forEach(group => {
+  document.querySelectorAll('.doc-group').forEach(group => {
     group.style.display = (!selected || group.dataset.product === selected) ? '' : 'none';
   });
 }
 productFilter.addEventListener('change', applyProductFilter);
 applyProductFilter();
+
+document.querySelectorAll('.delete-form').forEach(form => {
+  form.addEventListener('submit', (e) => {
+    if (!confirm(form.dataset.confirm)) e.preventDefault();
+  });
+});
 </script>
 {% endblock %}

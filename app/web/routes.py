@@ -99,10 +99,9 @@ def register_specification(file: UploadFile = File(...), product: str = Form(...
     settings = get_settings()
     storage.ensure_product(product)
     storage.ensure_version(product, version)
-    revision = storage.next_revision("specification", product, version)
     path = _save_upload(file, settings.path("storage.specification_dir"), {".pdf", ".docx"})
     chunks = parse_document(path, path.stem)
-    storage.add_document("specification", product, version, revision, file.filename or path.name, path, {"chunk_count": len(chunks)})
+    storage.add_document("specification", product, version, "", file.filename or path.name, path, {"chunk_count": len(chunks)})
     return RedirectResponse("/knowledge", status_code=303)
 
 
@@ -110,9 +109,8 @@ def register_specification(file: UploadFile = File(...), product: str = Form(...
 def register_testcase(file: UploadFile = File(...), product: str = Form(...), version: str = Form("")):
     storage.ensure_product(product)
     storage.ensure_version(product, version)
-    revision = storage.next_revision("testcase", product, version)
     path = _save_upload(file, get_settings().path("storage.testcase_dir"), {".xlsx"})
-    storage.add_document("testcase", product, version, revision, file.filename or path.name, path)
+    storage.add_document("testcase", product, version, "", file.filename or path.name, path)
     return RedirectResponse("/knowledge", status_code=303)
 
 
