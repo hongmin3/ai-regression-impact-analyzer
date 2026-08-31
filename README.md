@@ -64,7 +64,7 @@ cd /home/ubuntu/ai-regression-impact-analyzer
 4. `분석 실행` 후 HTML Report를 열거나 CSV/XLSX를 내려받습니다.
 5. `분석 이력` 메뉴에서 서버 재시작 후에도 완료된 결과와 Impact 집계를 다시 확인합니다.
 
-레거시 Word `.doc` 형식은 지원하지 않으므로 Word에서 `.docx`로 저장한 뒤 등록합니다. TC Excel은 `TC ID`, `Category`, `Feature`, `Precondition`, `Step`, `Expected Result`, `Result`, `Remark`와 일반적인 한글/영문 별칭을 인식합니다. `TC ID`는 필수입니다.
+레거시 Word `.doc` 형식은 지원하지 않으므로 Word에서 `.docx`로 저장한 뒤 등록합니다. TC Excel은 Cover가 있는 다중 시트 파일에서도 실제 헤더 행을 자동 탐지하며 `TC ID`, `Old ID`, `TC_ID`, `Category`, `Function`, `Precondition`, `Step Description`, `Expected Test Result`, `Result`, `Remark`와 일반적인 한글/영문 별칭을 인식합니다. `TC ID`는 필수입니다.
 
 ## 결과 해석
 

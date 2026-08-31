@@ -8,11 +8,14 @@ from openpyxl import load_workbook
 from app.core.schemas import TestCase
 
 ALIASES = {
-    "tc_id": ["tcid", "testcaseid", "testid", "id", "tcno", "테스트케이스id", "tc번호"],
-    "category": ["category", "분류", "구분"], "feature": ["feature", "기능", "기능명", "requirement"],
-    "precondition": ["precondition", "사전조건", "전제조건"], "step": ["step", "steps", "teststep", "절차", "시험절차"],
-    "expected_result": ["expectedresult", "expected", "기대결과", "예상결과"], "result": ["result", "결과"],
-    "remark": ["remark", "remarks", "비고", "note"],
+    "tc_id": ["tcid", "testcaseid", "testid", "oldid", "id", "tcno", "테스트케이스id", "tc번호"],
+    "category": ["category", "stccategory", "분류", "구분"],
+    "feature": ["feature", "function", "title", "testitem", "기능", "기능명", "requirement"],
+    "precondition": ["precondition", "pre-condition", "pre_condition", "사전조건", "전제조건"],
+    "step": ["step", "steps", "teststep", "stepdescription", "절차", "시험절차"],
+    "expected_result": ["expectedresult", "expectedtestresult", "expectedreuslt", "expected", "기대결과", "예상결과"],
+    "result": ["result", "testresult", "finalresult", "최종result", "결과"],
+    "remark": ["remark", "remarks", "comment", "comments", "description", "비고", "note"],
 }
 
 
@@ -39,19 +42,37 @@ def detect_columns(headers: list[object], mapping: dict[str, str] | None = None)
 def parse_testcases(path: Path, mapping: dict[str, str] | None = None) -> list[TestCase]:
     try:
         workbook = load_workbook(path, read_only=True, data_only=True)
-        sheet = workbook.active
-        rows = sheet.iter_rows(values_only=True)
-        headers = list(next(rows))
-        columns = detect_columns(headers, mapping)
         cases: list[TestCase] = []
         seen: set[str] = set()
-        for row in rows:
-            values = {field: str(row[index] or "").strip() for field, index in columns.items()}
-            tc_id = values.get("tc_id", "")
-            if not tc_id or tc_id in seen:
+        detected_sheet = False
+        for sheet in workbook.worksheets:
+            header_row = None
+            columns = None
+            for row_number, row in enumerate(sheet.iter_rows(min_row=1, max_row=min(sheet.max_row, 80), values_only=True), start=1):
+                try:
+                    candidate = detect_columns(list(row), mapping)
+                except ValueError:
+                    continue
+                if len(candidate) >= 2:
+                    header_row = row_number
+                    columns = candidate
+                    break
+            if header_row is None or columns is None:
                 continue
-            seen.add(tc_id)
-            cases.append(TestCase(**values))
+            detected_sheet = True
+            for row in sheet.iter_rows(min_row=header_row + 1, values_only=True):
+                values = {
+                    field: str(row[index] or "").strip()
+                    for field, index in columns.items()
+                    if index < len(row)
+                }
+                tc_id = values.get("tc_id", "")
+                if not tc_id or tc_id in seen:
+                    continue
+                seen.add(tc_id)
+                cases.append(TestCase(**values))
+        if not detected_sheet:
+            raise ValueError("TC ID 컬럼을 찾을 수 없습니다. 컬럼 매핑을 확인하세요.")
         return cases
     except ValueError:
         raise

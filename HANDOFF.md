@@ -38,9 +38,11 @@ SW 변경사항과 제품 사양서/Manual(PDF 또는 Word `.docx`), Test Case E
 - SQLite `analyses` 기반 Persistent Job 상태와 분석 이력/Impact 집계 화면
 - 서버 재기동 시 완료 결과는 유지하고 QUEUED/RUNNING 작업은 중단 실패로 명시
 - Gemini token usage 파싱·Logging 및 Mock 검증
+- VXvue 실제 다중 시트 TC 4개 파싱 확인: 669 / 3,894 / 1,785 / 59건
+- 실제 Gemini E2E smoke 성공: 분석 `a4903700e24a`, TC 59, 추천 23, total tokens 54,856
 - Gemini Key를 `secrets.txt` / `secrets.json` / `.env` / OS 환경변수 어디에 넣어도 인식 (우선순위 순)
 - `/config/status`, `/config/reload`로 Key 설정 여부 확인 및 재시작 없는 재적용
-- 로컬 자동 테스트 `29 passed` (이번 변경 서버 배포 전)
+- 로컬 자동 테스트 `31 passed` (이번 TC 파서 변경 서버 배포 전)
 - 2026-08-31 서버 배포 완료, 기존 PID `1208181`은 재시작하지 않았으므로 새 기능은 다음 정상 기동부터 활성화
 - GitHub Public repository push 완료
 - Ubuntu 포트 `12000`에서 임시 사용자 프로세스로 실행 확인
@@ -49,11 +51,10 @@ SW 변경사항과 제품 사양서/Manual(PDF 또는 Word `.docx`), Test Case E
 
 우선순위 순서:
 
-1. 사용자가 서버 `secrets.txt`에 `GEMINI_API_KEY` 입력 (로컬은 `.env`에 이미 값이 있어 동작 중)
-2. 실제 사양서/TC/변경 PDF 또는 Word `.docx`로 Gemini End-to-End 검증
-3. 실제 Gemini 응답의 usage metadata 필드가 SDK 버전과 일치하는지 E2E 확인
-4. 분석 이력의 검색·필터·페이지네이션 보강
-5. TC 컬럼 매핑 설정 UI 추가 — 미착수
+1. 서버 `secrets.txt`에 Gemini Key 입력 (현재 Key는 로컬 `secrets.txt`에만 설정됨)
+2. 실제 변경 전용 문서와 서로 다른 기준 사양서를 사용한 업무 정확도 E2E 검증
+3. 분석 이력의 검색·필터·페이지네이션 보강
+4. 자동 탐지로 해결되지 않는 TC용 수동 컬럼/시트 매핑 UI 추가
 6. 사용자 승인 후 systemd 등록
 7. 네트워크 접근 정책 담당자 확인 후 팀원 접속 검증
 
