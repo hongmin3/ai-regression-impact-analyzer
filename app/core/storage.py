@@ -110,6 +110,10 @@ class Storage:
             row = db.execute("SELECT * FROM documents WHERE id=?", (document_id,)).fetchone()
             return dict(row) if row else None
 
+    def delete_document(self, document_id: int) -> None:
+        with self.connect() as db:
+            db.execute("DELETE FROM documents WHERE id=?", (document_id,))
+
     def create_analysis(self, analysis_id: str, status: str = "QUEUED") -> None:
         now = datetime.now(timezone.utc).isoformat()
         with self.connect() as db:

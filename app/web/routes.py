@@ -116,6 +116,18 @@ def register_testcase(file: UploadFile = File(...), product: str = Form(...), ve
     return RedirectResponse("/knowledge", status_code=303)
 
 
+@router.post("/knowledge/delete/{document_id}")
+def delete_document(document_id: int):
+    document = storage.get_document(document_id)
+    if not document:
+        raise HTTPException(404, "문서를 찾을 수 없습니다.")
+    storage.delete_document(document_id)
+    path = Path(document["path"])
+    if path.exists():
+        path.unlink()
+    return RedirectResponse("/knowledge", status_code=303)
+
+
 @router.get("/knowledge/download/{document_id}")
 def download_document(document_id: int):
     document = storage.get_document(document_id)
@@ -127,26 +139,30 @@ def download_document(document_id: int):
     return FileResponse(path, filename=document["name"])
 
 
-def _run_job(job_id: str, change: Path, product: str) -> None:
+def _run_job(job_id: str, change: Path | None, product: str, notes: str) -> None:
     try:
         storage.update_analysis(job_id, "RUNNING")
-        result = RegressionAnalyzer().run_for_product(change, product, analysis_id=job_id)
+        result = RegressionAnalyzer().run_for_product(change, product, analysis_id=job_id, user_notes=notes)
         storage.update_analysis(job_id, "DONE", result=result.model_dump(mode="json"))
     except Exception as exc:
         storage.update_analysis(job_id, "FAILED", error=str(exc))
 
 
 @router.post("/analyses")
-def start_analysis(background_tasks: BackgroundTasks, change_file: UploadFile = File(...), product: str = Form(...)):
+def start_analysis(background_tasks: BackgroundTasks, product: str = Form(...), notes: str = Form(""), change_file: UploadFile | None = File(None)):
+    notes = notes.strip()
+    has_file = bool(change_file and change_file.filename)
+    if not has_file and not notes:
+        raise HTTPException(400, "변경문서를 첨부하거나 요청 사항을 입력하세요.")
     token_status = daily_token_status()
     if token_status["exceeded"]:
         raise HTTPException(429, f"오늘 Gemini 누적 토큰 사용량({token_status['used']:,})이 설정한 한도({token_status['limit']:,})를 초과해 분석을 실행할 수 없습니다. config.yaml의 analysis.daily_token_limit을 조정하세요.")
     if not storage.active_documents("specification", product) or not storage.active_documents("testcase", product):
         raise HTTPException(404, f"'{product}' 제품에 등록된 사양서 또는 TC가 없습니다. Knowledge 메뉴에서 먼저 등록하세요.")
-    change = _save_upload(change_file, get_settings().path("storage.upload_dir"), {".pdf", ".docx"})
+    change = _save_upload(change_file, get_settings().path("storage.upload_dir"), {".pdf", ".docx"}) if has_file else None
     job_id = uuid.uuid4().hex[:12]
     storage.create_analysis(job_id)
-    background_tasks.add_task(_run_job, job_id, change, product)
+    background_tasks.add_task(_run_job, job_id, change, product, notes)
     return {"job_id": job_id, "status_url": f"/analyses/{job_id}"}
 
 

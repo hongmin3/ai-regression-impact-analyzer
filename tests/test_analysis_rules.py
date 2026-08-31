@@ -59,6 +59,18 @@ def test_explicit_evidence_level_downgraded_without_relevant_specs():
     assert result[0].manual_review_required
 
 
+def test_user_notes_included_as_changed_feature_without_keyword_match():
+    result = analyze_change_rules("", user_notes="지문 인증 옵션을 추가해줘")
+    assert "지문 인증 옵션을 추가해줘" in result.changed_features
+    assert result.user_notes == "지문 인증 옵션을 추가해줘"
+
+
+def test_user_notes_take_priority_position_over_document_lines():
+    change = "Display 설정 저장 방식을 변경한다."
+    result = analyze_change_rules(change, user_notes="로그인 기능만 집중 확인")
+    assert result.changed_features[0] == "로그인 기능만 집중 확인"
+
+
 def test_evidence_level_and_revision_mark_defaults():
     decision_default = ImpactDecision(tc_id="TC-1", impact=Impact.LOW, confidence=.5, reason="확인 필요")
     assert decision_default.evidence_level is EvidenceLevel.INFERRED

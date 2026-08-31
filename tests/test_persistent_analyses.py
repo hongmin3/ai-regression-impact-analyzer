@@ -72,6 +72,34 @@ def test_active_documents_keeps_multiple_distinct_documents(tmp_path):
     assert {d["name"] for d in docs} == {"사양서1.pdf", "사양서2.pdf", "사양서3.pdf"}
 
 
+def test_start_analysis_requires_file_or_notes():
+    response = TestClient(app).post("/analyses", data={"product": "VXvue"})
+    assert response.status_code == 400
+
+
+def test_delete_document_removes_row_and_file(tmp_path, monkeypatch):
+    storage = Storage(tmp_path / "app.db")
+    file_path = tmp_path / "spec.pdf"
+    file_path.write_bytes(b"%PDF-")
+    doc_id = storage.add_document("specification", "VXvue", "1.0", "Rev.1", "spec.pdf", file_path)
+    monkeypatch.setattr(routes, "storage", storage)
+
+    response = TestClient(app).post(f"/knowledge/delete/{doc_id}", follow_redirects=False)
+
+    assert response.status_code == 303
+    assert storage.get_document(doc_id) is None
+    assert not file_path.exists()
+
+
+def test_delete_missing_document_returns_404(monkeypatch, tmp_path):
+    storage = Storage(tmp_path / "app.db")
+    monkeypatch.setattr(routes, "storage", storage)
+
+    response = TestClient(app).post("/knowledge/delete/999", follow_redirects=False)
+
+    assert response.status_code == 404
+
+
 def test_tokens_used_since_sums_done_analyses(tmp_path):
     storage = Storage(tmp_path / "app.db")
     old = _result("old")

@@ -37,6 +37,7 @@ class RevisionMark(str, Enum):
 
 
 class ChangeAnalysis(BaseModel):
+    user_notes: str = ""
     changed_features: list[str] = Field(default_factory=list)
     purpose: str = ""
     ui_changes: list[str] = Field(default_factory=list)

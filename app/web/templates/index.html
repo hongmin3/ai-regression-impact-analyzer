@@ -6,20 +6,27 @@
     <span>Gemini Key 상태 확인 중...</span>
     <button type="button" id="keyreload">설정 다시 읽기</button>
   </div>
+  {% if not products %}
+  <p class="hint">아직 분석 가능한 제품이 없습니다. <a href="/knowledge">Knowledge 메뉴</a>에서 제품의 사양서와 TC를 먼저 등록하세요 (제품명은 등록 화면에서 새로 입력하면 바로 추가됩니다).</p>
+  {% else %}
   <form id="analysis-form">
     <label>제품<select name="product" required><option value="">선택</option>{% for p in products %}<option value="{{ p }}">{{ p }}</option>{% endfor %}</select></label>
-    <label>변경사항 문서 (PDF 또는 Word .docx)
+    <label>변경사항 문서 (PDF 또는 Word .docx, 선택 사항)
       <div class="dropzone" id="change-dropzone" data-for="change-file" data-placeholder="클릭하여 선택하거나 파일을 끌어놓으세요">클릭하여 선택하거나 파일을 끌어놓으세요</div>
-      <input type="file" id="change-file" name="change_file" accept=".pdf,.docx" required hidden>
+      <input type="file" id="change-file" name="change_file" accept=".pdf,.docx" hidden>
+    </label>
+    <label>사용자 요청 사항 (선택 사항)
+      <textarea name="notes" rows="4" placeholder="예: 로그인 관련 기능만 집중적으로 확인해줘 / 이번 변경은 지문 인증 옵션 추가임"></textarea>
     </label>
     <button>분석 실행</button>
   </form>
-  <p class="hint">변경 내역서, 설계검토보고서, 리비전 히스토리, 사양서 자체(개정판) 등 무엇이든 올릴 수 있습니다. 선택한 제품에 등록된 모든 사양서·TC를 대상으로 자동으로 검색·분석합니다.</p>
-  <div id="status" class="status">{% if not products %}Knowledge 메뉴에서 제품별 사양서와 TC를 먼저 등록하세요.{% endif %}</div>
+  <p class="hint">변경 내역서, 설계검토보고서, 리비전 히스토리, 사양서 자체(개정판) 등 무엇이든 올릴 수 있고, 문서 없이 요청 사항만 입력해도 됩니다. 요청 사항은 문서보다 우선 근거로 반영됩니다. 선택한 제품에 등록된 모든 사양서·TC를 대상으로 자동으로 검색·분석합니다.</p>
+  {% endif %}
+  <div id="status" class="status"></div>
 </section>
 <script>
 const f=document.querySelector('#analysis-form'),s=document.querySelector('#status');
-f.addEventListener('submit',async e=>{e.preventDefault();s.textContent='업로드 중...';const r=await fetch('/analyses',{method:'POST',body:new FormData(f)});const d=await r.json();if(!r.ok){s.textContent=d.detail||'실패';return}const timer=setInterval(async()=>{const q=await(await fetch(d.status_url)).json();s.textContent='상태: '+q.status;if(q.status==='DONE'){clearInterval(timer);const id=q.result.analysis_id;const draft=q.result.draft_tc_path?` · <a href="/generated_tc/regression-${id}-draft.md" target="_blank">TC 초안(md)</a>`:'';s.innerHTML=`완료 · 추천 ${q.result.decisions.filter(x=>x.recommended).length}건 · <a href="/reports/regression-${id}.html" target="_blank">HTML Report</a> · <a href="/exports/regression-${id}.csv">CSV</a> · <a href="/exports/regression-${id}.xlsx">XLSX</a>${draft}`}if(q.status==='FAILED'){clearInterval(timer);s.textContent='실패: '+q.error}},1200)});
+f.addEventListener('submit',async e=>{e.preventDefault();const fd=new FormData(f);const hasFile=f.querySelector('[name=change_file]').files.length>0;const notes=(fd.get('notes')||'').trim();if(!hasFile&&!notes){s.textContent='변경문서를 첨부하거나 요청 사항을 입력하세요.';return}s.textContent='업로드 중...';const r=await fetch('/analyses',{method:'POST',body:fd});const d=await r.json();if(!r.ok){s.textContent=d.detail||'실패';return}const timer=setInterval(async()=>{const q=await(await fetch(d.status_url)).json();s.textContent='상태: '+q.status;if(q.status==='DONE'){clearInterval(timer);const id=q.result.analysis_id;const draft=q.result.draft_tc_path?` · <a href="/generated_tc/regression-${id}-draft.md" target="_blank">TC 초안(md)</a>`:'';s.innerHTML=`완료 · 추천 ${q.result.decisions.filter(x=>x.recommended).length}건 · <a href="/reports/regression-${id}.html" target="_blank">HTML Report</a> · <a href="/exports/regression-${id}.csv">CSV</a> · <a href="/exports/regression-${id}.xlsx">XLSX</a>${draft}`}if(q.status==='FAILED'){clearInterval(timer);s.textContent='실패: '+q.error}},1200)});
 </script>
 <script>
 const kb=document.querySelector('#keystatus'),kt=kb.querySelector('span');

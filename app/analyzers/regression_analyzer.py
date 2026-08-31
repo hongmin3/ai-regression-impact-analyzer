@@ -27,13 +27,13 @@ class RegressionAnalyzer:
         self.storage = storage or Storage()
         self.logger = configure_logging()
 
-    def run(self, change_path: Path, specification_path: Path, testcase_path: Path, analysis_id: str | None = None) -> AnalysisResult:
+    def run(self, change_path: Path | None, specification_path: Path, testcase_path: Path, analysis_id: str | None = None, user_notes: str = "") -> AnalysisResult:
         baseline_text = extract_document_text(specification_path)
         chunks = parse_document(specification_path, specification_path.stem)
         cases = parse_testcases(testcase_path)
-        return self._execute(change_path, chunks, cases, baseline_text, specification_path.name, testcase_path.name, analysis_id)
+        return self._execute(change_path, chunks, cases, baseline_text, specification_path.name, testcase_path.name, analysis_id, user_notes)
 
-    def run_for_product(self, change_path: Path, product: str, analysis_id: str | None = None) -> AnalysisResult:
+    def run_for_product(self, change_path: Path | None, product: str, analysis_id: str | None = None, user_notes: str = "") -> AnalysisResult:
         """개별 사양서/TC를 고르지 않고, 제품에 등록된 모든 사양서·TC 문서를 검색 대상으로 삼는다.
 
         사양서1~5처럼 같은 제품에 서로 다른 문서가 여러 개 등록될 수 있으므로, 새 문서가
@@ -54,31 +54,33 @@ class RegressionAnalyzer:
             cases.extend(parse_testcases(Path(doc["path"])))
         spec_label = ", ".join(doc["name"] for doc in spec_docs)
         tc_label = ", ".join(doc["name"] for doc in tc_docs)
-        return self._execute(change_path, chunks, cases, "\n".join(baseline_texts), spec_label, tc_label, analysis_id)
+        return self._execute(change_path, chunks, cases, "\n".join(baseline_texts), spec_label, tc_label, analysis_id, user_notes)
 
     def _execute(
         self,
-        change_path: Path,
+        change_path: Path | None,
         chunks: list[SpecificationChunk],
         cases: list[TestCase],
         baseline_text: str,
         specification_label: str,
         testcase_label: str,
         analysis_id: str | None,
+        user_notes: str = "",
     ) -> AnalysisResult:
         started = time.monotonic()
         analysis_id = analysis_id or uuid.uuid4().hex[:12]
-        self.logger.info("analysis_started id=%s change=%s spec=%s tc=%s model=%s", analysis_id, change_path.name, specification_label, testcase_label, self.settings.secrets.gemini_model)
+        change_file_name = change_path.name if change_path else "(문서 없음, 사용자 요청 텍스트만 사용)"
+        self.logger.info("analysis_started id=%s change=%s spec=%s tc=%s model=%s", analysis_id, change_file_name, specification_label, testcase_label, self.settings.secrets.gemini_model)
         try:
-            change_text = extract_document_text(change_path)
-            change = analyze_change_rules(change_text, baseline_text=baseline_text)
+            change_text = extract_document_text(change_path) if change_path else ""
+            change = analyze_change_rules(change_text, baseline_text=baseline_text, user_notes=user_notes)
             candidates = select_candidates(change, cases, int(self.settings.get("retrieval.candidate_limit", 150)))
             query = " ".join(change.changed_features + change.risk_keywords + [change.purpose])
             relevant_chunks = [chunk for chunk, _ in BM25Retriever(chunks, lambda item: f"{item.heading} {item.text}").search(query, int(self.settings.get("retrieval.specification_top_k", 8)))]
             decisions = self.gemini.analyze(change, candidates, relevant_chunks)
             decisions = validate_decisions(decisions, cases, relevant_chunks, float(self.settings.get("analysis.recommended_confidence", .8)), float(self.settings.get("analysis.review_confidence", .6)))
             drafts = validate_draft_test_cases(self.gemini.draft_test_cases, relevant_chunks)
-            result = AnalysisResult(analysis_id=analysis_id, created_at=datetime.now(timezone.utc), change_file=change_path.name, specification_file=specification_label, testcase_file=testcase_label, change=change, total_tc=len(cases), candidate_tc=len(candidates), decisions=decisions, draft_test_cases=drafts, token_usage=self.gemini.token_usage)
+            result = AnalysisResult(analysis_id=analysis_id, created_at=datetime.now(timezone.utc), change_file=change_file_name, specification_file=specification_label, testcase_file=testcase_label, change=change, total_tc=len(cases), candidate_tc=len(candidates), decisions=decisions, draft_test_cases=drafts, token_usage=self.gemini.token_usage)
             result.report_path = create_html_report(result)
             create_csv_export(result)
             create_xlsx_export(result)

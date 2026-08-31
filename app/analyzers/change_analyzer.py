@@ -31,25 +31,31 @@ def _new_or_changed_lines(text: str, baseline_text: str) -> list[str]:
     return result
 
 
-def analyze_change_rules(text: str, baseline_text: str | None = None) -> ChangeAnalysis:
-    if baseline_text:
+def analyze_change_rules(text: str, baseline_text: str | None = None, user_notes: str = "") -> ChangeAnalysis:
+    if not text:
+        lines = []
+    elif baseline_text:
         lines = _new_or_changed_lines(text, baseline_text)
     else:
         lines = [line.strip(" -\t") for line in text.splitlines() if len(line.strip()) > 2]
-    keyword_source = "\n".join(lines) if baseline_text else text
+    note_lines = [line.strip(" -\t") for line in user_notes.splitlines() if len(line.strip()) > 2]
+    combined_lines = note_lines + lines
+    keyword_source = "\n".join(combined_lines) if (baseline_text or note_lines) else text
     keywords = [word for word in RISK_WORDS if word.lower() in keyword_source.lower()]
-    features = []
+    # 사용자가 직접 입력한 요청은 이미 변경사항으로 명시된 것이므로 키워드 필터 없이 그대로 포함한다.
+    features = list(note_lines)
     for line in lines:
         if re.search(r"변경|추가|개선|수정|지원", line, re.I):
             features.append(line[:200])
     return ChangeAnalysis(
+        user_notes=user_notes,
         changed_features=features[:20], purpose="; ".join(features[:3]),
-        ui_changes=[line for line in lines if re.search(r"UI|화면|버튼|표시", line, re.I)][:10],
-        interface_changes=[line for line in lines if re.search(r"API|interface|연동", line, re.I)][:10],
-        dicom_changes=[line for line in lines if "dicom" in line.lower()][:10],
-        workflow_changes=[line for line in lines if re.search(r"workflow|흐름|절차", line, re.I)][:10],
-        configuration_changes=[line for line in lines if re.search(r"설정|config", line, re.I)][:10],
-        stored_data_changes=[line for line in lines if re.search(r"저장|database|DB", line, re.I)][:10],
-        compatibility_changes=[line for line in lines if re.search(r"호환|compatib", line, re.I)][:10],
+        ui_changes=[line for line in combined_lines if re.search(r"UI|화면|버튼|표시", line, re.I)][:10],
+        interface_changes=[line for line in combined_lines if re.search(r"API|interface|연동", line, re.I)][:10],
+        dicom_changes=[line for line in combined_lines if "dicom" in line.lower()][:10],
+        workflow_changes=[line for line in combined_lines if re.search(r"workflow|흐름|절차", line, re.I)][:10],
+        configuration_changes=[line for line in combined_lines if re.search(r"설정|config", line, re.I)][:10],
+        stored_data_changes=[line for line in combined_lines if re.search(r"저장|database|DB", line, re.I)][:10],
+        compatibility_changes=[line for line in combined_lines if re.search(r"호환|compatib", line, re.I)][:10],
         risk_keywords=keywords,
     )
