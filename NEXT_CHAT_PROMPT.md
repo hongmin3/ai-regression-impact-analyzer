@@ -1,75 +1,106 @@
-# 다른 채팅방에서 사용할 프롬프트
+# 다른 채팅방에서 사용할 연속 작업 프롬프트
 
-아래 `---` 사이의 내용을 새 채팅(Claude Code 또는 Codex)에 그대로 붙여넣는다.
-`이번 작업 목표` 항목만 그때그때 원하는 것으로 바꾼다.
+아래 `---` 사이를 새 Codex 또는 Claude Code 채팅에 그대로 붙여넣는다. 필요하면 `이번 작업 목표`의 우선순위만 바꾼다.
 
-마지막 갱신: 2026-08-31
+마지막 갱신: 2026-08-31  
+현재 Git HEAD: `fed5004` (`origin/master`와 동일)
 
 ---
 
 `C:\Users\2024980\Documents\자동화\ai-regression-impact-analyzer` 프로젝트 작업을 이어서 수행해줘.
 
-먼저 다음 순서를 반드시 지켜라.
+## 시작 순서
 
-1. 프로젝트 루트의 `AGENTS.md`를 읽는다.
-2. `akela/PROTOCOL.md`를 읽고 이번 작업에 맞는 activity로 `akela compile`을 실행한 뒤 slice를 읽는다. `akela` CLI가 설치되어 있지 않으면 그 사실만 보고하고 다음 단계로 넘어간다.
-3. `HANDOFF.md`, `README.md`, `SECURITY.md`를 읽는다.
-4. `git status`, 최근 commit, 현재 테스트 결과를 확인한다.
-5. 서버 작업이 필요하면 먼저 읽기 전용으로 상태와 포트 충돌을 확인한다.
+다음 순서를 반드시 지켜라.
 
-이 프로젝트는 로컬 폴더가 Canonical source이고, 검증된 결과만 Ubuntu 서버 `/home/ubuntu/ai-regression-impact-analyzer`에 배포한다. 공개 GitHub 저장소는 `https://github.com/hongmin3/ai-regression-impact-analyzer`다.
+1. 현재 위치에서 상위로 가장 가까운 `akela.json`을 찾아 Project Root를 확정한다.
+2. Project Root의 `AGENTS.md`와 `akela/PROTOCOL.md`를 읽는다.
+3. 이번 작업에 맞는 activity로 `akela compile --activity <activity> --task <task-id>`를 실행하고 생성된 slice 전체를 읽는다.
+4. `HANDOFF.md`, `README.md`, `SECURITY.md`를 읽는다.
+5. `git status`, 최근 commit, 로컬 전체 테스트를 확인한다.
+6. 서버 작업 전에는 대상 경로, `/health`, 포트 `12000` 소유 프로세스를 읽기 전용으로 확인한다.
 
-절대 안전 규칙:
+Akela CLI `0.1.4`는 개발 PC에 전역 설치되어 있다. 명령을 찾지 못할 때만 `npx akela@0.1.4 --version`으로 확인하고, 임의의 동명 패키지를 설치하지 않는다.
 
-- `/home/ubuntu/jjhhub/` 내부에 들어가거나 수정하지 않는다.
-- `/mnt/vhdmaster`, `/mnt/vhdmaste`를 수정·이동·삭제·권한 변경·마운트 변경하지 않는다.
+## 프로젝트와 배포 기준
+
+- Canonical source: `C:\Users\2024980\Documents\자동화\ai-regression-impact-analyzer`
+- Ubuntu 배포 경로: `/home/ubuntu/ai-regression-impact-analyzer`
+- GitHub: `https://github.com/hongmin3/ai-regression-impact-analyzer`
+- 검증된 로컬 결과만 `./scripts/deploy.ps1`로 서버 프로젝트 경로에 배포한다.
+- 서버 배포 폴더는 Git 저장소가 아닌 일반 디렉터리다.
+
+## 절대 안전 규칙
+
+- `/home/ubuntu/jjhhub/` 내부에 들어가거나 열람·수정하지 않는다.
+- `/mnt/vhdmaster`, `/mnt/vhdmaste`를 접근·수정·이동·삭제하거나 권한/마운트를 변경하지 않는다.
 - 기존 systemd/nginx/PostgreSQL/방화벽/서비스/virtualenv/requirements/Git 저장소를 변경하지 않는다.
 - 기존 서비스를 restart/stop하지 않고 서버를 reboot하지 않는다.
-- SSH 비밀번호나 Gemini API Key를 코드, config, README, 로그, Report, Git에 저장하지 않는다. SSH 비밀번호는 파일로 관리하지 않는다는 것이 확정된 방침이다.
+- SSH 비밀번호나 Gemini API Key를 코드, 설정 예제, 문서, 명령 출력, 로그, Report, Git에 저장하지 않는다.
+- SSH 비밀번호 파일을 만들지 않는다. 기존 SSH key 인증만 사용한다.
 - 서버 변경은 `/home/ubuntu/ai-regression-impact-analyzer` 내부로 제한한다.
-- 신규 systemd 등록이나 네트워크 설정 변경은 변경안과 영향을 먼저 설명하고 사용자 승인을 받은 뒤 수행한다.
+- 신규 systemd 등록, 프로세스 재기동, 네트워크 설정 변경은 변경안과 영향을 먼저 설명하고 사용자 승인을 받은 뒤 수행한다.
 
-## 현재 상태 (2026-08-31 기준)
+## 현재 구현 상태
 
-구현 완료:
+- FastAPI/Jinja2 Web UI
+- PDF 및 Word `.docx` 사양서/변경문서 지원 (`.doc` 미지원)
+- VXvue 실제 TC Excel의 Cover/다중 시트/가변 헤더 자동 탐지
+- PDF/DOCX text chunk, BM25 사양 검색, Rule 기반 Candidate Selection
+- Gemini Structured Output, 실제 TC/Chunk ID 교차검증, Confidence/Manual Review 분류
+- Gemini token usage 파싱·Logging
+- SQLite Metadata/Cache 및 Persistent Analysis 상태
+- 재기동 후 완료 결과 조회, 중단된 QUEUED/RUNNING 작업의 명시적 실패 처리
+- 분석 이력 및 Candidate/Impact 집계 화면
+- HTML Report, CSV, XLSX Export
+- `secrets.txt` / `secrets.json` / `.env` / OS 환경변수 지원
+- `GET /config/status`, `POST /config/reload`
+- 로컬 및 서버 테스트 `31 passed`
 
-- FastAPI/Jinja2 Web UI, PDF/Excel Parser, BM25 검색, Rule 기반 Candidate Selection
-- Gemini Structured Output, Hallucination 검증(실제 TC ID·Chunk ID 교차검증), Confidence 분류
-- SQLite Metadata/Cache, HTML Report, CSV Export
-- **비밀정보 입력 개선**: `app/core/secrets_loader.py`가 `secrets.txt` / `secrets.json` / `.env` / OS 환경변수를 모두 읽는다. 우선순위는 `OS 환경변수 > secrets.json > secrets.txt > .env > 기본값`. `GET /config/status`와 `POST /config/reload`로 Key 설정 여부 확인과 재시작 없는 재적용이 가능하고, Key 값 자체는 어떤 응답·로그·Report에도 노출되지 않는다.
-- PDF 및 Word `.docx` 사양서/변경문서 지원 (`.doc`는 미지원)
-- 로컬 및 서버 테스트 `25 passed` (`.\.venv\Scripts\python.exe -m pytest -q`)
+## 검증된 실제 자료
 
-확정된 사실:
+참고 전용 VXvue 지식 폴더:
 
-- SSH는 이미 키 인증으로 동작한다. `ssh -o BatchMode=yes ubuntu@10.13.0.222 'echo ok'`가 성공하므로 배포에 비밀번호가 필요 없다. `~/.ssh/id_ed25519`에 passphrase가 없어 ssh-agent도 필요 없고, Windows `ssh-agent` 서비스는 Stopped/Disabled 상태 그대로 둔다.
-- 서버 내부 `/health`는 성공하지만 개발 PC에서 `10.13.0.222:12000` 접속은 Timeout이다. 원인 미규명이며 방화벽/nginx를 임의로 바꾸지 않는다.
-- systemd는 아직 등록하지 않았다. 승인 대기안은 `HANDOFF.md` §6에 있다.
-- `akela` CLI가 개발 PC에 설치되어 있지 않다. 직전 slice는 knowledge 3개 섹션이 전부 `general-scope`로 dropped되어 비어 있으며, scoping은 사용자 결정으로 보류 중이다.
+`C:\Users\2024980\Documents\자동화\VXvue\VXvue 지식파일`
 
-미해결 / 주의:
+이 폴더는 읽기 전용 참고자료로 사용한다. 원문 PDF/XLSX/TXT나 비밀정보를 공개 Git 저장소에 복사하지 않는다.
 
-- `secrets.txt` 및 Word `.docx` 지원 변경분은 commit `8205963`으로 커밋되어 서버에 배포됐다. 기존 서버 프로세스는 안전 규칙에 따라 재시작하지 않았으므로 다음 정상 기동부터 활성화된다.
-- 분석 Job 상태가 `app/web/routes.py`의 `jobs: dict` 메모리에만 있어 재시작 시 사라진다. `analyses` 테이블은 이미 만들어져 있으나 사용되지 않는다.
-- Export는 CSV만 있고 XLSX는 없다. openpyxl은 이미 설치되어 있다.
-- Gemini 응답의 토큰 usage 파싱·Logging과 XLSX Export 기본 구현은 있으나 집중 Mock 테스트 보강이 필요하다.
-- 분석 이력 목록 화면이 없다.
-- BM25 인덱스를 등록 시 Chunk 수만 기록하고 직렬화해 재사용하지 않는다.
-- FastAPI BackgroundTasks는 대규모 동시 작업용 Queue가 아니다.
+- TC 작성 규칙: `[QA 작성 규칙] VXvue TC 설계 및 자체검토 가이드_Rev1.7.md`
+- 실제 TC 4개 파싱 성공: 669 / 3,894 / 1,785 / 59건
+- 최신 사양서 PDF 6개 파싱 성공
+- 실제 Gemini smoke 분석 `a4903700e24a` 성공
+  - VXvue 사양서1(260831) PDF + Basic Function Checklist
+  - 전체/Candidate/Decision 59건, 추천 23건
+  - prompt 22,643 / candidate 12,521 / total 54,856 tokens
+  - HTML/CSV/XLSX 생성 및 API Key 패턴 비노출 확인
+- 위 smoke test는 동일 사양서를 변경문서와 근거문서로 사용했으므로 파이프라인 검증이며 업무 정확도 검증은 아니다.
+
+VXvue 규칙 적용 시 텍스트 검색 결과만으로 현재 유효 사양을 확정하지 않는다. 최신 유효 사양서, 원본 PDF의 취소선·밑줄·교체 표시, 문서 상태를 확인하고 TC ID와 기존 결과 이력을 보존한다.
+
+## 서버 현재 상태
+
+- SSH key 인증 성공: `ubuntu@10.13.0.222`
+- 포트 `12000`: 프로젝트 Python 프로세스 PID `1208181`
+- 서버 내부 `http://127.0.0.1:12000/health`: 성공
+- 개발 PC에서 `http://10.13.0.222:12000`: TCP/HTTP Timeout
+- systemd unit은 아직 없음
+- 새 소스는 서버 폴더에 배포됐지만 기존 프로세스를 재시작하지 않아 최신 기능은 실행 중 프로세스에 활성화되지 않았을 수 있다.
+- 로컬 및 서버 `secrets.txt`에 Gemini Key가 설정되어 있다.
+- 서버 파일은 `/home/ubuntu/ai-regression-impact-analyzer/secrets.txt`, 소유자 `ubuntu`, 권한 `600`이다. Key 값 없이 `/config/status` 또는 `secret_status()`로 설정 여부만 확인한다.
 
 ## 이번 작업 목표
 
-우선순위 순서다. 이 중 하나 이상을 지정해서 진행한다.
+우선순위 순서로 가능한 범위를 직접 구현하고 테스트한다.
 
-1. Gemini 응답 토큰 usage 파싱 및 사용량 Logging 집중 테스트 보강 (Mock으로 검증, API Key 불필요)
-3. Persistent Job 상태 저장 — 기존 `analyses` 테이블을 사용해 재시작 후에도 결과 조회 가능하게
-4. XLSX Export 추가 (openpyxl)
-5. 분석 이력 목록 화면과 Candidate/Impact 집계 화면 강화
-6. TC 컬럼 매핑 설정 UI
-7. 실제 사양서/TC/변경 PDF로 Gemini End-to-End 검증 (서버 `secrets.txt`에 Key 입력 선행 필요)
-8. 사용자 승인 후 systemd 등록
-9. 네트워크 접근 정책 담당자 확인 후 팀원 접속 검증
+1. 실제 변경 전용 문서와 별도의 기준 사양서를 사용해 추천 정확도 E2E 검증
+2. VXvue Rev.1.7 규칙 반영 강화: 원본 개정 표시/삭제 사양/근거 수준을 결과 모델에 구조화
+3. 분석 이력 검색, 상태·날짜 필터, 페이지네이션
+4. 자동 탐지 실패용 TC 시트/헤더 수동 매핑 UI
+5. BM25 인덱스 직렬화 및 재사용
+6. BackgroundTasks의 동시 작업 한계 보완을 위한 Queue 설계
+7. 사용자 승인 후 최신 서버 코드 활성화 또는 systemd 등록
+8. 네트워크 담당자 확인 후 개발 PC/팀원 웹 접속 검증
 
-작업은 가능한 범위에서 직접 구현하고 테스트하되, 기존 운영 시스템 변경이 필요하면 멈추고 승인 요청을 해라. 완료 후 변경 파일, 테스트 결과, 서버 영향, 기존 운영 서비스 변경 여부를 명확히 보고해라.
+운영 시스템 변경이 필요하면 멈추고 승인 요청을 한다. 완료 후 변경 파일, 테스트 결과, Gemini 비용/usage, 서버 영향, 기존 서비스 변경 여부, Git commit/push, Akela applied/outcome을 명확히 보고한다.
 
 ---

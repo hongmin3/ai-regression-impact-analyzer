@@ -42,7 +42,7 @@ SW 변경사항과 제품 사양서/Manual(PDF 또는 Word `.docx`), Test Case E
 - 실제 Gemini E2E smoke 성공: 분석 `a4903700e24a`, TC 59, 추천 23, total tokens 54,856
 - Gemini Key를 `secrets.txt` / `secrets.json` / `.env` / OS 환경변수 어디에 넣어도 인식 (우선순위 순)
 - `/config/status`, `/config/reload`로 Key 설정 여부 확인 및 재시작 없는 재적용
-- 로컬 자동 테스트 `31 passed` (이번 TC 파서 변경 서버 배포 전)
+- 로컬 및 서버 자동 테스트 `31 passed`
 - 2026-08-31 서버 배포 완료, 기존 PID `1208181`은 재시작하지 않았으므로 새 기능은 다음 정상 기동부터 활성화
 - GitHub Public repository push 완료
 - Ubuntu 포트 `12000`에서 임시 사용자 프로세스로 실행 확인
@@ -51,11 +51,12 @@ SW 변경사항과 제품 사양서/Manual(PDF 또는 Word `.docx`), Test Case E
 
 우선순위 순서:
 
-1. 서버 `secrets.txt`에 Gemini Key 입력 (현재 Key는 로컬 `secrets.txt`에만 설정됨)
-2. 실제 변경 전용 문서와 서로 다른 기준 사양서를 사용한 업무 정확도 E2E 검증
+1. 실제 변경 전용 문서와 서로 다른 기준 사양서를 사용한 업무 정확도 E2E 검증
+2. VXvue Rev.1.7의 원본 개정 표시·삭제 사양·근거 수준을 결과 모델에 구조화
 3. 분석 이력의 검색·필터·페이지네이션 보강
 4. 자동 탐지로 해결되지 않는 TC용 수동 컬럼/시트 매핑 UI 추가
-6. 사용자 승인 후 systemd 등록
+5. BM25 인덱스 직렬화 및 재사용
+6. 사용자 승인 후 최신 서버 코드 활성화 또는 systemd 등록
 7. 네트워크 접근 정책 담당자 확인 후 팀원 접속 검증
 
 ## 6. systemd 승인 대기안
@@ -120,6 +121,8 @@ ss -ltnp 'sport = :12000'
 
 SSH 비밀번호는 어떤 파일에도 저장하지 않는다. 기존 SSH key/agent 인증을 사용한다.
 
+2026-08-31 기준 로컬과 서버 모두 `secrets.txt` Key 설정이 확인됐다. 서버 파일은 `/home/ubuntu/ai-regression-impact-analyzer/secrets.txt`, 소유자 `ubuntu`, 권한 `600`이다. Key 값 자체는 확인·출력하지 않는다.
+
 ## 10. 작업 완료 시 확인
 
 - `pytest` 통과
@@ -132,8 +135,8 @@ SSH 비밀번호는 어떤 파일에도 저장하지 않는다. 기존 SSH key/a
 
 ## 11. 알려진 한계
 
-- 실제 Gemini API Key 기반 E2E는 아직 수행되지 않았다.
-- `akela` CLI가 개발 PC에 설치되어 있지 않아 `akela compile` / `akela log`를 실행할 수 없다. 직전 slice는 knowledge 3개 섹션이 전부 `general-scope`로 dropped되어 비어 있다. scoping은 보류 결정.
+- 실제 Gemini smoke E2E는 성공했지만 동일 사양서를 변경/근거 문서로 사용했으므로 업무 정확도 검증은 남아 있다.
+- Akela CLI `0.1.4`가 전역 설치되어 compile/applied/outcome 기록이 정상 동작한다.
 - 완료된 분석과 상태는 SQLite에 저장되지만 BackgroundTasks 자체는 재시작 후 재개되지 않는다.
 - Specification Index는 등록 시 Chunk 수를 기록하지만 직렬화된 BM25 인덱스 재사용은 추가 개선이 필요하다.
 - FastAPI BackgroundTasks는 대규모 동시 작업용 Queue가 아니다.
