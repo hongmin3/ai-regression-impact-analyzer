@@ -6,7 +6,7 @@
   <div class="table-wrap"><table class="history">
     <thead><tr><th>시각</th><th>상태</th><th>변경 문서</th><th>Candidate</th><th>추천</th><th>Impact</th><th>결과</th></tr></thead>
     <tbody>{% for item in analyses %}<tr>
-      <td>{{ item.created_at[:19].replace('T', ' ') }}</td>
+      <td><span data-utc-time="{{ item.created_at }}">{{ item.created_at[:19].replace('T', ' ') }} UTC</span></td>
       <td><span class="badge {{ item.status }}">{{ item.status }}</span></td>
       <td>{{ item.result.change_file if item.result else '-' }}</td>
       <td>{{ item.result.candidate_tc if item.result else '-' }}</td>

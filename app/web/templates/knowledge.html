@@ -22,7 +22,7 @@
         {% for doc in group.documents %}
         <li>
           <span class="badge {{ 'latest' if loop.first else 'legacy' }}">{{ doc.revision }}{{ ' · 최근 등록' if loop.first else '' }}</span>
-          {{ doc.name }} <small>({{ doc.created_at[:19].replace('T', ' ') }})</small>
+          {{ doc.name }} <small>(<span data-utc-time="{{ doc.created_at }}">{{ doc.created_at[:19].replace('T', ' ') }} UTC</span>)</small>
           <a href="/knowledge/download/{{ doc.id }}">다운로드</a>
         </li>
         {% endfor %}
@@ -49,7 +49,7 @@
         {% for doc in group.documents %}
         <li>
           <span class="badge {{ 'latest' if loop.first else 'legacy' }}">{{ doc.revision }}{{ ' · 최근 등록' if loop.first else '' }}</span>
-          {{ doc.name }} <small>({{ doc.created_at[:19].replace('T', ' ') }})</small>
+          {{ doc.name }} <small>(<span data-utc-time="{{ doc.created_at }}">{{ doc.created_at[:19].replace('T', ' ') }} UTC</span>)</small>
           <a href="/knowledge/download/{{ doc.id }}">다운로드</a>
         </li>
         {% endfor %}

@@ -31,4 +31,28 @@ function bindDropzones(root) {
   });
 }
 
-document.addEventListener('DOMContentLoaded', () => bindDropzones());
+function formatKst(iso) {
+  try {
+    const parts = new Intl.DateTimeFormat('ko-KR', {
+      timeZone: 'Asia/Seoul',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+    }).formatToParts(new Date(iso));
+    const get = (type) => (parts.find((p) => p.type === type) || {}).value || '';
+    return `${get('year')}-${get('month')}-${get('day')} ${get('hour')}:${get('minute')}:${get('second')} KST`;
+  } catch (e) {
+    return iso;
+  }
+}
+
+function applyKstTimestamps(root) {
+  (root || document).querySelectorAll('[data-utc-time]').forEach((el) => {
+    const iso = el.dataset.utcTime;
+    if (iso) el.textContent = formatKst(iso);
+  });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  bindDropzones();
+  applyKstTimestamps();
+});
