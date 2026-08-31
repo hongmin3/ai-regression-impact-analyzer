@@ -54,6 +54,44 @@ class Storage:
             row = db.execute("SELECT * FROM documents WHERE id=?", (document_id,)).fetchone()
             return dict(row) if row else None
 
+    def create_analysis(self, analysis_id: str, status: str = "QUEUED") -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        with self.connect() as db:
+            db.execute(
+                "INSERT OR REPLACE INTO analyses(id,status,result_json,error,created_at,updated_at) VALUES(?,?,?,?,?,?)",
+                (analysis_id, status, None, None, now, now),
+            )
+
+    def update_analysis(self, analysis_id: str, status: str, result: dict | None = None, error: str | None = None) -> None:
+        with self.connect() as db:
+            db.execute(
+                "UPDATE analyses SET status=?,result_json=?,error=?,updated_at=? WHERE id=?",
+                (status, json.dumps(result, ensure_ascii=False) if result is not None else None, error, datetime.now(timezone.utc).isoformat(), analysis_id),
+            )
+
+    def get_analysis(self, analysis_id: str) -> dict | None:
+        with self.connect() as db:
+            row = db.execute("SELECT * FROM analyses WHERE id=?", (analysis_id,)).fetchone()
+        if not row:
+            return None
+        value = dict(row)
+        if value["result_json"]:
+            value["result"] = json.loads(value.pop("result_json"))
+        else:
+            value.pop("result_json")
+        return value
+
+    def list_analyses(self, limit: int = 100) -> list[dict]:
+        with self.connect() as db:
+            rows = db.execute("SELECT * FROM analyses ORDER BY created_at DESC LIMIT ?", (limit,)).fetchall()
+        values = []
+        for row in rows:
+            value = dict(row)
+            raw = value.pop("result_json")
+            value["result"] = json.loads(raw) if raw else None
+            values.append(value)
+        return values
+
     def cache_get(self, key: str) -> dict | None:
         with self.connect() as db:
             row = db.execute("SELECT response_json FROM ai_cache WHERE cache_key=?", (key,)).fetchone()

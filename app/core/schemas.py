@@ -81,6 +81,7 @@ class AnalysisResult(BaseModel):
     total_tc: int
     candidate_tc: int
     decisions: list[ImpactDecision]
+    token_usage: dict[str, int] = Field(default_factory=dict)
     report_path: Path | None = None
 
     @property

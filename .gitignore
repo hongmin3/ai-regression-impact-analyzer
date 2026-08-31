@@ -23,3 +23,10 @@ output/logs/
 app.pid
 output-bootstrap.log
 akela/.cache/
+
+# 사용자가 직접 편집하는 비밀정보 파일 (예제 파일만 공개)
+secrets.json
+secrets.txt
+secrets.local.*
+!secrets.example.json
+!secrets.example.txt

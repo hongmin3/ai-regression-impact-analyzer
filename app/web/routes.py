@@ -9,9 +9,9 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from app.analyzers.regression_analyzer import RegressionAnalyzer
-from app.core.config import get_settings
+from app.core.config import get_settings, reload_settings
 from app.core.storage import Storage
-from app.parsers.pdf_parser import parse_specification
+from app.parsers.document_parser import parse_document
 
 router = APIRouter()
 templates = Jinja2Templates(directory=str(get_settings().root / "app" / "web" / "templates"))
@@ -42,8 +42,8 @@ def knowledge(request: Request):
 @router.post("/knowledge/specification")
 def register_specification(file: UploadFile = File(...), product: str = Form(...), version: str = Form(""), revision: str = Form("")):
     settings = get_settings()
-    path = _save_upload(file, settings.path("storage.specification_dir"), {".pdf"})
-    chunks = parse_specification(path, path.stem)
+    path = _save_upload(file, settings.path("storage.specification_dir"), {".pdf", ".docx"})
+    chunks = parse_document(path, path.stem)
     storage.add_document("specification", product, version, revision, file.filename or path.name, path, {"chunk_count": len(chunks)})
     return RedirectResponse("/knowledge", status_code=303)
 
@@ -70,7 +70,7 @@ def start_analysis(background_tasks: BackgroundTasks, change_file: UploadFile = 
     testcase = storage.get_document(testcase_id)
     if not specification or not testcase:
         raise HTTPException(404, "선택한 사양서 또는 TC를 찾을 수 없습니다.")
-    change = _save_upload(change_file, get_settings().path("storage.upload_dir"), {".pdf"})
+    change = _save_upload(change_file, get_settings().path("storage.upload_dir"), {".pdf", ".docx"})
     job_id = uuid.uuid4().hex[:12]
     jobs[job_id] = {"status": "QUEUED"}
     background_tasks.add_task(_run_job, job_id, change, Path(specification["path"]), Path(testcase["path"]))
@@ -82,6 +82,18 @@ def job_status(job_id: str):
     if job_id not in jobs:
         raise HTTPException(404, "분석 작업을 찾을 수 없습니다.")
     return jobs[job_id]
+
+
+@router.get("/config/status")
+def config_status():
+    """Gemini Key 설정 여부만 반환한다. Key 값은 포함하지 않는다."""
+    return get_settings().secret_status()
+
+
+@router.post("/config/reload")
+def config_reload():
+    """secrets.txt/secrets.json을 수정한 뒤 재시작 없이 다시 읽는다."""
+    return reload_settings().secret_status()
 
 
 @router.get("/reports/{filename}")

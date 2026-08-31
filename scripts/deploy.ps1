@@ -15,4 +15,4 @@ Set-Location $projectRoot
 if ($LASTEXITCODE -ne 0) { throw "테스트 실패로 배포를 중단합니다." }
 ssh $hostTarget "test ! -e '$directory' || test -d '$directory'"
 ssh $hostTarget "mkdir -p '$directory'"
-foreach ($item in @("app", "scripts", "tests", "requirements.txt", "config.yaml", ".env.example", "README.md", "SECURITY.md")) { scp -r -- "$item" $target }
+foreach ($item in @("app", "scripts", "tests", "requirements.txt", "config.yaml", ".env.example", "secrets.example.txt", "secrets.example.json", "README.md", "SECURITY.md")) { scp -r -- "$item" $target }

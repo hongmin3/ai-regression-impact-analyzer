@@ -24,6 +24,7 @@ class GeminiClient:
         self.storage = storage or Storage()
         self.responder = responder
         self.request_count = 0
+        self.token_usage: dict[str, int] = {}
 
     @retry(retry=retry_if_exception_type((TimeoutError, ConnectionError)), stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=10), reraise=True)
     def _request(self, prompt: str) -> dict:
@@ -43,7 +44,13 @@ class GeminiClient:
                 temperature=0.1,
             ),
         )
-        return {"decisions": json.loads(response.text or "[]")}
+        usage = getattr(response, "usage_metadata", None)
+        token_usage = {
+            "prompt_tokens": int(getattr(usage, "prompt_token_count", 0) or 0),
+            "candidate_tokens": int(getattr(usage, "candidates_token_count", 0) or 0),
+            "total_tokens": int(getattr(usage, "total_token_count", 0) or 0),
+        }
+        return {"decisions": json.loads(response.text or "[]"), "token_usage": token_usage}
 
     def analyze(self, change: ChangeAnalysis, cases: list[TestCase], chunks: list[SpecificationChunk]) -> list[ImpactDecision]:
         payload = {
@@ -57,5 +64,6 @@ class GeminiClient:
         raw = cached or self._request(prompt)
         if not cached:
             self.storage.cache_set(cache_key, raw)
+        self.token_usage = {key: int(value) for key, value in raw.get("token_usage", {}).items()}
         values = raw.get("decisions", raw if isinstance(raw, list) else [])
         return [ImpactDecision.model_validate(item) for item in values]

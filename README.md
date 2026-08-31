@@ -1,11 +1,11 @@
 # AI Regression Impact Analyzer
 
-SW 변경사항 PDF, 제품 사양서/Manual PDF, Test Case Excel을 결합해 Regression 검증 대상 TC를 자동 추천하는 내부 QA 업무자동화 서비스입니다. 사용자는 별도의 AI 채팅이나 Prompt 작성 없이 브라우저에서 분석을 실행합니다.
+SW 변경사항과 제품 사양서/Manual(PDF 또는 Word `.docx`), Test Case Excel을 결합해 Regression 검증 대상 TC를 자동 추천하는 내부 QA 업무자동화 서비스입니다. 사용자는 별도의 AI 채팅이나 Prompt 작성 없이 브라우저에서 분석을 실행합니다.
 
 ## Architecture
 
 ```text
-Change PDF → Rule Change Analysis → Specification BM25 Retrieval
+Change PDF/DOCX → Rule Change Analysis → Specification BM25 Retrieval
            → TC Candidate Selection → Gemini Semantic Decision
            → Schema/Reference/Confidence Validation → HTML + CSV
 ```
@@ -18,11 +18,30 @@ Change PDF → Rule Change Analysis → Specification BM25 Retrieval
 cd "C:\Users\2024980\Documents\자동화\ai-regression-impact-analyzer"
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
-Copy-Item .env.example .env -Force
-notepad .env
+Copy-Item secrets.example.txt secrets.txt -Force
+notepad secrets.txt
 ```
 
-`.env`의 `GEMINI_API_KEY=` 뒤에 Gemini API Key를 입력합니다. `.env`는 Git에서 제외되며 화면·Report·Log에 표시되지 않습니다. SSH 비밀번호는 넣지 않습니다.
+## Gemini API Key 입력
+
+프로젝트 폴더의 **`secrets.txt`를 메모장으로 열어** `GEMINI_API_KEY=` 뒤에 Key를 붙여넣고 저장합니다.
+
+```text
+GEMINI_API_KEY=여기에_Key를_붙여넣습니다
+```
+
+앞뒤 공백, 따옴표, 줄바꿈은 자동으로 정리되므로 그대로 붙여넣어도 됩니다. `GEMINI_API_KEY=` 줄 없이 Key 한 줄만 적어도 인식합니다.
+
+JSON을 선호하면 `secrets.example.json`을 `secrets.json`으로 복사해 값을 채워도 됩니다. 값을 읽는 우선순위는 다음과 같습니다.
+
+1. OS 환경변수 `GEMINI_API_KEY`
+2. `secrets.json`
+3. `secrets.txt`
+4. `.env` (기존 방식, 계속 동작합니다)
+
+값을 저장한 뒤 서비스를 재시작하거나 화면 상단의 **설정 다시 읽기** 버튼을 누르면 즉시 반영됩니다. 상단 배너에 `설정됨 · 출처 · 길이`가 표시되면 정상입니다.
+
+`secrets.txt`, `secrets.json`, `.env`는 Git에서 제외되며 Key 값은 화면·Report·Log·API 응답 어디에도 표시되지 않습니다. SSH 비밀번호는 어떤 파일에도 넣지 않습니다.
 
 ## 실행과 종료
 
@@ -39,12 +58,12 @@ cd /home/ubuntu/ai-regression-impact-analyzer
 
 ## 사용 방법
 
-1. `Knowledge` 메뉴에서 제품명, Version, Revision과 사양서/Manual PDF를 등록합니다.
+1. `Knowledge` 메뉴에서 제품명, Version, Revision과 사양서/Manual PDF 또는 Word `.docx`를 등록합니다.
 2. 제품명, Version, TC Set Name과 `.xlsx` Test Case를 등록합니다.
-3. `분석`에서 변경사항 PDF와 등록된 사양서·TC를 선택합니다.
+3. `분석`에서 변경사항 PDF 또는 Word `.docx`와 등록된 사양서·TC를 선택합니다.
 4. `분석 실행` 후 HTML Report를 열거나 CSV를 내려받습니다.
 
-TC Excel은 `TC ID`, `Category`, `Feature`, `Precondition`, `Step`, `Expected Result`, `Result`, `Remark`와 일반적인 한글/영문 별칭을 인식합니다. `TC ID`는 필수입니다.
+레거시 Word `.doc` 형식은 지원하지 않으므로 Word에서 `.docx`로 저장한 뒤 등록합니다. TC Excel은 `TC ID`, `Category`, `Feature`, `Precondition`, `Step`, `Expected Result`, `Result`, `Remark`와 일반적인 한글/영문 별칭을 인식합니다. `TC ID`는 필수입니다.
 
 ## 결과 해석
 
@@ -69,7 +88,7 @@ Unit Test는 Gemini Mock Response를 사용하므로 API 비용이 없습니다.
 ## 설정 및 데이터 위치
 
 - 일반 설정: `config.yaml`
-- 비밀정보: `.env`
+- 비밀정보: `secrets.txt` 또는 `secrets.json` (`.env`도 계속 지원)
 - 앱 DB: `data/app.db`
 - 업로드: `data/uploads`, `data/specifications`, `data/testcases`
 - 보고서/CSV: `output/reports`, `output/exports`
@@ -79,7 +98,7 @@ Confidence, Top-K, Candidate 수, Retry 횟수는 `config.yaml`에서 변경합�
 
 ## 문제 해결과 로그
 
-Key 오류는 `.env`, PDF 오류는 텍스트 포함 여부, Excel 오류는 `.xlsx`와 TC ID 컬럼을 확인합니다.
+Key 오류는 `http://localhost:12000/config/status`에서 `configured`와 `source`를 확인합니다. PDF 오류는 텍스트 포함 여부, Excel 오류는 `.xlsx`와 TC ID 컬럼을 확인합니다.
 
 ```powershell
 Get-Content .\output\logs\app.log -Tail 100

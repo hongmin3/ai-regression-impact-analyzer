@@ -5,6 +5,9 @@ import html
 from collections import Counter
 from pathlib import Path
 
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill
+
 from app.core.config import get_settings
 from app.core.schemas import AnalysisResult
 
@@ -27,4 +30,25 @@ def create_csv_export(result: AnalysisResult) -> Path:
         writer.writerow(["TC ID", "Impact", "Confidence", "Reason", "Related Specification", "Verification Point", "Recommended", "Manual Review"])
         for item in result.decisions:
             writer.writerow([item.tc_id, item.impact.value, item.confidence, item.reason, " | ".join(item.relevant_specifications), " | ".join(item.verification_points), item.recommended, item.manual_review_required])
+    return output
+
+
+def create_xlsx_export(result: AnalysisResult) -> Path:
+    output = get_settings().path("storage.export_dir") / f"regression-{result.analysis_id}.xlsx"
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Regression Impact"
+    headers = ["TC ID", "Impact", "Confidence", "Reason", "Related Specification", "Verification Point", "Recommended", "Manual Review"]
+    sheet.append(headers)
+    for cell in sheet[1]:
+        cell.font = Font(bold=True, color="FFFFFF")
+        cell.fill = PatternFill("solid", fgColor="176B87")
+    for item in result.decisions:
+        sheet.append([item.tc_id, item.impact.value, item.confidence, item.reason, " | ".join(item.relevant_specifications), " | ".join(item.verification_points), item.recommended, item.manual_review_required])
+    sheet.freeze_panes = "A2"
+    sheet.auto_filter.ref = sheet.dimensions
+    widths = (18, 12, 12, 48, 35, 35, 14, 14)
+    for index, width in enumerate(widths, start=1):
+        sheet.column_dimensions[chr(64 + index)].width = width
+    workbook.save(output)
     return output
