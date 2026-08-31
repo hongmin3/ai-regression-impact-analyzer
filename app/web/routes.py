@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import shutil
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, Request, UploadFile
@@ -18,6 +19,32 @@ templates = Jinja2Templates(directory=str(get_settings().root / "app" / "web" / 
 storage = Storage()
 
 
+def _versions_by_product() -> dict[str, list[str]]:
+    return {product: storage.list_versions(product) for product in storage.list_products()}
+
+
+def _today_start_iso() -> str:
+    now = datetime.now(timezone.utc)
+    return now.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+
+
+def daily_token_status() -> dict:
+    limit = int(get_settings().get("analysis.daily_token_limit", 0) or 0)
+    used = storage.tokens_used_since(_today_start_iso())
+    return {"used": used, "limit": limit, "exceeded": limit > 0 and used >= limit}
+
+
+def _grouped_by_product_version(kind: str) -> list[dict]:
+    """list_documents는 id 내림차순이라 각 그룹의 첫 항목이 가장 최근 등록분이다. 표시 순서일 뿐 검색 포함 여부와는 무관하다 (모두 active_documents 대상)."""
+    groups: dict[tuple[str, str], list[dict]] = {}
+    for document in storage.list_documents(kind):
+        groups.setdefault((document["product"], document["version"]), []).append(document)
+    return [
+        {"product": product, "version": version, "documents": documents}
+        for (product, version), documents in groups.items()
+    ]
+
+
 def _save_upload(upload: UploadFile, directory: Path, allowed: set[str]) -> Path:
     suffix = Path(upload.filename or "").suffix.lower()
     if suffix not in allowed:
@@ -30,12 +57,27 @@ def _save_upload(upload: UploadFile, directory: Path, allowed: set[str]) -> Path
 
 @router.get("/", response_class=HTMLResponse)
 def home(request: Request):
-    return templates.TemplateResponse(request, "index.html", {"specs": storage.list_documents("specification"), "testcases": storage.list_documents("testcase")})
+    products = [p for p in storage.list_products() if storage.active_documents("specification", p) and storage.active_documents("testcase", p)]
+    return templates.TemplateResponse(request, "index.html", {"products": products})
 
 
 @router.get("/knowledge", response_class=HTMLResponse)
 def knowledge(request: Request):
-    return templates.TemplateResponse(request, "knowledge.html", {"specs": storage.list_documents("specification"), "testcases": storage.list_documents("testcase")})
+    return templates.TemplateResponse(
+        request,
+        "knowledge.html",
+        {
+            "spec_groups": _grouped_by_product_version("specification"),
+            "testcase_groups": _grouped_by_product_version("testcase"),
+            "products": storage.list_products(),
+            "versions_by_product": _versions_by_product(),
+        },
+    )
+
+
+@router.get("/guide", response_class=HTMLResponse)
+def guide(request: Request):
+    return templates.TemplateResponse(request, "guide.html", {})
 
 
 @router.get("/analyses", response_class=HTMLResponse)
@@ -53,8 +95,11 @@ def analysis_history(request: Request):
 
 
 @router.post("/knowledge/specification")
-def register_specification(file: UploadFile = File(...), product: str = Form(...), version: str = Form(""), revision: str = Form("")):
+def register_specification(file: UploadFile = File(...), product: str = Form(...), version: str = Form("")):
     settings = get_settings()
+    storage.ensure_product(product)
+    storage.ensure_version(product, version)
+    revision = storage.next_revision("specification", product, version)
     path = _save_upload(file, settings.path("storage.specification_dir"), {".pdf", ".docx"})
     chunks = parse_document(path, path.stem)
     storage.add_document("specification", product, version, revision, file.filename or path.name, path, {"chunk_count": len(chunks)})
@@ -62,31 +107,46 @@ def register_specification(file: UploadFile = File(...), product: str = Form(...
 
 
 @router.post("/knowledge/testcase")
-def register_testcase(file: UploadFile = File(...), product: str = Form(...), version: str = Form(""), revision: str = Form("")):
+def register_testcase(file: UploadFile = File(...), product: str = Form(...), version: str = Form("")):
+    storage.ensure_product(product)
+    storage.ensure_version(product, version)
+    revision = storage.next_revision("testcase", product, version)
     path = _save_upload(file, get_settings().path("storage.testcase_dir"), {".xlsx"})
     storage.add_document("testcase", product, version, revision, file.filename or path.name, path)
     return RedirectResponse("/knowledge", status_code=303)
 
 
-def _run_job(job_id: str, change: Path, specification: Path, testcase: Path) -> None:
+@router.get("/knowledge/download/{document_id}")
+def download_document(document_id: int):
+    document = storage.get_document(document_id)
+    if not document:
+        raise HTTPException(404, "문서를 찾을 수 없습니다.")
+    path = Path(document["path"])
+    if not path.exists():
+        raise HTTPException(404, "원본 파일을 찾을 수 없습니다.")
+    return FileResponse(path, filename=document["name"])
+
+
+def _run_job(job_id: str, change: Path, product: str) -> None:
     try:
         storage.update_analysis(job_id, "RUNNING")
-        result = RegressionAnalyzer().run(change, specification, testcase, analysis_id=job_id)
+        result = RegressionAnalyzer().run_for_product(change, product, analysis_id=job_id)
         storage.update_analysis(job_id, "DONE", result=result.model_dump(mode="json"))
     except Exception as exc:
         storage.update_analysis(job_id, "FAILED", error=str(exc))
 
 
 @router.post("/analyses")
-def start_analysis(background_tasks: BackgroundTasks, change_file: UploadFile = File(...), specification_id: int = Form(...), testcase_id: int = Form(...)):
-    specification = storage.get_document(specification_id)
-    testcase = storage.get_document(testcase_id)
-    if not specification or not testcase:
-        raise HTTPException(404, "선택한 사양서 또는 TC를 찾을 수 없습니다.")
+def start_analysis(background_tasks: BackgroundTasks, change_file: UploadFile = File(...), product: str = Form(...)):
+    token_status = daily_token_status()
+    if token_status["exceeded"]:
+        raise HTTPException(429, f"오늘 Gemini 누적 토큰 사용량({token_status['used']:,})이 설정한 한도({token_status['limit']:,})를 초과해 분석을 실행할 수 없습니다. config.yaml의 analysis.daily_token_limit을 조정하세요.")
+    if not storage.active_documents("specification", product) or not storage.active_documents("testcase", product):
+        raise HTTPException(404, f"'{product}' 제품에 등록된 사양서 또는 TC가 없습니다. Knowledge 메뉴에서 먼저 등록하세요.")
     change = _save_upload(change_file, get_settings().path("storage.upload_dir"), {".pdf", ".docx"})
     job_id = uuid.uuid4().hex[:12]
     storage.create_analysis(job_id)
-    background_tasks.add_task(_run_job, job_id, change, Path(specification["path"]), Path(testcase["path"]))
+    background_tasks.add_task(_run_job, job_id, change, product)
     return {"job_id": job_id, "status_url": f"/analyses/{job_id}"}
 
 
@@ -101,7 +161,9 @@ def job_status(job_id: str):
 @router.get("/config/status")
 def config_status():
     """Gemini Key 설정 여부만 반환한다. Key 값은 포함하지 않는다."""
-    return get_settings().secret_status()
+    status = get_settings().secret_status()
+    status["daily_token_usage"] = daily_token_status()
+    return status
 
 
 @router.post("/config/reload")
@@ -123,6 +185,15 @@ def report(filename: str):
 def export(filename: str):
     safe = Path(filename).name
     path = get_settings().path("storage.export_dir") / safe
+    if not path.exists():
+        raise HTTPException(404)
+    return FileResponse(path, filename=safe)
+
+
+@router.get("/generated_tc/{filename}")
+def generated_tc(filename: str):
+    safe = Path(filename).name
+    path = get_settings().path("storage.generated_tc_dir") / safe
     if not path.exists():
         raise HTTPException(404)
     return FileResponse(path, filename=safe)

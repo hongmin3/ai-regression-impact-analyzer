@@ -7,20 +7,23 @@
     <button type="button" id="keyreload">설정 다시 읽기</button>
   </div>
   <form id="analysis-form">
-    <label>변경사항 PDF 또는 Word (.docx)<input type="file" name="change_file" accept=".pdf,.docx" required></label>
-    <label>사양서<select name="specification_id" required><option value="">선택</option>{% for item in specs %}<option value="{{ item.id }}">{{ item.product }} / {{ item.name }}</option>{% endfor %}</select></label>
-    <label>Test Case Excel<select name="testcase_id" required><option value="">선택</option>{% for item in testcases %}<option value="{{ item.id }}">{{ item.product }} / {{ item.name }}</option>{% endfor %}</select></label>
+    <label>제품<select name="product" required><option value="">선택</option>{% for p in products %}<option value="{{ p }}">{{ p }}</option>{% endfor %}</select></label>
+    <label>변경사항 문서 (PDF 또는 Word .docx)
+      <div class="dropzone" id="change-dropzone" data-for="change-file" data-placeholder="클릭하여 선택하거나 파일을 끌어놓으세요">클릭하여 선택하거나 파일을 끌어놓으세요</div>
+      <input type="file" id="change-file" name="change_file" accept=".pdf,.docx" required hidden>
+    </label>
     <button>분석 실행</button>
   </form>
-  <div id="status" class="status">사양서와 TC를 Knowledge 메뉴에서 먼저 등록하세요.</div>
+  <p class="hint">변경 내역서, 설계검토보고서, 리비전 히스토리, 사양서 자체(개정판) 등 무엇이든 올릴 수 있습니다. 선택한 제품에 등록된 모든 사양서·TC를 대상으로 자동으로 검색·분석합니다.</p>
+  <div id="status" class="status">{% if not products %}Knowledge 메뉴에서 제품별 사양서와 TC를 먼저 등록하세요.{% endif %}</div>
 </section>
 <script>
 const f=document.querySelector('#analysis-form'),s=document.querySelector('#status');
-f.addEventListener('submit',async e=>{e.preventDefault();s.textContent='업로드 중...';const r=await fetch('/analyses',{method:'POST',body:new FormData(f)});const d=await r.json();if(!r.ok){s.textContent=d.detail||'실패';return}const timer=setInterval(async()=>{const q=await(await fetch(d.status_url)).json();s.textContent='상태: '+q.status;if(q.status==='DONE'){clearInterval(timer);const id=q.result.analysis_id;s.innerHTML=`완료 · 추천 ${q.result.decisions.filter(x=>x.recommended).length}건 · <a href="/reports/regression-${id}.html" target="_blank">HTML Report</a> · <a href="/exports/regression-${id}.csv">CSV</a> · <a href="/exports/regression-${id}.xlsx">XLSX</a>`}if(q.status==='FAILED'){clearInterval(timer);s.textContent='실패: '+q.error}},1200)});
+f.addEventListener('submit',async e=>{e.preventDefault();s.textContent='업로드 중...';const r=await fetch('/analyses',{method:'POST',body:new FormData(f)});const d=await r.json();if(!r.ok){s.textContent=d.detail||'실패';return}const timer=setInterval(async()=>{const q=await(await fetch(d.status_url)).json();s.textContent='상태: '+q.status;if(q.status==='DONE'){clearInterval(timer);const id=q.result.analysis_id;const draft=q.result.draft_tc_path?` · <a href="/generated_tc/regression-${id}-draft.md" target="_blank">TC 초안(md)</a>`:'';s.innerHTML=`완료 · 추천 ${q.result.decisions.filter(x=>x.recommended).length}건 · <a href="/reports/regression-${id}.html" target="_blank">HTML Report</a> · <a href="/exports/regression-${id}.csv">CSV</a> · <a href="/exports/regression-${id}.xlsx">XLSX</a>${draft}`}if(q.status==='FAILED'){clearInterval(timer);s.textContent='실패: '+q.error}},1200)});
 </script>
 <script>
 const kb=document.querySelector('#keystatus'),kt=kb.querySelector('span');
-async function loadKey(reload){kt.textContent='Gemini Key 상태 확인 중...';try{const r=await fetch(reload?'/config/reload':'/config/status',{method:reload?'POST':'GET'});const d=await r.json();const k=d.gemini_api_key;kb.classList.toggle('missing',!k.configured);kt.innerHTML=k.configured?`Gemini API Key 설정됨 · 출처 <code>${k.source}</code> · 길이 ${k.length}자 · 모델 <code>${d.gemini_model.value}</code>`:'Gemini API Key가 없습니다. 프로젝트 폴더의 <code>secrets.txt</code>를 메모장으로 열어 <code>GEMINI_API_KEY=</code> 뒤에 Key를 붙여넣고 저장한 뒤 이 버튼을 누르세요.'}catch(e){kb.classList.add('missing');kt.textContent='Key 상태를 확인하지 못했습니다.'}}
+async function loadKey(reload){kt.textContent='Gemini Key 상태 확인 중...';try{const r=await fetch(reload?'/config/reload':'/config/status',{method:reload?'POST':'GET'});const d=await r.json();const k=d.gemini_api_key;const t=d.daily_token_usage;const usage=t&&t.limit>0?` · 오늘 토큰 ${t.used.toLocaleString()} / ${t.limit.toLocaleString()}${t.exceeded?' (한도 초과)':''}`:'';kb.classList.toggle('missing',!k.configured||(t&&t.exceeded));kt.innerHTML=(k.configured?`Gemini API Key 설정됨 · 출처 <code>${k.source}</code> · 길이 ${k.length}자 · 모델 <code>${d.gemini_model.value}</code>`:'Gemini API Key가 없습니다. 프로젝트 폴더의 <code>secrets.txt</code>를 메모장으로 열어 <code>GEMINI_API_KEY=</code> 뒤에 Key를 붙여넣고 저장한 뒤 이 버튼을 누르세요.')+usage}catch(e){kb.classList.add('missing');kt.textContent='Key 상태를 확인하지 못했습니다.'}}
 document.querySelector('#keyreload').addEventListener('click',()=>loadKey(true));loadKey(false);
 </script>
 {% endblock %}

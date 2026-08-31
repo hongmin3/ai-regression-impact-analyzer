@@ -12,6 +12,7 @@ storage:
   index_dir: "data/indexes"
   report_dir: "output/reports"
   export_dir: "output/exports"
+  generated_tc_dir: "output/generated_tc"
   log_dir: "output/logs"
 
 retrieval:
@@ -26,3 +27,6 @@ analysis:
   retry_min_seconds: 1
   retry_max_seconds: 10
   cache_enabled: true
+  # 0 = 비활성. Gemini 무료 한도를 유지하려면 https://aistudio.google.com 할당량을 확인해
+  # 하루 총 토큰 수 기준으로 값을 넣는다. 넘으면 새 분석 실행이 차단된다 (실행 중인 분석에는 영향 없음).
+  daily_token_limit: 0

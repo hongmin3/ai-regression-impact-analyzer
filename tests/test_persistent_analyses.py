@@ -61,6 +61,47 @@ def test_job_status_reads_persisted_analysis(monkeypatch, tmp_path):
     assert response.json()["result"]["analysis_id"] == "restored"
 
 
+def test_active_documents_keeps_multiple_distinct_documents(tmp_path):
+    storage = Storage(tmp_path / "app.db")
+    storage.add_document("specification", "VXvue", "1.0", "Rev.1", "사양서1.pdf", tmp_path / "s1.pdf")
+    storage.add_document("specification", "VXvue", "1.0", "Rev.2", "사양서2.pdf", tmp_path / "s2.pdf")
+    storage.add_document("specification", "VXvue", "1.0", "Rev.3", "사양서3.pdf", tmp_path / "s3.pdf")
+
+    docs = storage.active_documents("specification", "VXvue")
+
+    assert {d["name"] for d in docs} == {"사양서1.pdf", "사양서2.pdf", "사양서3.pdf"}
+
+
+def test_tokens_used_since_sums_done_analyses(tmp_path):
+    storage = Storage(tmp_path / "app.db")
+    old = _result("old")
+    old["token_usage"] = {"total_tokens": 100}
+    new = _result("new")
+    new["token_usage"] = {"total_tokens": 250}
+    storage.create_analysis("old")
+    storage.update_analysis("old", "DONE", result=old)
+    storage.create_analysis("new")
+    storage.update_analysis("new", "DONE", result=new)
+    storage.create_analysis("running", status="RUNNING")
+
+    assert storage.tokens_used_since("1970-01-01T00:00:00+00:00") == 350
+
+
+def test_start_analysis_blocked_when_daily_token_limit_exceeded(monkeypatch, tmp_path):
+    persisted = Storage(tmp_path / "app.db")
+    used = _result("used-up")
+    used["token_usage"] = {"total_tokens": 999}
+    persisted.create_analysis("used-up")
+    persisted.update_analysis("used-up", "DONE", result=used)
+    monkeypatch.setattr(routes, "storage", persisted)
+    routes.get_settings().raw.setdefault("analysis", {})["daily_token_limit"] = 500
+    try:
+        response = TestClient(app).post("/analyses", files={"change_file": ("c.pdf", b"%PDF-", "application/pdf")}, data={"product": "VXvue"})
+        assert response.status_code == 429
+    finally:
+        routes.get_settings().raw["analysis"]["daily_token_limit"] = 0
+
+
 def test_analysis_history_renders_persisted_results(monkeypatch, tmp_path):
     persisted = Storage(tmp_path / "app.db")
     persisted.create_analysis("history-job")

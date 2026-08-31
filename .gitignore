@@ -18,6 +18,7 @@ data/indexes/
 data/*.db
 output/reports/
 output/exports/
+output/generated_tc/
 output/logs/
 *.log
 app.pid

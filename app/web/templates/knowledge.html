@@ -1,1 +1,69 @@
-{% extends "base.html" %}{% block content %}<div class="grid"><section><h2>사양서 / Manual 등록</h2><form method="post" action="/knowledge/specification" enctype="multipart/form-data"><label>제품명<input name="product" required></label><label>Version<input name="version"></label><label>Revision<input name="revision"></label><label>PDF 또는 Word (.docx)<input type="file" name="file" accept=".pdf,.docx" required></label><button>등록</button></form><ul>{% for i in specs %}<li>{{ i.product }} · {{ i.version }} · {{ i.name }}</li>{% endfor %}</ul></section><section><h2>Test Case 등록</h2><form method="post" action="/knowledge/testcase" enctype="multipart/form-data"><label>제품명<input name="product" required></label><label>Version<input name="version"></label><label>TC Set Name<input name="revision"></label><label>XLSX<input type="file" name="file" accept=".xlsx" required></label><button>등록</button></form><ul>{% for i in testcases %}<li>{{ i.product }} · {{ i.version }} · {{ i.name }}</li>{% endfor %}</ul></section></div>{% endblock %}
+{% extends "base.html" %}
+{% block content %}
+<datalist id="products-list">{% for p in products %}<option value="{{ p }}">{% endfor %}</datalist>
+<datalist id="versions-list"></datalist>
+<div class="grid">
+  <section>
+    <h2>사양서 / Manual 등록</h2>
+    <form method="post" action="/knowledge/specification" enctype="multipart/form-data">
+      <label>제품명<input name="product" list="products-list" placeholder="제품명 선택 또는 새로 입력" required></label>
+      <label>Version<input name="version" list="versions-list" placeholder="버전 선택 또는 새로 입력"></label>
+      <label>PDF 또는 Word (.docx)
+        <div class="dropzone" id="spec-dropzone" data-for="spec-file" data-placeholder="클릭하여 선택하거나 파일을 끌어놓으세요">클릭하여 선택하거나 파일을 끌어놓으세요</div>
+        <input type="file" id="spec-file" name="file" accept=".pdf,.docx" required hidden>
+      </label>
+      <button>등록</button>
+    </form>
+    <p class="hint">Revision은 같은 제품·버전에 등록할 때마다 자동으로 올라갑니다 (Rev.1, Rev.2 ...). 사양서1~5처럼 서로 다른 문서를 여러 개 등록해도 이전 문서를 대체하지 않고 모두 분석 대상에 포함됩니다.</p>
+    {% for group in spec_groups %}
+    <div class="revision-group">
+      <h3>{{ group.product }} · {{ group.version }}</h3>
+      <ul>
+        {% for doc in group.documents %}
+        <li>
+          <span class="badge {{ 'latest' if loop.first else 'legacy' }}">{{ doc.revision }}{{ ' · 최근 등록' if loop.first else '' }}</span>
+          {{ doc.name }} <small>({{ doc.created_at[:19].replace('T', ' ') }})</small>
+          <a href="/knowledge/download/{{ doc.id }}">다운로드</a>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endfor %}
+  </section>
+  <section>
+    <h2>Test Case 등록</h2>
+    <form method="post" action="/knowledge/testcase" enctype="multipart/form-data">
+      <label>제품명<input name="product" list="products-list" placeholder="제품명 선택 또는 새로 입력" required></label>
+      <label>Version<input name="version" list="versions-list" placeholder="버전 선택 또는 새로 입력"></label>
+      <label>XLSX
+        <div class="dropzone" id="tc-dropzone" data-for="tc-file" data-placeholder="클릭하여 선택하거나 파일을 끌어놓으세요">클릭하여 선택하거나 파일을 끌어놓으세요</div>
+        <input type="file" id="tc-file" name="file" accept=".xlsx" required hidden>
+      </label>
+      <button>등록</button>
+    </form>
+    <p class="hint">Revision은 같은 제품·버전에 등록할 때마다 자동으로 올라갑니다 (Rev.1, Rev.2 ...). 사양서1~5처럼 서로 다른 문서를 여러 개 등록해도 이전 문서를 대체하지 않고 모두 분석 대상에 포함됩니다.</p>
+    {% for group in testcase_groups %}
+    <div class="revision-group">
+      <h3>{{ group.product }} · {{ group.version }}</h3>
+      <ul>
+        {% for doc in group.documents %}
+        <li>
+          <span class="badge {{ 'latest' if loop.first else 'legacy' }}">{{ doc.revision }}{{ ' · 최근 등록' if loop.first else '' }}</span>
+          {{ doc.name }} <small>({{ doc.created_at[:19].replace('T', ' ') }})</small>
+          <a href="/knowledge/download/{{ doc.id }}">다운로드</a>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endfor %}
+  </section>
+</div>
+<script>
+const versionsByProduct = {{ versions_by_product | tojson }};
+const versionList = document.querySelector('#versions-list');
+function refreshVersions(product) {
+  versionList.innerHTML = (versionsByProduct[product] || []).map(v => `<option value="${v}">`).join('');
+}
+document.querySelectorAll('input[name=product]').forEach(inp => inp.addEventListener('input', () => refreshVersions(inp.value)));
+</script>
+{% endblock %}

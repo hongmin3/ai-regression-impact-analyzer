@@ -19,6 +19,8 @@ class Storage:
         connection.row_factory = sqlite3.Row
         return connection
 
+    DEFAULT_PRODUCTS = ("VXvue", "Bellalun Viewer")
+
     def initialize(self) -> None:
         with self.connect() as db:
             db.executescript("""
@@ -35,7 +37,61 @@ class Storage:
                 CREATE TABLE IF NOT EXISTS ai_cache (
                     cache_key TEXT PRIMARY KEY, response_json TEXT NOT NULL, created_at TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS products (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, created_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS product_versions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT, product TEXT NOT NULL, version TEXT NOT NULL,
+                    created_at TEXT NOT NULL, UNIQUE(product, version)
+                );
             """)
+            now = datetime.now(timezone.utc).isoformat()
+            for name in self.DEFAULT_PRODUCTS:
+                db.execute("INSERT OR IGNORE INTO products(name,created_at) VALUES(?,?)", (name, now))
+
+    def list_products(self) -> list[str]:
+        with self.connect() as db:
+            return [row["name"] for row in db.execute("SELECT name FROM products ORDER BY name")]
+
+    def ensure_product(self, name: str) -> None:
+        name = name.strip()
+        if not name:
+            return
+        with self.connect() as db:
+            db.execute("INSERT OR IGNORE INTO products(name,created_at) VALUES(?,?)", (name, datetime.now(timezone.utc).isoformat()))
+
+    def list_versions(self, product: str) -> list[str]:
+        with self.connect() as db:
+            return [row["version"] for row in db.execute("SELECT version FROM product_versions WHERE product=? ORDER BY version", (product,))]
+
+    def ensure_version(self, product: str, version: str) -> None:
+        version = version.strip()
+        if not version:
+            return
+        with self.connect() as db:
+            db.execute(
+                "INSERT OR IGNORE INTO product_versions(product,version,created_at) VALUES(?,?,?)",
+                (product, version, datetime.now(timezone.utc).isoformat()),
+            )
+
+    def next_revision(self, kind: str, product: str, version: str) -> str:
+        with self.connect() as db:
+            row = db.execute(
+                "SELECT COUNT(*) AS n FROM documents WHERE kind=? AND product=? AND version=?", (kind, product, version)
+            ).fetchone()
+        return f"Rev.{int(row['n']) + 1}"
+
+    def active_documents(self, kind: str, product: str) -> list[dict]:
+        """제품에 등록된 모든 문서를 반환한다.
+
+        사양서1~5처럼 서로 다른 문서가 같은 제품·버전 아래 여러 개 등록될 수 있으므로,
+        새 문서가 추가돼도 이전 문서를 검색 대상에서 제외(레거시 처리)하지 않고 전부 포함한다.
+        """
+        with self.connect() as db:
+            rows = db.execute(
+                "SELECT * FROM documents WHERE kind=? AND product=? ORDER BY id", (kind, product)
+            ).fetchall()
+        return [dict(row) for row in rows]
 
     def add_document(self, kind: str, product: str, version: str, revision: str, name: str, path: Path, metadata: dict | None = None) -> int:
         with self.connect() as db:
@@ -91,6 +147,21 @@ class Storage:
             value["result"] = json.loads(raw) if raw else None
             values.append(value)
         return values
+
+    def tokens_used_since(self, since_iso: str) -> int:
+        """지정 시각 이후 완료된 분석의 total_tokens 합계. 한도 체크용이라 대략치면 충분하다."""
+        with self.connect() as db:
+            rows = db.execute(
+                "SELECT result_json FROM analyses WHERE status='DONE' AND created_at>=? AND result_json IS NOT NULL",
+                (since_iso,),
+            ).fetchall()
+        total = 0
+        for row in rows:
+            try:
+                total += int(json.loads(row["result_json"]).get("token_usage", {}).get("total_tokens", 0))
+            except (TypeError, ValueError, json.JSONDecodeError):
+                continue
+        return total
 
     def fail_incomplete_analyses(self, error: str = "서버 재시작으로 분석이 중단되었습니다.") -> int:
         """A process restart cannot resume in-memory BackgroundTasks safely."""

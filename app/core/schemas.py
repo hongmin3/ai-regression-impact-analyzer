@@ -14,6 +14,28 @@ class Impact(str, Enum):
     NONE = "NONE"
 
 
+class EvidenceLevel(str, Enum):
+    """VXvue TC 설계 가이드 Rev.1.7 §7 근거 수준."""
+
+    EXPLICIT = "EXPLICIT"  # 명시 사양: 최신 유효 사양서에 직접 명시
+    EXPLICIT_CANDIDATE = "EXPLICIT_CANDIDATE"  # 명시 사양 후보: 검색은 됐으나 원본 유효성 미확인
+    DELETED_HISTORY = "DELETED_HISTORY"  # 삭제 이력 근거: 취소선 등으로 삭제된 사양
+    EXISTING_BEHAVIOR = "EXISTING_BEHAVIOR"  # 기존 동작: 매뉴얼/TC에서만 확인
+    INFERRED = "INFERRED"  # 확인 권장: 직접 근거 없는 추론
+
+
+class RevisionMark(str, Enum):
+    """원본 PDF의 취소선/밑줄 등 개정 표시 시각 확인 결과 (Rev.1.7 §1.2.1).
+
+    이 파이프라인은 텍스트만 추출하고 PDF 서식(취소선 등)을 분석하지 않으므로
+    기본값은 UNVERIFIED이다. NONE_DETECTED는 문장 자체에 삭제/개정 관련 표현이
+    없다는 뜻일 뿐, 원본을 시각적으로 확인했다는 뜻이 아니다.
+    """
+
+    NONE_DETECTED = "NONE_DETECTED"
+    UNVERIFIED = "UNVERIFIED"
+
+
 class ChangeAnalysis(BaseModel):
     changed_features: list[str] = Field(default_factory=list)
     purpose: str = ""
@@ -56,6 +78,19 @@ class SpecificationChunk(BaseModel):
     text: str
 
 
+class DraftTestCase(BaseModel):
+    """근거가 없는 필드는 반드시 '확인 필요'로 남기고 생성하지 않는다 (VXvue TC 가이드 Rev.1.7 §2, §7.6)."""
+
+    changed_feature: str
+    srs_no: str = "SRS No 확인 필요"
+    title: str = ""
+    precondition: str = ""
+    test_step: str = ""
+    expected_result: str = ""
+    test_data: str = ""
+    evidence_chunk_ids: list[str] = Field(default_factory=list)
+
+
 class ImpactDecision(BaseModel):
     tc_id: str
     impact: Impact
@@ -69,6 +104,13 @@ class ImpactDecision(BaseModel):
     recommended: bool = False
     manual_review_required: bool = False
     review_status: str = ""
+    evidence_level: EvidenceLevel = EvidenceLevel.INFERRED
+    revision_mark: RevisionMark = RevisionMark.UNVERIFIED
+
+
+class GeminiAnalysisResponse(BaseModel):
+    decisions: list[ImpactDecision]
+    draft_test_cases: list[DraftTestCase] = Field(default_factory=list)
 
 
 class AnalysisResult(BaseModel):
@@ -81,8 +123,10 @@ class AnalysisResult(BaseModel):
     total_tc: int
     candidate_tc: int
     decisions: list[ImpactDecision]
+    draft_test_cases: list[DraftTestCase] = Field(default_factory=list)
     token_usage: dict[str, int] = Field(default_factory=dict)
     report_path: Path | None = None
+    draft_tc_path: Path | None = None
 
     @property
     def recommended_count(self) -> int:
