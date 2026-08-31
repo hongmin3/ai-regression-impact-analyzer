@@ -37,7 +37,8 @@
 - Gemini Structured Output, Hallucination 검증(실제 TC ID·Chunk ID 교차검증), Confidence 분류
 - SQLite Metadata/Cache, HTML Report, CSV Export
 - **비밀정보 입력 개선**: `app/core/secrets_loader.py`가 `secrets.txt` / `secrets.json` / `.env` / OS 환경변수를 모두 읽는다. 우선순위는 `OS 환경변수 > secrets.json > secrets.txt > .env > 기본값`. `GET /config/status`와 `POST /config/reload`로 Key 설정 여부 확인과 재시작 없는 재적용이 가능하고, Key 값 자체는 어떤 응답·로그·Report에도 노출되지 않는다.
-- 로컬 테스트 `23 passed` (`.\.venv\Scripts\python.exe -m pytest -q`)
+- PDF 및 Word `.docx` 사양서/변경문서 지원 (`.doc`는 미지원)
+- 로컬 및 서버 테스트 `25 passed` (`.\.venv\Scripts\python.exe -m pytest -q`)
 
 확정된 사실:
 
@@ -48,10 +49,10 @@
 
 미해결 / 주의:
 
-- **위 `secrets.txt` 변경분이 아직 서버에 배포되지 않았고 Git에도 커밋되지 않았다.** 작업 전 `git status`로 확인할 것.
+- `secrets.txt` 및 Word `.docx` 지원 변경분은 commit `8205963`으로 커밋되어 서버에 배포됐다. 기존 서버 프로세스는 안전 규칙에 따라 재시작하지 않았으므로 다음 정상 기동부터 활성화된다.
 - 분석 Job 상태가 `app/web/routes.py`의 `jobs: dict` 메모리에만 있어 재시작 시 사라진다. `analyses` 테이블은 이미 만들어져 있으나 사용되지 않는다.
 - Export는 CSV만 있고 XLSX는 없다. openpyxl은 이미 설치되어 있다.
-- Gemini 응답의 토큰 usage를 파싱·기록하지 않는다.
+- Gemini 응답의 토큰 usage 파싱·Logging과 XLSX Export 기본 구현은 있으나 집중 Mock 테스트 보강이 필요하다.
 - 분석 이력 목록 화면이 없다.
 - BM25 인덱스를 등록 시 Chunk 수만 기록하고 직렬화해 재사용하지 않는다.
 - FastAPI BackgroundTasks는 대규모 동시 작업용 Queue가 아니다.
@@ -60,8 +61,7 @@
 
 우선순위 순서다. 이 중 하나 이상을 지정해서 진행한다.
 
-1. 이번 `secrets.txt` 변경분 커밋 및 서버 배포 (`.\scripts\deploy.ps1`), 배포 후 서버 `pytest`와 `/health` 재확인
-2. Gemini 응답 토큰 usage 파싱 및 사용량 Logging 보완 (Mock으로 검증, API Key 불필요)
+1. Gemini 응답 토큰 usage 파싱 및 사용량 Logging 집중 테스트 보강 (Mock으로 검증, API Key 불필요)
 3. Persistent Job 상태 저장 — 기존 `analyses` 테이블을 사용해 재시작 후에도 결과 조회 가능하게
 4. XLSX Export 추가 (openpyxl)
 5. 분석 이력 목록 화면과 Candidate/Impact 집계 화면 강화

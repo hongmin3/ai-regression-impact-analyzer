@@ -2,7 +2,7 @@
 
 ## 1. 프로젝트 목적
 
-SW 변경사항 PDF, 제품 사양서/Manual PDF, Test Case Excel을 입력받아 Rule Engine과 Gemini Semantic Decision Engine으로 Regression 검증 TC를 자동 추천한다. 사용자가 ChatGPT/Gemini Web/Claude/Codex에 별도로 질문하지 않는 업무 흐름이 핵심이다.
+SW 변경사항과 제품 사양서/Manual(PDF 또는 Word `.docx`), Test Case Excel을 입력받아 Rule Engine과 Gemini Semantic Decision Engine으로 Regression 검증 TC를 자동 추천한다. 사용자가 ChatGPT/Gemini Web/Claude/Codex에 별도로 질문하지 않는 업무 흐름이 핵심이다.
 
 ## 2. 작업 위치
 
@@ -25,9 +25,9 @@ SW 변경사항 PDF, 제품 사양서/Manual PDF, Test Case Excel을 입력받�
 ## 4. 현재 구현 상태
 
 - FastAPI/Jinja2 Web UI
-- Knowledge 사양서 PDF 등록
+- Knowledge 사양서 PDF/Word `.docx` 등록
 - TC Excel 등록
-- PyMuPDF 텍스트 추출 및 Page Chunk
+- PDF/Word `.docx` 텍스트 추출 및 Chunk
 - BM25 Specification 검색
 - Rule 기반 Change 분석 및 TC Candidate 축소
 - Gemini JSON Schema Structured Output
@@ -37,7 +37,8 @@ SW 변경사항 PDF, 제품 사양서/Manual PDF, Test Case Excel을 입력받�
 - Responsive HTML Report와 CSV Export
 - Gemini Key를 `secrets.txt` / `secrets.json` / `.env` / OS 환경변수 어디에 넣어도 인식 (우선순위 순)
 - `/config/status`, `/config/reload`로 Key 설정 여부 확인 및 재시작 없는 재적용
-- 로컬 자동 테스트 `23 passed` (서버 반영 전)
+- 로컬 및 서버 자동 테스트 `25 passed`
+- 2026-08-31 서버 배포 완료, 기존 PID `1208181`은 재시작하지 않았으므로 새 기능은 다음 정상 기동부터 활성화
 - GitHub Public repository push 완료
 - Ubuntu 포트 `12000`에서 임시 사용자 프로세스로 실행 확인
 
@@ -45,12 +46,10 @@ SW 변경사항 PDF, 제품 사양서/Manual PDF, Test Case Excel을 입력받�
 
 우선순위 순서:
 
-1. 이번 변경분(`secrets.txt` 지원)을 서버에 배포 — `.\scripts\deploy.ps1`. 아직 미배포이며 서버는 이전 버전이다.
-2. 사용자가 서버 `secrets.txt`에 `GEMINI_API_KEY` 입력 (로컬은 `.env`에 이미 값이 있어 동작 중)
-3. 실제 사양서/TC/변경 PDF로 Gemini End-to-End 검증
-4. Gemini 응답의 토큰 usage 필드 파싱 및 사용량 Logging 보완 — 미착수
-5. Persistent Job 상태 저장 — 미착수. `analyses` 테이블은 이미 있으나 `app/web/routes.py`의 `jobs: dict`가 메모리만 사용한다.
-6. XLSX Export 추가 — 미착수. 현재 `app/reports/html_report.py`는 HTML/CSV만 생성한다. openpyxl은 이미 설치되어 있다.
+1. 사용자가 서버 `secrets.txt`에 `GEMINI_API_KEY` 입력 (로컬은 `.env`에 이미 값이 있어 동작 중)
+2. 실제 사양서/TC/변경 PDF 또는 Word `.docx`로 Gemini End-to-End 검증
+3. Gemini 응답 토큰 usage 파싱/Logging과 XLSX Export의 집중 Mock 테스트 보강 (기본 구현은 포함됨)
+4. Persistent Job 상태 저장 — Storage 메서드는 추가됐으나 `app/web/routes.py`의 `jobs: dict`가 여전히 메모리만 사용한다.
 7. UI에서 상세 Candidate/Impact 집계 화면 강화 — 미착수. 분석 이력 목록 화면이 없다.
 8. TC 컬럼 매핑 설정 UI 추가 — 미착수
 9. 사용자 승인 후 systemd 등록
