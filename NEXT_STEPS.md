@@ -18,6 +18,9 @@
   이동 시에도 유지).
 - 테스트 7건 추가(`test_persistent_analyses.py`) — `pytest -q` **183 passed**(real-file E2E
   제외 기준). 실제 로컬 서버 데이터(분석 9건, DONE 5건)로 필터·검색·빈 결과 모두 확인.
+- 커밋(`7b38ac5`)·push·배포 완료. 원격 `183 passed, 1 skipped`, 포트 12000만 PID `1260054`
+  → `1261121`로 재기동, 다른 포트 PID 그대로 유지, `/analyses?status=DONE&page=1` 포함
+  주요 페이지 200 확인.
 
 ## 2026-09-01 매뉴얼 개정 검증 캐시 Hit 기록 추가 (비용 대시보드 v1 공백 해소)
 
