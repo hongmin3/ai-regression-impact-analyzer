@@ -76,6 +76,7 @@ class Storage:
                     source TEXT NOT NULL, category TEXT, title TEXT NOT NULL,
                     status TEXT NOT NULL DEFAULT 'MISSING_SUSPECTED',
                     matched_change_id INTEGER REFERENCES manual_changes(id),
+                    description TEXT NOT NULL DEFAULT '', result_status TEXT NOT NULL DEFAULT '',
                     created_at TEXT NOT NULL
                 );
             """)
@@ -94,6 +95,10 @@ class Storage:
             for column, ddl in (("source_page", "INTEGER"), ("review_required", "INTEGER NOT NULL DEFAULT 0")):
                 if column not in manual_change_columns:
                     db.execute(f"ALTER TABLE manual_changes ADD COLUMN {column} {ddl}")
+            release_finding_columns = {row["name"] for row in db.execute("PRAGMA table_info(manual_release_findings)")}
+            for column, ddl in (("description", "TEXT NOT NULL DEFAULT ''"), ("result_status", "TEXT NOT NULL DEFAULT ''")):
+                if column not in release_finding_columns:
+                    db.execute(f"ALTER TABLE manual_release_findings ADD COLUMN {column} {ddl}")
             now = datetime.now(timezone.utc).isoformat()
             for name in self.DEFAULT_PRODUCTS:
                 db.execute("INSERT OR IGNORE INTO products(name,created_at) VALUES(?,?)", (name, now))
@@ -413,11 +418,11 @@ class Storage:
             ).fetchall()
             return [dict(row) for row in rows]
 
-    def add_release_finding(self, revision_id: int, source: str, category: str, title: str, status: str = "MISSING_SUSPECTED", matched_change_id: int | None = None) -> int:
+    def add_release_finding(self, revision_id: int, source: str, category: str, title: str, status: str = "MISSING_SUSPECTED", matched_change_id: int | None = None, description: str = "", result_status: str = "") -> int:
         with self.connect() as db:
             cursor = db.execute(
-                "INSERT INTO manual_release_findings(revision_id,source,category,title,status,matched_change_id,created_at) VALUES(?,?,?,?,?,?,?)",
-                (revision_id, source, category, title, status, matched_change_id, datetime.now(timezone.utc).isoformat()),
+                "INSERT INTO manual_release_findings(revision_id,source,category,title,status,matched_change_id,description,result_status,created_at) VALUES(?,?,?,?,?,?,?,?,?)",
+                (revision_id, source, category, title, status, matched_change_id, description, result_status, datetime.now(timezone.utc).isoformat()),
             )
             return int(cursor.lastrowid)
 

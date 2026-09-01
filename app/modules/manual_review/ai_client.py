@@ -33,7 +33,7 @@ class ManualReviewAIClient:
     def token_usage(self) -> dict:
         return self._client.token_usage
 
-    def _payload(self, stage: str, change: TrackedChange, candidates: list[SpecificationChunk]) -> str:
+    def _payload(self, stage: str, change: TrackedChange, candidates: list[SpecificationChunk], release_context: list[dict] | None = None) -> str:
         payload = {
             "stage": stage,
             "manual_change": {
@@ -45,11 +45,12 @@ class ManualReviewAIClient:
                 "review_required": change.review_required,
             },
             "candidate_srs": [chunk.model_dump() for chunk in candidates],
+            "release_scope_context": release_context or [],
         }
         return json.dumps(payload, ensure_ascii=False, sort_keys=True)
 
-    def judge(self, change: TrackedChange, candidates: list[SpecificationChunk]) -> ManualChangeJudgment:
-        quick_prompt = self._payload("quick", change, candidates)
+    def judge(self, change: TrackedChange, candidates: list[SpecificationChunk], release_context: list[dict] | None = None) -> ManualChangeJudgment:
+        quick_prompt = self._payload("quick", change, candidates, release_context)
         quick_raw = self._client.generate_structured(quick_prompt, prompt_name=QUICK_PROMPT_NAME, response_schema=QuickJudgmentResponse)
         quick = QuickJudgmentResponse.model_validate(quick_raw)
 
@@ -61,7 +62,7 @@ class ManualReviewAIClient:
                 prompt_version=load_prompt(QUICK_PROMPT_NAME).version,
             )
 
-        detail_prompt = self._payload("detail", change, candidates)
+        detail_prompt = self._payload("detail", change, candidates, release_context)
         detail_raw = self._client.generate_structured(detail_prompt, prompt_name=DETAIL_PROMPT_NAME, response_schema=DetailJudgmentResponse)
         detail = DetailJudgmentResponse.model_validate(detail_raw)
         return ManualChangeJudgment(

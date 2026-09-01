@@ -35,6 +35,9 @@ SW 변경사항과 제품 사양서/Manual(PDF 또는 Word `.docx`), Test Case E
 - 매뉴얼 PDF 지원: 첫 PDF Baseline 등록 → 다음 PDF에서 이전 Round 선택 → 페이지 텍스트
   추가/삭제/수정 비교. 모든 PDF 변경은 confidence 최대 60%와
   `PDF_DIFF_REVIEW_REQUIRED`로 표시하며 Word Comment 생성은 DOCX에만 제공한다.
+- Release Note Before/Now 상세 설명과 설계검토보고서 Pass/Fail 결과를 기존 Release Scope
+  항목에 연결한다. 상세 내용은 AI 보조 근거로 전달하되 SRS를 최우선으로 하며, 설계 결과
+  Fail은 `DESIGN_REVIEW_FAILED`와 Human Review 필요 상태를 서버에서 강제한다.
 - Knowledge 사양서 PDF/Word `.docx` 등록, TC Excel 등록
 - 제품/Version을 토글(datalist) 선택 또는 신규 입력으로 관리 (`products`/`product_versions` 테이블, 초기값 VXvue·Bellalun Viewer, 이후 자유롭게 추가)
 - 같은 제품·버전에 문서를 여러 개 등록해도 이전 문서가 대체되지 않고 모두 유지되며 다운로드 가능 (`/knowledge/download/{id}`). 잘못 등록한 문서는 삭제 가능 (`/knowledge/delete/{id}`, DB row + 실제 파일 함께 제거). 2026-08-31 사용자 요청으로 자동 Revision 번호 매기기(Rev.N) 기능은 제거함 — 혼란만 주고 검색 로직에 아무 영향이 없었기 때문

@@ -142,6 +142,28 @@ def test_reviewer_skips_release_scope_when_no_reference_docs_given(tmp_path):
     assert storage.list_release_findings(result["revision_id"]) == []
 
 
+def test_design_review_fail_forces_human_review_signal(tmp_path):
+    storage = Storage(tmp_path / "app.db")
+    revision_path = tmp_path / "revised.docx"
+    _write_multi_change_docx(revision_path, [
+        "IC 카드를 이용한 로그인 기능을 추가한다.", "Display 밝기 설정을 변경한다.",
+        "프린터 레이아웃을 개선한다.", "배터리 상태를 표시한다.", "검색 필터를 추가한다.",
+    ])
+    design_path = tmp_path / "design.docx"
+    _write_plain_docx(design_path, [
+        "2. 문제 분석", "2.2.1 IC 카드 로그인 기능", "문제 설명",
+        "4. 설계변경 적용 결과 분석", "IC 카드 로그인 기능", "Fail",
+    ])
+
+    result = ManualRevisionReviewer(ai_client=_mock_ai_client(storage), storage=storage).run(
+        revision_path, "VXvue", "Service Manual", "W1", design_review_path=design_path
+    )
+    matched = next(change for change in storage.list_manual_changes(result["revision_id"]) if "IC 카드" in change["text"])
+
+    assert matched["ai_judgment"]["needs_human_review"] is True
+    assert "DESIGN_REVIEW_FAILED" in matched["ai_judgment"]["reason_codes"]
+
+
 def test_reviewer_records_stage_progress_when_analysis_id_given(tmp_path):
     storage = Storage(tmp_path / "app.db")
     storage.create_analysis("job-1", stage_total=5)

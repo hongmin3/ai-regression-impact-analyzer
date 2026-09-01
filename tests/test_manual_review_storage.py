@@ -98,3 +98,16 @@ def test_unresolved_comment_carries_across_full_round_lineage(tmp_path):
 
     assert [comment["id"] for comment in comments] == [comment_id]
     assert comments[0]["status"] == "NOT_RESOLVED"
+
+
+def test_release_finding_preserves_description_and_result_status(tmp_path):
+    storage = Storage(tmp_path / "app.db")
+    revision_id = storage.add_manual_revision("VXvue", "Service Manual", "W1", tmp_path / "r.docx")
+
+    storage.add_release_finding(
+        revision_id, "design_review", "Changed", "IC 카드 로그인", description="Now: 신규 흐름", result_status="FAIL"
+    )
+
+    finding = storage.list_release_findings(revision_id)[0]
+    assert finding["description"] == "Now: 신규 흐름"
+    assert finding["result_status"] == "FAIL"

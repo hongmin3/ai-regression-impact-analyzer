@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from difflib import SequenceMatcher
 
 from app.retrieval.bm25_retriever import BM25Retriever
 
@@ -48,6 +49,11 @@ _PAGE_FURNITURE_RE = re.compile(r"^(vieworks|doc\.\s*no\.|template\s*no\.|page\s
 # 목차(TOC) 항목은 실제 섹션 헤더와 문구가 동일하고 점선 리더+페이지 번호로만 구분되므로,
 # 점선 리더가 보이면 헤더/본문 판정 없이 그 줄 전체를 건너뛴다 (안 그러면 TOC에서 조기 종료됨).
 _TOC_LEADER_RE = re.compile(r"\.{3,}")
+_BEFORE_RE = re.compile(r"^before(?:\s*\([^)]*\))?\s*[:：]?\s*(.*)$", re.IGNORECASE)
+_NOW_RE = re.compile(r"^(?:now|after)(?:\s*\([^)]*\))?\s*[:：]?\s*(.*)$", re.IGNORECASE)
+_VERSION_LINE_RE = re.compile(r"^(?:v(?:ersion)?\s*)?\d+(?:\.\d+)+(?:\s*\w+)?$", re.IGNORECASE)
+_RESULT_SECTION_RE = re.compile(r"^\d+\.\s*.*(?:변경|적용|change).*(?:결과|result)", re.IGNORECASE)
+_RESULT_STATUS_RE = re.compile(r"\b(pass(?:ed)?|fail(?:ed)?)\b", re.IGNORECASE)
 
 
 @dataclass
@@ -55,6 +61,8 @@ class ReleaseChange:
     source_document: str
     category: str
     title: str
+    description: str = ""
+    result_status: str = ""
 
 
 def extract_release_note_changes(text: str, source_document: str) -> list[ReleaseChange]:
@@ -62,11 +70,14 @@ def extract_release_note_changes(text: str, source_document: str) -> list[Releas
     그 카테고리로 분류한다. 첫 헤더를 만나기 전 줄(문서 메타데이터 등)은 수집하지 않는다."""
     changes: list[ReleaseChange] = []
     current_category: str | None = None
-    for raw_line in text.splitlines():
+    lines = text.splitlines()
+    detail_start: int | None = None
+    for line_index, raw_line in enumerate(lines):
         line = raw_line.strip(" -•\t")
         if not line:
             continue
         if any(pattern.match(line) for pattern in _RELEASE_NOTE_STOP_PATTERNS):
+            detail_start = line_index + 1
             break
         matched_category = next((category for category, pattern in _CATEGORY_HEADER_PATTERNS.items() if pattern.match(line)), None)
         if matched_category:
@@ -76,7 +87,64 @@ def extract_release_note_changes(text: str, source_document: str) -> list[Releas
             continue
         title = _LEADING_NUMBER_RE.sub("", line)
         changes.append(ReleaseChange(source_document=source_document, category=current_category, title=title[:200]))
+    if detail_start is not None and changes:
+        _enrich_release_descriptions(lines[detail_start:], changes)
     return changes
+
+
+def _normalized(value: str) -> str:
+    return re.sub(r"[^0-9a-z가-힣]+", "", value.lower())
+
+
+def _title_match(line: str, changes: list[ReleaseChange]) -> ReleaseChange | None:
+    normalized = _normalized(_LEADING_NUMBER_RE.sub("", line))
+    if len(normalized) < 3:
+        return None
+    exact = [change for change in changes if _normalized(change.title) in normalized or normalized in _normalized(change.title)]
+    if exact:
+        return max(exact, key=lambda change: len(_normalized(change.title)))
+    scored = [(SequenceMatcher(None, normalized, _normalized(change.title)).ratio(), change) for change in changes]
+    score, change = max(scored, key=lambda item: item[0])
+    return change if score >= 0.68 else None
+
+
+def _enrich_release_descriptions(lines: list[str], changes: list[ReleaseChange]) -> None:
+    current: ReleaseChange | None = None
+    mode = ""
+    buffers: dict[int, dict[str, list[str]]] = {id(change): {"before": [], "now": []} for change in changes}
+    next_unassigned = 0
+    for raw_line in lines:
+        line = raw_line.strip(" -•\t")
+        if not line or _VERSION_LINE_RE.match(line) or any(pattern.match(line) for pattern in _CATEGORY_HEADER_PATTERNS.values()):
+            continue
+        matched_title = _title_match(line, changes)
+        if matched_title:
+            current, mode = matched_title, ""
+            continue
+        before = _BEFORE_RE.match(line)
+        now = _NOW_RE.match(line)
+        if before or now:
+            if before and current is not None and mode == "now" and buffers[id(current)]["now"]:
+                current = None
+            if current is None:
+                while next_unassigned < len(changes) and (
+                    buffers[id(changes[next_unassigned])]["before"] or buffers[id(changes[next_unassigned])]["now"]
+                ):
+                    next_unassigned += 1
+                current = changes[next_unassigned] if next_unassigned < len(changes) else None
+                next_unassigned += 1
+            mode = "before" if before else "now"
+            inline = (before or now).group(1).strip()
+            if current and inline:
+                buffers[id(current)][mode].append(inline)
+            continue
+        if current and mode:
+            buffers[id(current)][mode].append(line)
+    for change in changes:
+        before_text = " ".join(buffers[id(change)]["before"]).strip()
+        now_text = " ".join(buffers[id(change)]["now"]).strip()
+        parts = ([f"Before: {before_text}"] if before_text else []) + ([f"Now: {now_text}"] if now_text else [])
+        change.description = " | ".join(parts)[:2000]
 
 
 def extract_design_review_changes(text: str, source_document: str) -> list[ReleaseChange]:
@@ -110,7 +178,45 @@ def extract_design_review_changes(text: str, source_document: str) -> list[Relea
             changes.append(ReleaseChange(source_document=source_document, category="Changed", title=line[:200]))
             pending_number = False
         # else: 설명 본문 줄 — 제목만 추출하므로 건너뜀
+    _enrich_design_results(text, changes)
     return changes
+
+
+def _enrich_design_results(text: str, changes: list[ReleaseChange]) -> None:
+    if not changes:
+        return
+    in_results = False
+    recent_lines: list[str] = []
+    assigned: set[int] = set()
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line or _PAGE_FURNITURE_RE.match(line) or _TOC_LEADER_RE.search(line):
+            continue
+        if _RESULT_SECTION_RE.match(line):
+            in_results = True
+            recent_lines.clear()
+            continue
+        if not in_results:
+            continue
+        status_match = _RESULT_STATUS_RE.search(line)
+        if not status_match:
+            recent_lines.append(line)
+            recent_lines = recent_lines[-4:]
+            continue
+        status = "PASS" if status_match.group(1).lower().startswith("pass") else "FAIL"
+        title_part = _RESULT_STATUS_RE.sub("", line).strip(" -:：")
+        candidate = _title_match(title_part, changes) if title_part else None
+        if candidate is None:
+            for recent in reversed(recent_lines):
+                candidate = _title_match(recent, changes)
+                if candidate:
+                    break
+        if candidate is None:
+            candidate = next((change for change in changes if id(change) not in assigned), None)
+        if candidate:
+            candidate.result_status = status
+            assigned.add(id(candidate))
+        recent_lines.clear()
 
 
 def match_release_changes(release_changes: list[ReleaseChange], functional_changes: list[tuple[int, str]]) -> list[tuple[ReleaseChange, int | None]]:
@@ -126,7 +232,8 @@ def match_release_changes(release_changes: list[ReleaseChange], functional_chang
     retriever = BM25Retriever(functional_changes, lambda item: item[1])
     results: list[tuple[ReleaseChange, int | None]] = []
     for release_change in release_changes:
-        matches = retriever.search(release_change.title, 1)
+        query = f"{release_change.title} {release_change.description}".strip()
+        matches = retriever.search(query, 1)
         if matches and matches[0][1] > 0:
             results.append((release_change, matches[0][0][0]))
         else:

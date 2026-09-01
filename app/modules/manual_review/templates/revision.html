@@ -15,7 +15,7 @@
 <section>
   <h2>누락 의심 (Release Note/설계검토보고서 대비)</h2>
   <p class="hint">Release Note 또는 설계검토보고서에는 있으나 이번 리비전의 매뉴얼 변경 중에서는 관련 항목을 찾지 못한 것들입니다. 자동 판정이 아니라 검색 기반 추정이므로 반드시 QA가 직접 확인하세요.</p>
-  <ul>{% for f in missing_findings %}<li>[{{ f.category or '-' }}] {{ f.title }} <span class="hint">(출처: {{ f.source }})</span></li>{% endfor %}</ul>
+  <ul>{% for f in missing_findings %}<li>[{{ f.category or '-' }}] {{ f.title }}{% if f.result_status %} <span class="badge {{ f.result_status }}">{{ f.result_status }}</span>{% endif %} <span class="hint">(출처: {{ f.source }})</span>{% if f.description %}<br><span class="hint">{{ f.description }}</span>{% endif %}</li>{% endfor %}</ul>
 </section>
 {% endif %}
 
@@ -55,11 +55,13 @@
       {% else %}<span class="badge">{{ c.decision|judgment_ko }}</span>{% if c.confidence is not none %}<span class="hint"> confidence {{ '%.2f'|format(c.confidence) }}</span>{% endif %}
       {% endif %}
       {% if c.qa_decision %}<span class="badge">QA 재판정: {{ c.qa_decision|judgment_ko }}</span>{% endif %}
+      {% if c.ai_judgment and c.ai_judgment.needs_human_review %}<span class="badge FAILED">Human Review 필요</span>{% endif %}
     </div>
     <p>{{ c.text }}</p>
     <p class="hint">{% if c.source_page %}PDF 페이지 {{ c.source_page }}{% else %}작성자 {{ c.author or '-' }} · {{ c.change_date or '-' }} · 문단 #{{ c.paragraph_index }}{% endif %}</p>
     {% if c.functional and c.ai_judgment %}
       {% if c.ai_judgment.problem %}<p><strong>문제:</strong> {{ c.ai_judgment.problem }}</p>{% endif %}
+      {% if c.ai_judgment.reason_codes %}<p class="hint">판정 신호: {{ c.ai_judgment.reason_codes|join(', ') }}</p>{% endif %}
       {% if c.ai_judgment.qa_comment %}<p><strong>QA Comment 초안:</strong> {{ c.ai_judgment.qa_comment }}</p>{% endif %}
       {% if c.ai_judgment.recommended_manual_text %}<p><strong>권장 문구:</strong> {{ c.ai_judgment.recommended_manual_text }}</p>{% endif %}
       {% if c.ai_judgment.evidence %}<ul>{% for e in c.ai_judgment.evidence %}<li>[{{ e.type }}] {{ e.srs_no or '-' }} {{ e.srs_title }} ({{ e.source_file }} p.{{ e.page }}) — 시각확인: {{ e.visual_verification_status }}</li>{% endfor %}</ul>{% endif %}

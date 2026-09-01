@@ -110,13 +110,18 @@ class ManualRevisionReviewer:
                     functional_pairs.append((change_id, change))
 
             stage(3)
-            missing_count, release_scope_total = self._match_release_scope(revision_id, release_note_path, design_review_path, functional_pairs)
+            missing_count, release_scope_total, release_context = self._match_release_scope(revision_id, release_note_path, design_review_path, functional_pairs)
 
             stage(4)
             decision_counts: dict[str, int] = {}
             for change_id, change in functional_pairs:
                 candidates = search_candidates(chunks, change.text, max_candidates)
-                judgment = self.ai_client.judge(change, candidates)
+                change_release_context = release_context.get(change_id, [])
+                judgment = self.ai_client.judge(change, candidates, change_release_context)
+                if any(item.get("result_status") == "FAIL" for item in change_release_context):
+                    judgment.needs_human_review = True
+                    if "DESIGN_REVIEW_FAILED" not in judgment.reason_codes:
+                        judgment.reason_codes.append("DESIGN_REVIEW_FAILED")
                 if change.review_required:
                     judgment.confidence = min(judgment.confidence, 0.6)
                     judgment.needs_human_review = True
@@ -157,7 +162,7 @@ class ManualRevisionReviewer:
         release_note_path: Path | None,
         design_review_path: Path | None,
         functional_pairs: list[tuple[int, TrackedChange]],
-    ) -> tuple[int, int]:
+    ) -> tuple[int, int, dict[int, list[dict]]]:
         """등록된(선택) Release Note/설계검토보고서에서 변경 Scope를 추출해 이번 리비전의
         functional 변경들과 BM25로 대조한다. 매칭되지 않으면 MISSING_SUSPECTED로 저장한다
         (스펙 §13 Reverse 검증). 반환값은 (누락 의심 건수, 전체 Release Scope 건수)."""
@@ -167,15 +172,25 @@ class ManualRevisionReviewer:
         if design_review_path and design_review_path.exists():
             release_changes.extend(extract_design_review_changes(extract_document_text(design_review_path), design_review_path.name))
         if not release_changes:
-            return 0, 0
+            return 0, 0, {}
 
         functional_texts = [(change_id, change.text) for change_id, change in functional_pairs]
         matched = match_release_changes(release_changes, functional_texts)
         missing_count = 0
+        context_by_change: dict[int, list[dict]] = {}
         for release_change, matched_change_id in matched:
             status = "FOUND" if matched_change_id else "MISSING_SUSPECTED"
             if status == "MISSING_SUSPECTED":
                 missing_count += 1
             source = "release_note" if release_note_path and release_change.source_document == release_note_path.name else "design_review"
-            self.storage.add_release_finding(revision_id, source, release_change.category, release_change.title, status, matched_change_id)
-        return missing_count, len(release_changes)
+            self.storage.add_release_finding(
+                revision_id, source, release_change.category, release_change.title, status, matched_change_id,
+                description=release_change.description, result_status=release_change.result_status,
+            )
+            if matched_change_id:
+                context_by_change.setdefault(matched_change_id, []).append({
+                    "source": source, "category": release_change.category,
+                    "title": release_change.title, "description": release_change.description,
+                    "result_status": release_change.result_status,
+                })
+        return missing_count, len(release_changes), context_by_change

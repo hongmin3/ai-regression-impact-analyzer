@@ -92,6 +92,22 @@ def test_release_note_stops_before_description_for_each_version_section():
     assert [c.title for c in changes] == ["신규 기능 A"]
 
 
+def test_release_note_enriches_existing_item_with_before_now_description():
+    text = "\n".join([
+        "Changed", "Generator 자동 연결 개선",
+        "Description for Each Version", "V1.1.0", "Generator 자동 연결 개선",
+        "Before (V1.0)", "사용자가 수동으로 연결했다.",
+        "Now (V1.1)", "프로그램 시작 시 자동으로 연결한다.",
+    ])
+
+    changes = extract_release_note_changes(text, "release_note.docx")
+
+    assert len(changes) == 1
+    assert changes[0].title == "Generator 자동 연결 개선"
+    assert "Before: 사용자가 수동으로 연결했다." in changes[0].description
+    assert "Now: 프로그램 시작 시 자동으로 연결한다." in changes[0].description
+
+
 def test_design_review_extracts_numbered_subsection_titles():
     """"2.2.N" 형태로 번호와 제목이 한 줄에 있는 경우."""
     text = "\n".join(["1. 개요", "2. 문제 분석", "2.1 결과 요약", "배경 설명", "2.2 상세 내용", "2.2.1 IC 카드 로그인 기능", "기존 방식의 문제점 설명"])
@@ -160,6 +176,18 @@ def test_design_review_stops_collecting_when_next_top_level_section_reuses_numbe
 
 def test_design_review_without_problem_analysis_section_returns_empty():
     assert extract_design_review_changes("1. 개요\n어떤 내용", "design_review.pdf") == []
+
+
+def test_design_review_enriches_problem_item_with_result_status():
+    text = "\n".join([
+        "2. 문제 분석", "2.2.1 IC 카드 로그인 기능", "문제 설명",
+        "4. 설계변경 적용 결과 분석", "IC 카드 로그인 기능", "Fail",
+    ])
+
+    changes = extract_design_review_changes(text, "design_review.pdf")
+
+    assert len(changes) == 1
+    assert changes[0].result_status == "FAIL"
 
 
 def _sample_functional_changes() -> list[tuple[int, str]]:
