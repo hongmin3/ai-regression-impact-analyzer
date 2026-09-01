@@ -26,7 +26,10 @@
   않음(Knowledge와 동일하게 nav 전용 운영 페이지로 취급).
 - 테스트 7건 추가(`tests/test_cost_dashboard.py`) — `pytest -q` **174 passed**. 실제 로컬 서버로
   기존 완료 분석 5건(합계 313,844 tokens) 렌더링까지 확인.
-- 서버 재배포는 아직 하지 않음 — 다음 배포 시 포함 필요.
+- 커밋(`c674185`)·GitHub push·`scripts/deploy.ps1` 배포 완료. 원격 `pytest -q` 174 passed,
+  구 PID `1253849` → 신 PID `1255193`로 포트 12000만 재기동, 다른 포트(5000/5001/5002/5003/
+  8000/10000/18800)는 PID 그대로 유지 확인. `/health` 및 `/`, `/impact-analyzer`,
+  `/manual-review`, `/knowledge`, `/cost-dashboard`, `/analyses` 전부 200 확인.
 
 ## 2026-09-01 Cross-Manual/이미지 Gate 마무리 + 명칭 통일 (로컬 폴더 rename만 미완료)
 
