@@ -4,6 +4,10 @@ SW 변경사항과 제품 사양서·Test Case를 결합해 Regression 검증이
 
 ## Architecture
 
+루트(`/`)는 QA 자동화 기능을 선택하는 허브입니다. Regression 영향 분석은
+`/impact-analyzer`, 매뉴얼 개정 검증은 `/manual-review`에서 시작합니다. 새 QA 기능과
+공유 DB 확장 원칙은 [공용 플랫폼 아키텍처](docs/SHARED_PLATFORM_ARCHITECTURE.md)를 따릅니다.
+
 ```text
 Change Document → Rule 기반 Change 추출(기준 사양서 diff) → BM25 Specification 검색
      → TC Candidate 선정 → Gemini Semantic Decision(Structured Output)

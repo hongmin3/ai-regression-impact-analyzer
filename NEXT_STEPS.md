@@ -2,6 +2,13 @@
 
 ## 2026-09-01 세션에서 완료
 
+**3차 (QA 플랫폼 허브)**: 루트(`/`)를 공용 QA 자동화 허브로 전환하고 기존 Regression
+분석 시작 화면을 `/impact-analyzer`로 분리했다. `/manual-review`와 함께 두 기능을 카드로
+선택할 수 있으며, 기존 `/analyses`·`/knowledge`·동기화 API 경로는 호환성을 유지한다.
+공유 DB와 새 QA 모듈의 확장 원칙은 `docs/SHARED_PLATFORM_ARCHITECTURE.md`에 정리했다.
+로컬/서버 `pytest -q` 132건 통과 후 실서버 재배포·재기동과 주요 6개 페이지 200 응답까지
+검증했다.
+
 **1차 (스켈레톤 → 동작하는 파이프라인)**: 코드 구조 리팩터링(`app/core/`·`app/prompts/`·
 `app/modules/{impact_analyzer,manual_review}/`·`app/web/`), DOCX Track Changes 파서,
 NON_FUNCTIONAL_CHANGE 필터, SRS 근거 로컬 검색(impact_analyzer가 이미 관리하는 등록 사양서
@@ -56,9 +63,6 @@ NON_FUNCTIONAL_CHANGE 필터, SRS 근거 로컬 검색(impact_analyzer가 이미
    검증은 했지만(실제 회사 문서라 테스트 fixture로 커밋하지 않음), 이 실제 파일들을 pytest
    fixture로 안전하게 참조할 방법(예: 사내망 접근 가능한 CI에서만 skip 없이 실행)을 정하면
    정식 E2E 테스트로 승격 가능.
-9. **원격 서버 배포** — 이번 세션 변경분이 아직 원격 서버에 반영되지 않음. `requirements.txt`에
-   `python-docx` 추가됐으므로 배포 시 서버에서 `pip install -r requirements.txt` 재실행 필요.
-
 ## 알려진 설계상 단순화 (버그 아님, 의도적 v1 범위)
 
 - Word Comment는 항상 "변경이 속한 문단 전체"에 앵커링된다 — 정확한 run 범위는 추적 안 함.

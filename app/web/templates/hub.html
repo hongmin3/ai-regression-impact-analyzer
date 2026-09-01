@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block content %}
+<section>
+  <h2>QA 자동화</h2>
+  <p>수행할 검증 업무를 선택하세요.</p>
+  <div class="grid">
+    <a class="app-card" href="/impact-analyzer">
+      <h3>Regression 영향 분석</h3>
+      <p>소프트웨어 변경사항과 제품 사양서·Test Case를 분석해 Regression 검증 대상을 추천합니다.</p>
+    </a>
+    <a class="app-card" href="/manual-review">
+      <h3>매뉴얼 개정 검증</h3>
+      <p>Word 변경 이력과 최신 SRS·Release Scope를 비교해 매뉴얼 수정 및 누락 의심 항목을 검토합니다.</p>
+    </a>
+  </div>
+</section>
+{% endblock %}

@@ -24,6 +24,11 @@ SW 변경사항과 제품 사양서/Manual(PDF 또는 Word `.docx`), Test Case E
 
 ## 4. 현재 구현 상태
 
+- 루트(`/`)는 QA 자동화 허브이며 Regression 영향 분석(`/impact-analyzer`)과 매뉴얼 개정
+  검증(`/manual-review`)으로 진입한다. 공용 브랜드/내비게이션은 `app/web/`, 기능별 화면과
+  로직은 `app/modules/*`가 소유한다. 새 QA 모듈과 공유 DB 확장 원칙은
+  `docs/SHARED_PLATFORM_ARCHITECTURE.md` 참고.
+
 - FastAPI/Jinja2 Web UI
 - Knowledge 사양서 PDF/Word `.docx` 등록, TC Excel 등록
 - 제품/Version을 토글(datalist) 선택 또는 신규 입력으로 관리 (`products`/`product_versions` 테이블, 초기값 VXvue·Bellalun Viewer, 이후 자유롭게 추가)

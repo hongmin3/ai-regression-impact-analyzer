@@ -58,7 +58,7 @@ def _save_upload(upload: UploadFile, directory: Path, allowed: set[str]) -> Path
     return path
 
 
-@router.get("/", response_class=HTMLResponse)
+@router.get("/impact-analyzer", response_class=HTMLResponse)
 def home(request: Request):
     products = [p for p in storage.list_products() if storage.active_documents("specification", p) and storage.active_documents("testcase", p)]
     return templates.TemplateResponse(request, "index.html", {"products": products})
