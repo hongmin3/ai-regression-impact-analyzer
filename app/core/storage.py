@@ -32,7 +32,7 @@ class Storage:
                 );
                 CREATE TABLE IF NOT EXISTS analyses (
                     id TEXT PRIMARY KEY, status TEXT NOT NULL, result_json TEXT,
-                    error TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+                    request_json TEXT, error TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
                 );
                 CREATE TABLE IF NOT EXISTS ai_cache (
                     cache_key TEXT PRIMARY KEY, response_json TEXT NOT NULL, created_at TEXT NOT NULL
@@ -89,6 +89,7 @@ class Storage:
                 ("stage_total", "INTEGER"),
                 ("started_at", "TEXT"),
                 ("stage_updated_at", "TEXT"),
+                ("request_json", "TEXT"),
             ):
                 if column not in existing:
                     db.execute(f"ALTER TABLE analyses ADD COLUMN {column} {ddl}")
@@ -165,13 +166,13 @@ class Storage:
         with self.connect() as db:
             db.execute("DELETE FROM documents WHERE id=?", (document_id,))
 
-    def create_analysis(self, analysis_id: str, status: str = "QUEUED", stage_total: int = 0) -> None:
+    def create_analysis(self, analysis_id: str, status: str = "QUEUED", stage_total: int = 0, request: dict | None = None) -> None:
         now = datetime.now(timezone.utc).isoformat()
         with self.connect() as db:
             db.execute(
-                "INSERT OR REPLACE INTO analyses(id,status,result_json,error,created_at,updated_at,stage,stage_index,stage_total,started_at,stage_updated_at) "
-                "VALUES(?,?,?,?,?,?,?,?,?,?,?)",
-                (analysis_id, status, None, None, now, now, "대기 중", 0, stage_total, now, now),
+                "INSERT OR REPLACE INTO analyses(id,status,result_json,request_json,error,created_at,updated_at,stage,stage_index,stage_total,started_at,stage_updated_at) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+                (analysis_id, status, None, json.dumps(request, ensure_ascii=False) if request else None, None, now, now, "대기 중", 0, stage_total, now, now),
             )
 
     def update_stage(self, analysis_id: str, index: int, name: str, stage_total: int | None = None) -> None:
@@ -200,6 +201,8 @@ class Storage:
         if not row:
             return None
         value = dict(row)
+        raw_request = value.pop("request_json", None)
+        value["request"] = json.loads(raw_request) if raw_request else None
         if value["result_json"]:
             value["result"] = json.loads(value.pop("result_json"))
         else:
@@ -213,7 +216,9 @@ class Storage:
         for row in rows:
             value = dict(row)
             raw = value.pop("result_json")
+            raw_request = value.pop("request_json", None)
             value["result"] = json.loads(raw) if raw else None
+            value["request"] = json.loads(raw_request) if raw_request else None
             values.append(value)
         return values
 

@@ -164,6 +164,9 @@ class AnalysisResult(BaseModel):
     draft_tc_path: Path | None = None
     spec_sync: dict | None = None
     tc_sync: dict | None = None
+    knowledge_documents: list[dict] = Field(default_factory=list)
+    ai_audit: dict = Field(default_factory=dict)
+    candidate_ranking: list[dict] = Field(default_factory=list)
 
     @property
     def recommended_count(self) -> int:

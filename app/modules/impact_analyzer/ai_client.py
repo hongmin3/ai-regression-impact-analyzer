@@ -19,6 +19,8 @@ class ImpactAnalysisAIClient:
         self._client = GeminiClient(storage=storage, responder=responder)
         self.draft_test_cases: list[DraftTestCase] = []
         self.change_items: list[ChangeItem] = []
+        self.last_prompt = ""
+        self.last_response: dict = {}
 
     @property
     def request_count(self) -> int:
@@ -39,7 +41,27 @@ class ImpactAnalysisAIClient:
             "specifications": [chunk.model_dump() for chunk in chunks],
         }
         prompt = json.dumps(payload, ensure_ascii=False, sort_keys=True)
+        self.last_prompt = prompt
         raw = self._client.generate_structured(prompt, prompt_name=PROMPT_NAME, response_schema=GeminiAnalysisResponse)
+        self.last_response = raw
         self.draft_test_cases = [DraftTestCase.model_validate(item) for item in raw.get("draft_test_cases", [])]
         self.change_items = [ChangeItem.model_validate(item) for item in raw.get("change_items", [])]
         return [ImpactDecision.model_validate(item) for item in raw.get("decisions", [])]
+
+    @property
+    def audit_snapshot(self) -> dict:
+        config = load_prompt(PROMPT_NAME)
+        return {
+            "prompt_name": config.name,
+            "prompt_version": config.version,
+            "model": self._client.settings.secrets.gemini_model,
+            "system_instruction": config.system_instruction,
+            "user_prompt": self.last_prompt,
+            "response": self.last_response,
+            "cache_hit": self._client.last_cache_hit,
+            "generation": {
+                "temperature": config.temperature,
+                "max_output_tokens": config.max_output_tokens,
+                "thinking_budget": config.thinking_budget,
+            },
+        }

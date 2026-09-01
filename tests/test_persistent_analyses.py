@@ -74,6 +74,20 @@ def test_create_analysis_initializes_stage_tracking(tmp_path):
     assert job["started_at"]
 
 
+def test_analysis_request_snapshot_survives_storage_recreation(tmp_path):
+    db_path = tmp_path / "app.db"
+    storage = Storage(db_path)
+    storage.create_analysis(
+        "audited",
+        request={"product": "VXvue", "user_notes": "로그인 변경 확인", "change_files": ["change.pdf"]},
+    )
+
+    restored = Storage(db_path).get_analysis("audited")
+
+    assert restored["request"]["product"] == "VXvue"
+    assert restored["request"]["change_files"] == ["change.pdf"]
+
+
 def test_update_stage_advances_progress(tmp_path):
     storage = Storage(tmp_path / "app.db")
     storage.create_analysis("job-stage-2", stage_total=8)
@@ -211,3 +225,44 @@ def test_analysis_history_renders_persisted_results(monkeypatch, tmp_path):
     assert response.status_code == 200
     assert "history-job" in response.text
     assert "XLSX" in response.text
+    assert f'/analyses/history-job/view' in response.text
+
+
+def test_analysis_detail_renders_documents_and_exact_prompt_audit(monkeypatch, tmp_path):
+    persisted = Storage(tmp_path / "app.db")
+    persisted.create_analysis(
+        "detail-job",
+        request={
+            "product": "VXvue",
+            "user_notes": "Viewer 로그인 회귀 확인",
+            "change_files": ["release-note.pdf"],
+            "knowledge_documents": [{"kind": "specification", "name": "VXvue SRS.pdf", "product": "VXvue", "version": "1.0", "revision": "R1", "created_at": "2026-09-01"}],
+        },
+    )
+    result = _result("detail-job")
+    result["ai_audit"] = {
+        "model": "gemini-test",
+        "prompt_name": "impact_analysis",
+        "prompt_version": 1,
+        "cache_hit": False,
+        "generation": {"temperature": 0.1, "max_output_tokens": 100, "thinking_budget": 0},
+        "system_instruction": "QA system instruction",
+        "user_prompt": '{"change":"로그인"}',
+        "response": {"decisions": [{"tc_id": "TC-LOGIN"}]},
+    }
+    persisted.update_analysis("detail-job", "DONE", result=result)
+    monkeypatch.setattr(routes, "storage", persisted)
+
+    response = TestClient(app).get("/analyses/detail-job/view")
+
+    assert response.status_code == 200
+    assert "Viewer 로그인 회귀 확인" in response.text
+    assert "release-note.pdf" in response.text
+    assert "VXvue SRS.pdf" in response.text
+    assert "QA system instruction" in response.text
+    assert "TC-LOGIN" in response.text
+
+
+def test_missing_analysis_detail_returns_404(monkeypatch, tmp_path):
+    monkeypatch.setattr(routes, "storage", Storage(tmp_path / "app.db"))
+    assert TestClient(app).get("/analyses/missing/view").status_code == 404

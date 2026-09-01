@@ -6,14 +6,14 @@
   {% if analyses %}
   <div class="table-wrap"><table class="history">
     <thead><tr><th>시각</th><th>상태</th><th>변경 문서</th><th title="Rule 기반으로 1차 추려서 AI에게 실제로 검토를 맡긴 TC 수 (전체 TC 중 일부)">AI 검토 대상 TC</th><th>추천</th><th>Impact</th><th>결과</th></tr></thead>
-    <tbody>{% for item in analyses %}<tr>
+    <tbody>{% for item in analyses %}<tr style="cursor:pointer" onclick="if(!event.target.closest('a'))location.href='/analyses/{{ item.id }}/view'" title="상세 기록 보기">
       <td><span data-utc-time="{{ item.created_at }}">{{ item.created_at[:19].replace('T', ' ') }} UTC</span></td>
       <td><span class="badge {{ item.status }}">{{ item.status }}</span></td>
       <td>{{ item.result.change_file if item.result else '-' }}</td>
       <td>{{ item.result.candidate_tc if item.result else '-' }}</td>
       <td>{{ item.recommended_count if item.result else '-' }}</td>
       <td>{% if item.result %}H {{ item.impact_counts.HIGH }} · M {{ item.impact_counts.MEDIUM }} · L {{ item.impact_counts.LOW }}{% else %}-{% endif %}</td>
-      <td>{% if item.status == 'DONE' %}<a href="/reports/regression-{{ item.id }}.html" target="_blank">Report</a> · <a href="/exports/regression-{{ item.id }}.xlsx">XLSX</a>{% if item.result.draft_tc_path %} · <a href="/generated_tc/regression-{{ item.id }}-draft.md" target="_blank">TC 초안</a>{% endif %}{% elif item.error %}{{ item.error }}{% else %}-{% endif %}</td>
+      <td><a href="/analyses/{{ item.id }}/view">상세</a>{% if item.status == 'DONE' %} · <a href="/reports/regression-{{ item.id }}.html" target="_blank">Report</a> · <a href="/exports/regression-{{ item.id }}.xlsx">XLSX</a>{% if item.result.draft_tc_path %} · <a href="/generated_tc/regression-{{ item.id }}-draft.md" target="_blank">TC 초안</a>{% endif %}{% elif item.error %} · {{ item.error }}{% endif %}</td>
     </tr>{% endfor %}</tbody>
   </table></div>
   {% else %}<p>저장된 분석 이력이 없습니다.</p>{% endif %}

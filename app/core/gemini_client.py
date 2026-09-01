@@ -25,6 +25,7 @@ class GeminiClient:
         self.responder = responder
         self.request_count = 0
         self.token_usage: dict[str, int] = {}
+        self.last_cache_hit = False
 
     @retry(retry=retry_if_exception_type((TimeoutError, ConnectionError)), stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=10), reraise=True)
     def _request(self, prompt: str, *, system_instruction: str, response_schema: type[BaseModel], temperature: float, max_output_tokens: int, thinking_budget: int) -> dict:
@@ -70,6 +71,7 @@ class GeminiClient:
         prompt_cfg = load_prompt(prompt_name)
         cache_key = hashlib.sha256((self.settings.secrets.gemini_model + prompt_name + str(prompt_cfg.version) + prompt).encode()).hexdigest()
         cached = self.storage.cache_get(cache_key) if self.settings.get("analysis.cache_enabled", True) else None
+        self.last_cache_hit = cached is not None
         raw = cached or self._request(
             prompt,
             system_instruction=prompt_cfg.system_instruction,

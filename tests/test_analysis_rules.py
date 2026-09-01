@@ -1,7 +1,7 @@
 from app.modules.impact_analyzer.change_analyzer import analyze_change_rules, trim_by_relevance
-from app.modules.impact_analyzer.tc_candidate_selector import select_candidates
+from app.modules.impact_analyzer.tc_candidate_selector import select_candidates, select_candidates_with_scores
 from app.modules.impact_analyzer.validation import attach_specification_references, classify_confidence, validate_decisions, validate_draft_test_cases
-from app.modules.impact_analyzer.schemas import DraftTestCase, EvidenceLevel, Impact, ImpactDecision, RevisionMark, SpecificationChunk, TestCase
+from app.modules.impact_analyzer.schemas import ChangeAnalysis, DraftTestCase, EvidenceLevel, Impact, ImpactDecision, RevisionMark, SpecificationChunk, TestCase
 
 
 def decision(confidence: float) -> ImpactDecision:
@@ -30,6 +30,16 @@ def test_candidate_search():
     change = analyze_change_rules("Display 설정 저장 방식을 변경")
     cases = [TestCase(tc_id="TC-1", feature="Display 설정", step="저장"), TestCase(tc_id="TC-2", feature="로그인")]
     assert select_candidates(change, cases, 10)[0].tc_id == "TC-1"
+
+
+def test_candidate_ranking_exposes_bm25_score():
+    change = ChangeAnalysis(changed_features=["로그인"])
+    cases = [TestCase(tc_id="TC-LOGIN", feature="로그인 인증"), TestCase(tc_id="TC-PRINT", feature="출력")]
+
+    ranked = select_candidates_with_scores(change, cases, 2)
+
+    assert ranked[0][0].tc_id == "TC-LOGIN"
+    assert isinstance(ranked[0][1], float)
 
 
 def test_confidence_classification():

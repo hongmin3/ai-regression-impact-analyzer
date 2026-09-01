@@ -75,3 +75,16 @@ def test_report_generation():
     sheet = load_workbook(xlsx, read_only=True).active
     assert sheet["A1"].value == "TC ID"
     assert sheet["A2"].value == "TC-1"
+
+
+def test_ai_client_keeps_exact_prompt_and_response_for_audit(tmp_path):
+    response = {"decisions": [], "draft_test_cases": [], "change_items": [], "token_usage": {"total_tokens": 7}}
+    client = ImpactAnalysisAIClient(Storage(tmp_path / "audit.db"), responder=lambda _: response)
+
+    client.analyze(ChangeAnalysis(user_notes="감사 기록"), [], [])
+    audit = client.audit_snapshot
+
+    assert '"user_notes": "감사 기록"' in audit["user_prompt"]
+    assert audit["system_instruction"]
+    assert audit["response"] == response
+    assert audit["cache_hit"] is False

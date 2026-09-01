@@ -63,6 +63,19 @@ def analysis_history(request: Request):
     return templates.TemplateResponse(request, "analyses.html", {"analyses": analyses})
 
 
+@router.get("/analyses/{job_id}/view", response_class=HTMLResponse)
+def analysis_detail(request: Request, job_id: str):
+    analysis = storage.get_analysis(job_id)
+    if not analysis:
+        raise HTTPException(404, "분석 작업을 찾을 수 없습니다.")
+    result = analysis.get("result") or {}
+    return templates.TemplateResponse(
+        request,
+        "analysis_detail.html",
+        {"analysis": analysis, "result": result, "audit": result.get("ai_audit") or {}},
+    )
+
+
 def _run_job(job_id: str, changes: list[Path], product: str, notes: str) -> None:
     try:
         storage.update_analysis(job_id, "RUNNING")
@@ -85,7 +98,16 @@ def start_analysis(background_tasks: BackgroundTasks, product: str = Form(...), 
         raise HTTPException(404, f"'{product}' 제품에 등록된 사양서 또는 TC가 없습니다. Knowledge 메뉴에서 먼저 등록하세요.")
     changes = [save_upload(f, get_settings().path("storage.upload_dir"), {".pdf", ".docx"}) for f in uploads]
     job_id = uuid.uuid4().hex[:12]
-    storage.create_analysis(job_id, stage_total=len(ANALYSIS_STAGES))
+    request_snapshot = {
+        "product": product,
+        "user_notes": notes,
+        "change_files": [upload.filename for upload in uploads],
+        "knowledge_documents": [
+            {key: doc.get(key) for key in ("id", "kind", "product", "version", "revision", "name", "created_at")}
+            for kind in ("specification", "testcase") for doc in storage.active_documents(kind, product)
+        ],
+    }
+    storage.create_analysis(job_id, stage_total=len(ANALYSIS_STAGES), request=request_snapshot)
     background_tasks.add_task(_run_job, job_id, changes, product, notes)
     return {"job_id": job_id, "status_url": f"/analyses/{job_id}"}
 

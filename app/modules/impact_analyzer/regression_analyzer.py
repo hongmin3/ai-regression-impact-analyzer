@@ -12,7 +12,7 @@ from app.modules.impact_analyzer.ai_client import ImpactAnalysisAIClient
 from app.modules.impact_analyzer.change_analyzer import analyze_change_rules, trim_by_relevance
 from app.modules.impact_analyzer.html_report import create_html_report, create_xlsx_export
 from app.modules.impact_analyzer.schemas import ANALYSIS_STAGES, AnalysisResult, SpecificationChunk, TestCase
-from app.modules.impact_analyzer.tc_candidate_selector import select_candidates
+from app.modules.impact_analyzer.tc_candidate_selector import select_candidates_with_scores
 from app.modules.impact_analyzer.tc_draft import create_tc_draft_markdown
 from app.modules.impact_analyzer.validation import attach_specification_references, validate_decisions, validate_draft_test_cases
 from app.parsers.excel_parser import parse_testcases
@@ -57,7 +57,11 @@ class RegressionAnalyzer:
             cases.extend(parse_testcases(Path(doc["path"])))
         spec_label = ", ".join(doc["name"] for doc in spec_docs)
         tc_label = ", ".join(doc["name"] for doc in tc_docs)
-        return self._execute(change_paths, chunks, cases, "\n".join(baseline_texts), spec_label, tc_label, analysis_id, user_notes, doc_labels, product)
+        knowledge_documents = [
+            {key: doc.get(key) for key in ("id", "kind", "product", "version", "revision", "name", "created_at")}
+            for doc in (*spec_docs, *tc_docs)
+        ]
+        return self._execute(change_paths, chunks, cases, "\n".join(baseline_texts), spec_label, tc_label, analysis_id, user_notes, doc_labels, product, knowledge_documents)
 
     def _execute(
         self,
@@ -71,6 +75,7 @@ class RegressionAnalyzer:
         user_notes: str = "",
         doc_labels: dict[str, str] | None = None,
         product: str | None = None,
+        knowledge_documents: list[dict] | None = None,
     ) -> AnalysisResult:
         started = time.monotonic()
         analysis_id = analysis_id or uuid.uuid4().hex[:12]
@@ -97,7 +102,8 @@ class RegressionAnalyzer:
             relevant_chunks = [chunk for chunk, _ in BM25Retriever(chunks, lambda item: f"{item.heading} {item.text}").search(query, int(self.settings.get("retrieval.specification_top_k", 8)))]
 
             stage(4)  # TC 후보 검색
-            candidates = select_candidates(change, cases, int(self.settings.get("retrieval.candidate_limit", 150)))
+            ranked_candidates = select_candidates_with_scores(change, cases, int(self.settings.get("retrieval.candidate_limit", 150)))
+            candidates = [case for case, _ in ranked_candidates]
 
             stage(5)  # AI 영향도 분석
             decisions = self.ai_client.analyze(change, candidates, relevant_chunks)
@@ -112,6 +118,12 @@ class RegressionAnalyzer:
 
             stage(8)  # HTML 결과 생성
             result = AnalysisResult(analysis_id=analysis_id, created_at=datetime.now(timezone.utc), change_file=change_file_name, specification_file=specification_label, testcase_file=testcase_label, change=change, total_tc=len(cases), candidate_tc=len(candidates), decisions=decisions, draft_test_cases=drafts, token_usage=self.ai_client.token_usage, prompt_version=self.ai_client.prompt_version)
+            result.knowledge_documents = knowledge_documents or []
+            result.ai_audit = self.ai_client.audit_snapshot
+            result.candidate_ranking = [
+                {"rank": rank, "tc_id": case.tc_id, "bm25_score": round(score, 6)}
+                for rank, (case, score) in enumerate(ranked_candidates, start=1)
+            ]
             if product:
                 result.spec_sync = self.storage.latest_sync(product, "specification")
                 result.tc_sync = self.storage.latest_sync(product, "testcase")
