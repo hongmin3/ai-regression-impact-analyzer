@@ -54,6 +54,7 @@ class Storage:
                     round_number INTEGER NOT NULL DEFAULT 0,
                     parent_revision_id INTEGER REFERENCES manual_revisions(id),
                     baseline_revision_id INTEGER REFERENCES manual_revisions(id),
+                    target_version TEXT NOT NULL DEFAULT '',
                     source_path TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'REGISTERED',
                     analysis_id TEXT, created_at TEXT NOT NULL
                 );
@@ -99,6 +100,9 @@ class Storage:
             for column, ddl in (("description", "TEXT NOT NULL DEFAULT ''"), ("result_status", "TEXT NOT NULL DEFAULT ''")):
                 if column not in release_finding_columns:
                     db.execute(f"ALTER TABLE manual_release_findings ADD COLUMN {column} {ddl}")
+            revision_columns = {row["name"] for row in db.execute("PRAGMA table_info(manual_revisions)")}
+            if "target_version" not in revision_columns:
+                db.execute("ALTER TABLE manual_revisions ADD COLUMN target_version TEXT NOT NULL DEFAULT ''")
             now = datetime.now(timezone.utc).isoformat()
             for name in self.DEFAULT_PRODUCTS:
                 db.execute("INSERT OR IGNORE INTO products(name,created_at) VALUES(?,?)", (name, now))
@@ -291,12 +295,13 @@ class Storage:
         baseline_revision_id: int | None = None,
         analysis_id: str | None = None,
         status: str = "REGISTERED",
+        target_version: str = "",
     ) -> int:
         with self.connect() as db:
             cursor = db.execute(
-                "INSERT INTO manual_revisions(product,manual_name,revision_label,round_number,parent_revision_id,baseline_revision_id,source_path,status,analysis_id,created_at) "
-                "VALUES(?,?,?,?,?,?,?,?,?,?)",
-                (product, manual_name, revision_label, round_number, parent_revision_id, baseline_revision_id, str(source_path), status, analysis_id, datetime.now(timezone.utc).isoformat()),
+                "INSERT INTO manual_revisions(product,manual_name,revision_label,round_number,parent_revision_id,baseline_revision_id,target_version,source_path,status,analysis_id,created_at) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                (product, manual_name, revision_label, round_number, parent_revision_id, baseline_revision_id, target_version, str(source_path), status, analysis_id, datetime.now(timezone.utc).isoformat()),
             )
             return int(cursor.lastrowid)
 

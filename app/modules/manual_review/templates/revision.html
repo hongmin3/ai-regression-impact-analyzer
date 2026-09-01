@@ -3,7 +3,7 @@
 {% block content %}
 <section>
   <h2>매뉴얼 개정 검증 결과</h2>
-  <p>{{ revision.product }} · {{ revision.manual_name }} · {{ revision.revision_label }} (Round {{ revision.round_number }}) · 상태 <span class="badge {{ revision.status }}">{{ revision.status }}</span></p>
+  <p>{{ revision.product }} · {{ revision.manual_name }} · {{ revision.revision_label }}{% if revision.target_version %} · 제품 버전 V{{ revision.target_version }}{% endif %} · 상태 <span class="badge {{ revision.status }}">{{ revision.status }}</span></p>
   <p class="hint">판정 요약:
     {%- for label, count in decision_counts.items() %} {{ label|judgment_ko }} {{ count }}건{% endfor %}
     {%- if not decision_counts %} (분석 대상 변경 없음){% endif %}

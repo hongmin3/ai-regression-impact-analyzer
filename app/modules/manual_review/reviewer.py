@@ -43,6 +43,7 @@ class ManualRevisionReviewer:
         analysis_id: str | None = None,
         release_note_path: Path | None = None,
         design_review_path: Path | None = None,
+        target_version: str = "",
     ) -> dict:
         started = time.monotonic()
 
@@ -68,6 +69,7 @@ class ManualRevisionReviewer:
             baseline_revision_id=baseline_revision_id,
             analysis_id=analysis_id,
             status="ANALYZING",
+            target_version=target_version,
         )
         self.logger.info("manual_review_started revision_id=%s product=%s manual=%s round=%s", revision_id, product, manual_name, round_number)
 

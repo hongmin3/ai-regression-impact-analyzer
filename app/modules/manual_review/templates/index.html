@@ -3,97 +3,39 @@
 {% block content %}
 <section>
   <h2>매뉴얼 개정 검증</h2>
-  <p class="hint">Word Track Changes(.docx) 또는 이전 리비전과 비교할 PDF가 등록된 사양서(SRS)를 정확히 반영했는지 AI가 1차 검토합니다. Release Note/설계검토보고서를 함께 등록하면 누락 의심 항목도 표시합니다.</p>
+  <p class="hint">Word Track Changes(.docx) 또는 이전 리비전과 비교할 PDF가 등록된 최신 제품 사양(SRS)을 정확히 반영하는지 AI가 1차 검토합니다.</p>
   <div class="srs-source-panel">
     <h3>현재 검증 근거 SRS</h3>
-    <p class="hint">선택한 제품에 등록된 아래 사양서 원문을 모두 로컬 검색하고, 변경별 관련 구간만 AI 판정 근거로 전달합니다. 추가·삭제가 필요하면 상단의 공용 Knowledge에서 관리하세요.</p>
+    <p class="hint">제품 추가가 필요하면 <a href="/knowledge"><strong>공용 Knowledge</strong></a>에서 먼저 추가하세요. 등록된 제품은 이 화면과 Regression 분석에서 함께 사용됩니다.</p>
     {% for product, status in srs_status_by_product.items() %}
-    <details class="srs-product">
-      <summary><strong>{{ product }}</strong> · 사양서 {{ status.documents|length }}개{% if status.latest_sync %} · 최근 동기화 {{ status.latest_sync.status }}{% endif %}</summary>
-      {% if status.documents %}
-      <ul>{% for doc in status.documents %}<li>{{ doc.name }}{% if doc.version %} <span class="hint">({{ doc.version }})</span>{% endif %} · <span data-utc-time="{{ doc.created_at }}">{{ doc.created_at[:19].replace('T', ' ') }} UTC</span></li>{% endfor %}</ul>
-      {% else %}<p class="hint">등록된 사양서가 없어 SRS 근거를 찾을 수 없습니다.</p>{% endif %}
+    <details class="srs-product"><summary><strong>{{ product }}</strong> · 사양서 {{ status.documents|length }}개{% if status.latest_sync %} · 최근 동기화 {{ status.latest_sync.status }}{% endif %}</summary>
+      {% if status.documents %}<ul>{% for doc in status.documents %}<li>{{ doc.name }}{% if doc.version %} <span class="hint">({{ doc.version }})</span>{% endif %} · <span data-utc-time="{{ doc.created_at }}">{{ doc.created_at[:19].replace('T', ' ') }} UTC</span></li>{% endfor %}</ul>{% else %}<p class="hint">등록된 사양서가 없어 SRS 근거를 찾을 수 없습니다.</p>{% endif %}
       {% if status.latest_sync %}<p class="hint">동기화 상세: {{ status.latest_sync.detail or '-' }}</p>{% endif %}
-    </details>
-    {% endfor %}
+    </details>{% endfor %}
   </div>
   <form id="revision-form">
-    <label>제품<select name="product" required><option value="">선택</option>{% for p in products %}<option value="{{ p }}">{{ p }}</option>{% endfor %}<option value="__new__">(새 제품 입력)</option></select></label>
-    <label id="new-product-label" hidden>새 제품명<input type="text" name="new_product"></label>
-    <label>Manual 종류<input type="text" name="manual_name" placeholder="예: VXvue Service Manual" required></label>
-    <label>Revision 표기<input type="text" name="revision_label" placeholder="예: V1.1.0 W1" required></label>
-    <label>이전 Round (DOCX는 선택, PDF 비교 시 필수 — 첫 PDF는 없음을 선택해 Baseline 등록)
-      <select name="parent_revision_id"><option value="">없음 (Official Baseline)</option>{% for r in revisions %}<option value="{{ r.id }}">#{{ r.id }} · {{ r.product }} · {{ r.manual_name }} · {{ r.revision_label }} (Round {{ r.round_number }})</option>{% endfor %}</select>
-    </label>
-    <label>개정 Manual (Word Track Changes .docx 또는 .pdf)
-      <div class="dropzone" id="revision-dropzone" data-for="revision-file" data-placeholder="클릭하여 선택하거나 파일을 끌어놓으세요">클릭하여 선택하거나 파일을 끌어놓으세요</div>
-      <input type="file" id="revision-file" name="file" accept=".docx,.pdf" hidden required>
-    </label>
-    <label>Release Note (선택, 미첨부 시 이 제품에 등록된 최신 문서를 자동 사용)
-      <input type="file" name="release_note_file" accept=".pdf,.docx">
-    </label>
-    <label>설계검토보고서 (선택, 미첨부 시 이 제품에 등록된 최신 문서를 자동 사용)
-      <input type="file" name="design_review_file" accept=".pdf,.docx">
-    </label>
+    <label>제품<select name="product" required><option value="">선택</option>{% for p in products %}<option value="{{ p }}">{{ p }}</option>{% endfor %}</select><span class="hint">목록에 없으면 <a href="/knowledge">Knowledge에서 제품을 추가</a>하세요.</span></label>
+    <label>매뉴얼 종류<input type="text" name="manual_name" list="manual-types-list" placeholder="목록에서 선택하거나 직접 입력" autocomplete="off" required><datalist id="manual-types-list"></datalist><span class="hint">VXvue의 실제 매뉴얼 이름을 제안하며 다른 이름도 입력할 수 있습니다.</span></label>
+    <label>제품 버전<input type="text" name="target_version" list="product-versions-list" placeholder="예: 1.1.0" autocomplete="off" required><datalist id="product-versions-list"></datalist><span class="hint">Knowledge 등록 버전을 선택하거나 직접 입력하세요. V는 자동으로 붙습니다.</span></label>
+    <label>이전 검증<select name="parent_revision_id"><option value="">없음 (새 검증 계보)</option>{% for r in revisions %}<option value="{{ r.id }}" data-product="{{ r.product }}" data-manual="{{ r.manual_name }}" data-version="{{ r.target_version or '' }}" data-round="{{ r.round_number }}">#{{ r.id }} · {{ r.product }} · {{ r.manual_name }} · {{ r.revision_label }}</option>{% endfor %}</select><span class="hint">같은 제품·매뉴얼·제품 버전의 후속 검증일 때만 선택하세요.</span></label>
+    <div class="srs-source-panel"><strong>자동 리비전 표기: <span id="revision-preview">제품, 매뉴얼, 버전을 선택하세요.</span></strong><p class="hint">제품 버전과 QA 검증 회차를 분리합니다. 새 DOCX는 W1, 후속 검증은 W2·W3로 자동 증가합니다. 비교 대상이 없는 첫 PDF는 Baseline입니다. 새 제품 버전은 이전 검증 없이 새 계보로 시작합니다.</p></div>
+    <label>개정 Manual (Word Track Changes .docx 또는 .pdf)<div class="dropzone" id="revision-dropzone" data-for="revision-file" data-placeholder="클릭하여 선택하거나 파일을 끌어놓으세요">클릭하여 선택하거나 파일을 끌어놓으세요</div><input type="file" id="revision-file" name="file" accept=".docx,.pdf" hidden required></label>
+    <label>Release Note (선택, 미첨부 시 제품의 최신 문서 자동 사용)<input type="file" name="release_note_file" accept=".pdf,.docx"></label>
+    <label>설계검토보고서 (선택, 미첨부 시 제품의 최신 문서 자동 사용)<input type="file" name="design_review_file" accept=".pdf,.docx"></label>
     <button>검증 시작</button>
   </form>
-  <div id="progress" class="progress-panel" hidden>
-    <div class="progress-head"><span id="progress-stage">대기 중</span><span id="progress-percent">0%</span></div>
-    <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
-  </div>
-  <div id="status" class="status"></div>
+  <div id="progress" class="progress-panel" hidden><div class="progress-head"><span id="progress-stage">대기 중</span><span id="progress-percent">0%</span></div><div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div></div><div id="status" class="status"></div>
 </section>
-<section>
-  <h2>검증 이력</h2>
-  {% if revisions %}
-  <div class="table-wrap"><table class="history">
-    <thead><tr><th>등록 시각</th><th>제품</th><th>Manual</th><th>Revision</th><th>Round</th><th>상태</th><th>결과</th></tr></thead>
-    <tbody>{% for r in revisions %}<tr>
-      <td><span data-utc-time="{{ r.created_at }}">{{ r.created_at[:19].replace('T', ' ') }} UTC</span></td>
-      <td>{{ r.product }}</td>
-      <td>{{ r.manual_name }}</td>
-      <td>{{ r.revision_label }}</td>
-      <td>{{ r.round_number }}</td>
-      <td><span class="badge {{ r.status }}">{{ r.status }}</span></td>
-      <td><a href="/manual-review/revisions/{{ r.id }}/view">결과 보기</a></td>
-    </tr>{% endfor %}</tbody>
-  </table></div>
-  {% else %}<p>아직 등록된 검증 이력이 없습니다.</p>{% endif %}
-</section>
+<section><h2>검증 이력</h2>{% if revisions %}<div class="table-wrap"><table class="history"><thead><tr><th>등록 시각</th><th>제품</th><th>매뉴얼</th><th>제품 버전</th><th>리비전</th><th>상태</th><th>결과</th></tr></thead><tbody>{% for r in revisions %}<tr><td><span data-utc-time="{{ r.created_at }}">{{ r.created_at[:19].replace('T', ' ') }} UTC</span></td><td>{{ r.product }}</td><td>{{ r.manual_name }}</td><td>{{ ('V' + r.target_version) if r.target_version else '-' }}</td><td>{{ r.revision_label }}</td><td><span class="badge {{ r.status }}">{{ r.status }}</span></td><td><a href="/manual-review/revisions/{{ r.id }}/view">결과 보기</a></td></tr>{% endfor %}</tbody></table></div>{% else %}<p>아직 등록된 검증 이력이 없습니다.</p>{% endif %}</section>
 <script>
-const f=document.querySelector('#revision-form'),s=document.querySelector('#status');
-const progress=document.querySelector('#progress'),pStage=document.querySelector('#progress-stage'),pPercent=document.querySelector('#progress-percent'),pFill=document.querySelector('#progress-fill');
-f.querySelector('[name=product]').addEventListener('change',e=>{
-  document.querySelector('#new-product-label').hidden = e.target.value !== '__new__';
-});
-f.addEventListener('submit',async e=>{
-  e.preventDefault();
-  const fd=new FormData(f);
-  if(fd.get('product')==='__new__'){fd.set('product',(fd.get('new_product')||'').trim());}
-  fd.delete('new_product');
-  if(!fd.get('product')){s.textContent='제품을 선택하거나 입력하세요.';return}
-  s.textContent='';
-  progress.hidden=false;pStage.textContent='업로드 중...';pPercent.textContent='0%';pFill.style.width='0%';pFill.classList.remove('failed');
-  const r=await fetch('/manual-review/revisions',{method:'POST',body:fd});
-  const d=await r.json();
-  if(!r.ok){progress.hidden=true;s.textContent=d.detail||'실패';return}
-  const source=new EventSource(d.status_url+'/stream');
-  source.onmessage=(event)=>{
-    const job=JSON.parse(event.data);
-    const total=job.stage_total||5,index=job.stage_index||0;
-    const percent=Math.round((index/total)*100);
-    pStage.textContent=(job.status==='DONE')?'완료':(job.status==='FAILED')?`실패 (${job.stage||'-'})`:(job.stage||'대기 중');
-    pPercent.textContent=percent+'%';pFill.style.width=percent+'%';pFill.classList.toggle('failed',job.status==='FAILED');
-    if(job.status==='DONE'){
-      source.close();
-      if(job.result.pdf_baseline){s.innerHTML=`PDF Baseline 등록 완료 · 다음 PDF 검증에서 이전 Round로 선택하세요. · <a href="/manual-review/revisions/${job.result.revision_id}/view">등록 내용 보기</a>`;return}
-      const missing=job.result.release_scope_missing_suspected||0;
-      const missingText=job.result.release_scope_total?` · 누락 의심 ${missing}/${job.result.release_scope_total}건`:'';
-      s.innerHTML=`완료 · 변경 ${job.result.total_changes}건(분석 대상 ${job.result.functional_changes}건)${missingText} · <a href="/manual-review/revisions/${job.result.revision_id}/view">결과 보기</a>`;
-    }
-    if(job.status==='FAILED'){source.close();s.textContent=`실패 (${job.stage||'-'} 단계): `+(job.error||'알 수 없는 오류')}
-  };
-  source.onerror=()=>{source.close();if(!s.textContent)s.textContent='진행 상태 연결이 끊어졌습니다. 검증 이력에서 결과를 확인하세요.'};
-});
+const manualTypes={{ manual_types_by_product|tojson }},productVersions={{ versions_by_product|tojson }};
+const f=document.querySelector('#revision-form'),s=document.querySelector('#status'),product=f.querySelector('[name=product]'),manual=f.querySelector('[name=manual_name]'),version=f.querySelector('[name=target_version]'),parent=f.querySelector('[name=parent_revision_id]'),file=f.querySelector('[name=file]');
+const manualList=document.querySelector('#manual-types-list'),versionList=document.querySelector('#product-versions-list'),preview=document.querySelector('#revision-preview'),progress=document.querySelector('#progress'),pStage=document.querySelector('#progress-stage'),pPercent=document.querySelector('#progress-percent'),pFill=document.querySelector('#progress-fill');
+const fillList=(element,values)=>element.replaceChildren(...(values||[]).map(value=>{const option=document.createElement('option');option.value=value;return option}));
+function filterParents(){[...parent.options].forEach((option,index)=>{if(!index)return;const visible=option.dataset.product===product.value&&option.dataset.manual===manual.value;option.hidden=!visible;option.disabled=!visible});if(parent.selectedOptions[0]?.disabled)parent.value=''}
+function updatePreview(){const selected=parent.selectedOptions[0],rawVersion=version.value.trim().replace(/^[Vv]/,'');if(!product.value||!manual.value||!rawVersion){preview.textContent='제품, 매뉴얼, 버전을 선택하세요.';return}const isPdf=file.files[0]?.name.toLowerCase().endsWith('.pdf'),suffix=isPdf&&!parent.value?'Baseline':`W${parent.value?Number(selected.dataset.round)+2:1}`;preview.textContent=`V${rawVersion} · ${suffix}`}
+function refreshChoices(){fillList(manualList,manualTypes[product.value]);fillList(versionList,productVersions[product.value]);filterParents();updatePreview()}
+product.addEventListener('change',refreshChoices);manual.addEventListener('input',()=>{filterParents();updatePreview()});version.addEventListener('input',updatePreview);file.addEventListener('change',updatePreview);parent.addEventListener('change',()=>{const selected=parent.selectedOptions[0];if(selected?.dataset.version)version.value=selected.dataset.version;updatePreview()});
+f.addEventListener('submit',async e=>{e.preventDefault();const fd=new FormData(f);if(!fd.get('product')||!String(fd.get('manual_name')).trim()||!String(fd.get('target_version')).trim()){s.textContent='제품, 매뉴얼 종류, 제품 버전을 모두 입력하세요.';return}s.textContent='';progress.hidden=false;pStage.textContent='업로드 중...';pPercent.textContent='0%';pFill.style.width='0%';pFill.classList.remove('failed');const r=await fetch('/manual-review/revisions',{method:'POST',body:fd}),d=await r.json();if(!r.ok){progress.hidden=true;s.textContent=d.detail||'실패';return}const source=new EventSource(d.status_url+'/stream');source.onmessage=(event)=>{const job=JSON.parse(event.data),total=job.stage_total||5,index=job.stage_index||0,percent=Math.round((index/total)*100);pStage.textContent=job.status==='DONE'?'완료':job.status==='FAILED'?`실패 (${job.stage||'-'})`:(job.stage||'대기 중');pPercent.textContent=percent+'%';pFill.style.width=percent+'%';pFill.classList.toggle('failed',job.status==='FAILED');if(job.status==='DONE'){source.close();if(job.result.pdf_baseline){s.innerHTML=`PDF Baseline 등록 완료 · 다음 PDF 검증에서는 이전 검증으로 선택하세요. · <a href="/manual-review/revisions/${job.result.revision_id}/view">등록 내용 보기</a>`;return}const missing=job.result.release_scope_missing_suspected||0,missingText=job.result.release_scope_total?` · 누락 의심 ${missing}/${job.result.release_scope_total}건`:'';s.innerHTML=`완료 · 변경 ${job.result.total_changes}건 분석 대상 ${job.result.functional_changes}건${missingText} · <a href="/manual-review/revisions/${job.result.revision_id}/view">결과 보기</a>`}if(job.status==='FAILED'){source.close();s.textContent=`실패 (${job.stage||'-'} 단계): `+(job.error||'알 수 없는 오류')}};source.onerror=()=>{source.close();if(!s.textContent)s.textContent='진행 상태 연결이 끊어졌습니다. 검증 이력에서 결과를 확인하세요.'}});refreshChoices();
 </script>
 {% endblock %}

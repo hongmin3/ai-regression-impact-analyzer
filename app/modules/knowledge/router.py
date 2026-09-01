@@ -16,6 +16,15 @@ templates = Jinja2Templates(directory=[Path(__file__).parent / "templates", get_
 storage = Storage()
 
 
+@router.post("/knowledge/products")
+def register_product(product: str = Form(...)):
+    product = product.strip()
+    if not product:
+        raise HTTPException(400, "제품명을 입력하세요.")
+    storage.ensure_product(product)
+    return RedirectResponse("/knowledge", status_code=303)
+
+
 def _versions_by_product() -> dict[str, list[str]]:
     return {product: storage.list_versions(product) for product in storage.list_products()}
 

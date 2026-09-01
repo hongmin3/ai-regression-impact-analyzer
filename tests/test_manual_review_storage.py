@@ -23,6 +23,15 @@ def test_list_manual_revisions_orders_newest_first(tmp_path):
     assert [r["revision_label"] for r in revisions] == ["W2", "W1"]
 
 
+def test_manual_revision_stores_target_product_version(tmp_path):
+    storage = Storage(tmp_path / "app.db")
+    revision_id = storage.add_manual_revision(
+        "VXvue", "Service Manual", "V1.2.0 · W1", tmp_path / "r.docx", target_version="1.2.0"
+    )
+
+    assert storage.get_manual_revision(revision_id)["target_version"] == "1.2.0"
+
+
 def test_manual_change_judgment_round_trip(tmp_path):
     storage = Storage(tmp_path / "app.db")
     revision_id = storage.add_manual_revision("VXvue", "Service Manual", "W1", tmp_path / "r.docx")

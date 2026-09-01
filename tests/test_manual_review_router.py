@@ -4,6 +4,7 @@ from docx import Document
 from fastapi.testclient import TestClient
 
 import app.modules.manual_review.router as manual_review_router
+import app.modules.knowledge.router as knowledge_router
 from app.core.storage import Storage
 from app.main import app
 
@@ -68,6 +69,54 @@ def test_home_shows_registered_srs_sources(monkeypatch, tmp_path):
     assert "VXvue SRS.pdf" in response.text
 
 
+def test_product_added_in_knowledge_appears_in_manual_review(monkeypatch, tmp_path):
+    storage = Storage(tmp_path / "app.db")
+    monkeypatch.setattr(knowledge_router, "storage", storage)
+    monkeypatch.setattr(manual_review_router, "storage", storage)
+    client = TestClient(app)
+
+    added = client.post("/knowledge/products", data={"product": "신규 장비"}, follow_redirects=False)
+    response = client.get("/manual-review")
+
+    assert added.status_code == 303
+    assert '<option value="신규 장비">신규 장비</option>' in response.text
+    assert "Knowledge에서 제품을 추가" in response.text
+
+
+def test_vxvue_manual_types_are_suggested_and_custom_input_is_allowed(monkeypatch, tmp_path):
+    storage = Storage(tmp_path / "app.db")
+    storage.ensure_product("VXvue")
+    monkeypatch.setattr(manual_review_router, "storage", storage)
+
+    response = TestClient(app).get("/manual-review")
+
+    assert response.status_code == 200
+    assert 'name="manual_name" list="manual-types-list"' in response.text
+    assert "VXvue Service Manual" in response.text
+    assert "VXvue DICOM Conformance Statement" in response.text
+
+
+def test_revision_label_policy_separates_version_and_qa_round():
+    assert manual_review_router._normalize_target_version(" V1.1.0 ") == "1.1.0"
+    assert manual_review_router._revision_label("1.1.0", None) == "V1.1.0 · W1"
+    assert manual_review_router._revision_label("1.1.0", 0) == "V1.1.0 · W2"
+    assert manual_review_router._revision_label("1.1.0", None, True) == "V1.1.0 · Baseline"
+
+
+def test_manual_review_rejects_product_not_registered_in_knowledge(monkeypatch, tmp_path):
+    storage = Storage(tmp_path / "app.db")
+    monkeypatch.setattr(manual_review_router, "storage", storage)
+
+    response = TestClient(app).post(
+        "/manual-review/revisions",
+        files={"file": ("change.docx", b"not-read-in-background", "application/octet-stream")},
+        data={"product": "미등록 제품", "manual_name": "Custom Manual", "target_version": "1.0"},
+    )
+
+    assert response.status_code == 400
+    assert "Knowledge에서 제품을 먼저 추가" in response.json()["detail"]
+
+
 def test_upload_rejects_unsupported_extension(monkeypatch, tmp_path):
     storage = Storage(tmp_path / "app.db")
     monkeypatch.setattr(manual_review_router, "storage", storage)
@@ -75,7 +124,7 @@ def test_upload_rejects_unsupported_extension(monkeypatch, tmp_path):
     response = TestClient(app).post(
         "/manual-review/revisions",
         files={"file": ("change.txt", b"plain", "text/plain")},
-        data={"product": "VXvue", "manual_name": "Service Manual", "revision_label": "W1"},
+        data={"product": "VXvue", "manual_name": "Service Manual", "target_version": "1.0"},
     )
 
     assert response.status_code == 400

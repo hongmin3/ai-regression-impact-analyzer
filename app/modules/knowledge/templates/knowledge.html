@@ -4,6 +4,11 @@
 <datalist id="versions-list"></datalist>
 <section>
   <label>제품별로 보기<select id="product-filter"><option value="">전체 제품</option>{% for p in products %}<option value="{{ p }}">{{ p }}</option>{% endfor %}</select></label>
+  <form method="post" action="/knowledge/products" style="display:flex;gap:8px;align-items:end;margin-top:14px">
+    <label style="flex:1">새 제품 추가<input name="product" placeholder="제품명" required></label>
+    <button type="submit">제품 추가</button>
+  </form>
+  <p class="hint">여기서 추가한 제품은 Regression 분석과 매뉴얼 개정 검증의 제품 목록에 함께 표시됩니다.</p>
 </section>
 <section>
   <h2>동기화 상태</h2>

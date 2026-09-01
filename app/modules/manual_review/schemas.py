@@ -117,6 +117,7 @@ class ManualRevision(BaseModel):
     product: str
     manual_name: str
     revision_label: str
+    target_version: str = ""
     round_number: int = 0
     parent_revision_id: int | None = None
     baseline_revision_id: int | None = None

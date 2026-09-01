@@ -26,6 +26,7 @@ class SyncScheduleConfig(BaseModel):
 class ProductConfig(BaseModel):
     product: str
     version: str = ""
+    manual_types: list[str] = Field(default_factory=list)
     specification: SpecificationSyncConfig = Field(default_factory=SpecificationSyncConfig)
     testcase: TestCaseSyncConfig = Field(default_factory=TestCaseSyncConfig)
     sync: SyncScheduleConfig = Field(default_factory=SyncScheduleConfig)

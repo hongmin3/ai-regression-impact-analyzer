@@ -2,6 +2,12 @@
 # 대체하지 않는다 — "이 제품을 어떻게 동기화할지"만 담는다.
 product: VXvue
 version: "1.0"
+manual_types:
+  - "VXvue Service Manual"
+  - "VXvue Operation Manual"
+  - "VXvue DICOM Conformance Statement"
+  - "System Integration Guide for VXvue"
+  - "VXvue Web System Design & API Protocol Manual"
 
 specification:
   # alm_crawler: 별도 프로젝트(ALM 사양서 최신화 크롤링)가 Polarion에서 이미 수집한 PDF를 읽기만 한다.

@@ -11,6 +11,7 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Stre
 from fastapi.templating import Jinja2Templates
 
 from app.core.config import get_settings
+from app.core.product_config import list_product_configs
 from app.core.storage import Storage
 from app.modules.manual_review.comment_writer import insert_comments, output_filename
 from app.modules.manual_review.comment_resolution import suggest_prior_comments
@@ -35,16 +36,37 @@ def _srs_status_by_product(products: list[str]) -> dict[str, dict]:
     }
 
 
+def _manual_types_by_product(products: list[str], revisions: list[dict]) -> dict[str, list[str]]:
+    values = {product: set() for product in products}
+    for config in list_product_configs():
+        values.setdefault(config.product, set()).update(config.manual_types)
+    for revision in revisions:
+        values.setdefault(revision["product"], set()).add(revision["manual_name"])
+    return {product: sorted(names) for product, names in values.items()}
+
+
+def _normalize_target_version(value: str) -> str:
+    return value.strip().removeprefix("V").removeprefix("v").strip()
+
+
+def _revision_label(target_version: str, parent_round: int | None, pdf_baseline: bool = False) -> str:
+    suffix = "Baseline" if pdf_baseline else f"W{(parent_round + 2) if parent_round is not None else 1}"
+    return f"V{target_version} · {suffix}"
+
+
 @router.get("", response_class=HTMLResponse)
 def home(request: Request):
     products = storage.list_products()
+    revisions = storage.list_manual_revisions()
     return templates.TemplateResponse(
         request,
         "index.html",
         {
             "products": products,
-            "revisions": storage.list_manual_revisions(),
+            "revisions": revisions,
             "srs_status_by_product": _srs_status_by_product(products),
+            "manual_types_by_product": _manual_types_by_product(products, revisions),
+            "versions_by_product": {product: storage.list_versions(product) for product in products},
         },
     )
 
@@ -63,6 +85,7 @@ def _run_job(
     parent_revision_id: int | None,
     release_note_path: Path | None = None,
     design_review_path: Path | None = None,
+    target_version: str = "",
 ) -> None:
     try:
         storage.update_analysis(job_id, "RUNNING")
@@ -71,6 +94,7 @@ def _run_job(
             path, product, manual_name, revision_label,
             parent_revision_id=parent_revision_id, analysis_id=job_id,
             release_note_path=release_note_path, design_review_path=design_review_path,
+            target_version=target_version,
         )
         storage.update_analysis(job_id, "DONE", result=result)
     except Exception as exc:
@@ -99,7 +123,7 @@ def start_revision(
     file: UploadFile = File(...),
     product: str = Form(...),
     manual_name: str = Form(...),
-    revision_label: str = Form(...),
+    target_version: str = Form(...),
     parent_revision_id: str = Form(""),
     release_note_file: UploadFile | None = File(None),
     design_review_file: UploadFile | None = File(None),
@@ -107,16 +131,35 @@ def start_revision(
     suffix = Path(file.filename or "").suffix.lower()
     if suffix not in {".docx", ".pdf"}:
         raise HTTPException(400, "Word Track Changes(.docx) 또는 PDF 파일만 지원합니다.")
-    storage.ensure_product(product)
+    product = product.strip()
+    manual_name = manual_name.strip()
+    target_version = _normalize_target_version(target_version)
+    if not product or not manual_name or not target_version:
+        raise HTTPException(400, "제품, Manual 종류, 제품 버전을 모두 입력하세요.")
+    if product not in storage.list_products():
+        raise HTTPException(400, "등록되지 않은 제품입니다. 공용 Knowledge에서 제품을 먼저 추가하세요.")
+    storage.ensure_version(product, target_version)
+    try:
+        parent_id = int(parent_revision_id) if parent_revision_id.strip() else None
+    except ValueError as exc:
+        raise HTTPException(400, "이전 검증 값이 올바르지 않습니다.") from exc
+    parent = storage.get_manual_revision(parent_id) if parent_id else None
+    if parent_id and not parent:
+        raise HTTPException(400, "선택한 이전 검증을 찾을 수 없습니다.")
+    if parent and (parent["product"] != product or parent["manual_name"] != manual_name):
+        raise HTTPException(400, "이전 Round는 같은 제품과 Manual 종류에서만 선택할 수 있습니다.")
+    if parent and parent["target_version"] and parent["target_version"] != target_version:
+        raise HTTPException(400, "같은 검증 계보에서는 제품 버전을 변경할 수 없습니다. 새 제품 버전은 이전 Round를 선택하지 않고 시작하세요.")
+    next_round = int(parent["round_number"]) + 1 if parent else 0
+    revision_label = _revision_label(target_version, int(parent["round_number"]) if parent else None, suffix == ".pdf" and not parent)
     path = get_settings().path("storage.manual_revision_dir") / f"{uuid.uuid4().hex}{suffix}"
     with path.open("wb") as target:
         shutil.copyfileobj(file.file, target)
-    parent_id = int(parent_revision_id) if parent_revision_id.strip() else None
     release_note_path = _register_or_reuse_reference_doc("release_note", product, revision_label, release_note_file)
     design_review_path = _register_or_reuse_reference_doc("design_review", product, revision_label, design_review_file)
     job_id = uuid.uuid4().hex[:12]
     storage.create_analysis(job_id, stage_total=len(MANUAL_REVIEW_STAGES))
-    background_tasks.add_task(_run_job, job_id, path, product, manual_name, revision_label, parent_id, release_note_path, design_review_path)
+    background_tasks.add_task(_run_job, job_id, path, product, manual_name, revision_label, parent_id, release_note_path, design_review_path, target_version)
     return {"job_id": job_id, "status_url": f"/manual-review/jobs/{job_id}"}
 
 
