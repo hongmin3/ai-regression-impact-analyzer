@@ -26,8 +26,8 @@ def _impact_result(total_tokens: int, cache_hit: bool | None) -> dict:
     return result
 
 
-def _manual_review_result(total_tokens: int, revision_id: int = 1) -> dict:
-    return {
+def _manual_review_result(total_tokens: int, revision_id: int = 1, ai_audit: dict | None = None) -> dict:
+    result = {
         "revision_id": revision_id,
         "round_number": 1,
         "total_changes": 3,
@@ -39,6 +39,9 @@ def _manual_review_result(total_tokens: int, revision_id: int = 1) -> dict:
         "cross_manual_review_required": 0,
         "token_usage": {"total_tokens": total_tokens},
     }
+    if ai_audit is not None:
+        result["ai_audit"] = ai_audit
+    return result
 
 
 def test_cost_dashboard_stats_aggregates_by_module_and_day(tmp_path):
@@ -81,6 +84,26 @@ def test_cost_dashboard_cache_hit_rate_ignores_analyses_without_cache_data(tmp_p
 
     assert stats["cache_sample_size"] == 2
     assert stats["cache_hit_rate"] == 0.5
+
+
+def test_cost_dashboard_cache_hit_rate_includes_manual_review_call_counts(tmp_path):
+    storage = Storage(tmp_path / "app.db")
+    storage.create_analysis("impact-hit", module="impact_analyzer")
+    storage.update_analysis("impact-hit", "DONE", result=_impact_result(10, cache_hit=True))
+    storage.create_analysis("manual-1", module="manual_review")
+    storage.update_analysis(
+        "manual-1", "DONE",
+        result=_manual_review_result(10, ai_audit={"request_count": 1, "cache_hit_count": 1}),
+    )
+
+    stats = storage.cost_dashboard_stats(days=30)
+
+    # impact: 1 hit / 1 call. manual: 1 hit / (1 hit + 1 실제 요청) = 1/2 calls. 합계 2 hits / 3 calls.
+    assert stats["cache_sample_size"] == 3
+    assert stats["cache_hit_rate"] == 2 / 3
+    recent_by_id = {item["id"]: item for item in stats["recent"]}
+    assert recent_by_id["manual-1"]["cache_hits"] == 1
+    assert recent_by_id["manual-1"]["cache_calls"] == 2
 
 
 def test_cost_dashboard_stats_excludes_analyses_older_than_window(tmp_path):

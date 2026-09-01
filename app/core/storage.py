@@ -246,6 +246,22 @@ class Storage:
                 continue
         return total
 
+    @staticmethod
+    def _cache_calls_from_audit(ai_audit: dict) -> tuple[int, int] | None:
+        """(hit 수, 전체 호출 수)를 ai_audit 형태에 상관없이 계산한다.
+
+        impact_analyzer는 분석당 Gemini 호출이 1회뿐이라 `cache_hit`(bool) 하나만 기록한다.
+        manual_review는 변경 건마다 여러 번 호출하므로 `cache_hit_count`/`request_count`
+        누적치를 기록한다(request_count는 캐시 미스=실제 호출 수만 센다, gemini_client.py 참고).
+        둘 다 없으면 이 분석은 캐시 통계에서 제외한다(None)."""
+        if "cache_hit" in ai_audit:
+            return (1, 1) if ai_audit["cache_hit"] else (0, 1)
+        if "cache_hit_count" in ai_audit:
+            hits = int(ai_audit.get("cache_hit_count", 0) or 0)
+            total = hits + int(ai_audit.get("request_count", 0) or 0)
+            return (hits, total) if total else None
+        return None
+
     def cost_dashboard_stats(self, days: int = 30) -> dict:
         """비용/캐시 대시보드 집계. analyses에 토큰/캐시 전용 컬럼이 없어 result_json을 그때그때 파싱한다.
 
@@ -278,19 +294,20 @@ class Storage:
             module_bucket = modules.setdefault(module, {"tokens": 0, "count": 0})
             module_bucket["tokens"] += tokens
             module_bucket["count"] += 1
-            cache_hit = (result.get("ai_audit") or {}).get("cache_hit")
-            if cache_hit is not None:
-                cache_checked += 1
-                if cache_hit:
-                    cache_hits += 1
+            cache_calls = self._cache_calls_from_audit(result.get("ai_audit") or {})
+            if cache_calls is not None:
+                hits, total = cache_calls
+                cache_checked += total
+                cache_hits += hits
             request = json.loads(row["request_json"]) if row["request_json"] else {}
             product = request.get("product")
             if not product and module == "manual_review" and result.get("revision_id"):
                 revision = self.get_manual_revision(int(result["revision_id"]))
                 product = revision["product"] if revision else None
             recent.append({
-                "id": row["id"], "module": module, "product": product,
-                "created_at": row["created_at"], "tokens": tokens, "cache_hit": cache_hit,
+                "id": row["id"], "module": module, "product": product, "created_at": row["created_at"],
+                "tokens": tokens, "cache_hits": cache_calls[0] if cache_calls else None,
+                "cache_calls": cache_calls[1] if cache_calls else None,
             })
         return {
             "days": days,

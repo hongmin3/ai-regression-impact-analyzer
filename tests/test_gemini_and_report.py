@@ -77,6 +77,28 @@ def test_report_generation():
     assert sheet["A2"].value == "TC-1"
 
 
+def test_gemini_client_accumulates_token_usage_and_cache_hits_across_calls(tmp_path):
+    from app.core.gemini_client import GeminiClient
+    from app.modules.manual_review.schemas import QuickJudgmentResponse
+
+    storage = Storage(tmp_path / "test.db")
+    calls = {"n": 0}
+
+    def responder(prompt: str) -> dict:
+        calls["n"] += 1
+        return {"decision": "PASS", "confidence": 0.9, "reason_codes": [], "requires_detail_generation": False, "token_usage": {"total_tokens": 10}}
+
+    client = GeminiClient(storage=storage, responder=responder)
+    client.generate_structured("prompt-a", prompt_name="manual_revision_quick", response_schema=QuickJudgmentResponse)
+    client.generate_structured("prompt-b", prompt_name="manual_revision_quick", response_schema=QuickJudgmentResponse)
+    client.generate_structured("prompt-a", prompt_name="manual_revision_quick", response_schema=QuickJudgmentResponse)
+
+    assert calls["n"] == 2  # 세 번째 호출은 동일 prompt라 캐시로 처리되어 responder가 다시 불리지 않음
+    assert client.request_count == 2
+    assert client.cache_hit_count == 1
+    assert client.token_usage == {"total_tokens": 20}  # 실제 호출 2회분만 누적, 캐시 재사용분은 중복 합산하지 않음
+
+
 def test_ai_client_keeps_exact_prompt_and_response_for_audit(tmp_path):
     response = {"decisions": [], "draft_test_cases": [], "change_items": [], "token_usage": {"total_tokens": 7}}
     client = ImpactAnalysisAIClient(Storage(tmp_path / "audit.db"), responder=lambda _: response)

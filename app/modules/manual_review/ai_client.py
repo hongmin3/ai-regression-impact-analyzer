@@ -30,6 +30,10 @@ class ManualReviewAIClient:
         return self._client.request_count
 
     @property
+    def cache_hit_count(self) -> int:
+        return self._client.cache_hit_count
+
+    @property
     def token_usage(self) -> dict:
         return self._client.token_usage
 

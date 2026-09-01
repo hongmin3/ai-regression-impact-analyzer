@@ -1,9 +1,33 @@
 # Next Steps — 매뉴얼 개정 검증 기능 진행 상황 (우선순위 순)
 
-> **미완료 로컬 폴더 rename 대상 이름(= GitHub repo slug와 동일)**: `qa-verification-management-system`
-> (현재: `ai-regression-impact-analyzer`). 정확한 명령은 `HANDOFF.md` §2 참고. 이 세션이
-> 폴더를 작업 디렉터리로 물고 있어 세션 내부에서는 구조적으로 rename이 불가능하다(2026-09-01
-> 재시도로 재확인) — 세션 창을 모두 닫은 뒤 사용자가 직접 실행해야 한다.
+> **2026-09-01 사용자 결정: 아래 두 항목은 보류(우선순위 낮음, 삭제 아님)**
+> - 로컬 폴더 rename(대상 이름 `qa-verification-management-system`, `HANDOFF.md` §2에
+>   정확한 명령 있음, 이 세션이 폴더를 물고 있어 세션 내부에서는 구조적으로 불가능함을
+>   2026-09-01 재확인). 필요해지면 `HANDOFF.md` §2 명령으로 재개.
+> - Release Note/설계검토보고서 주간 자동 확보(`OPEN_QUESTIONS.md` #4) — 현재 수동
+>   업로드+자동 재사용으로 충분하다고 판단해 보류.
+
+## 2026-09-01 매뉴얼 개정 검증 캐시 Hit 기록 추가 (비용 대시보드 v1 공백 해소)
+
+비용 대시보드에서 드러난 공백 — `impact_analyzer`만 `ai_audit.cache_hit`을 기록해 매뉴얼 개정
+검증은 캐시 통계에서 빠져있던 문제를 해결했다.
+
+- `app/core/gemini_client.py`: `cache_hit_count` 누적 카운터 추가. 캐시 Hit 시 `_request()`를
+  호출하지 않고 즉시 반환하도록 재구성해, **캐시 Hit은 실제 비용이 0이므로 `token_usage`에
+  다시 합산하지 않도록 수정**(부수적으로 발견한 버그: 이전에는 캐시로 재사용해도 원래 호출의
+  토큰 수가 다시 집계되어 `daily_token_limit`을 실제보다 과다 소모한 것처럼 보이게 했다).
+  `token_usage`는 이제 이 클라이언트 인스턴스가 실제로 과금된 호출만 누적한다(매뉴얼 개정
+  검증처럼 한 인스턴스로 변경 건마다 여러 번 호출하는 경우도 정확히 합산됨 — 기존에는 마지막
+  호출값으로 덮어써져 과소집계되는 별개의 버그가 있었다).
+- `ManualReviewAIClient.cache_hit_count` 프로퍼티 추가, `reviewer.py`의 두 결과 조립 지점에
+  `"ai_audit": {"request_count": ..., "cache_hit_count": ...}` 추가.
+- `Storage.cost_dashboard_stats`: `ai_audit.cache_hit`(bool, impact_analyzer)와
+  `ai_audit.cache_hit_count`/`request_count`(누적, manual_review) 두 형태를 모두 처리하도록
+  일반화(`_cache_calls_from_audit`). 집계 단위가 "분석 건수"에서 "Gemini 호출 건수"로
+  바뀌었다(대시보드 UI 문구도 갱신).
+- 테스트 4건 추가/보강(`test_gemini_and_report.py`, `test_manual_review_reviewer.py`,
+  `test_cost_dashboard.py`) — `pytest -q` **178 passed**. 실제 로컬 서버 렌더링도 재확인.
+- 아직 커밋/push/배포는 하지 않음.
 
 ## 2026-09-01 실제 파일 기반 E2E pytest 편입 (OPEN_QUESTIONS.md #5 완료)
 

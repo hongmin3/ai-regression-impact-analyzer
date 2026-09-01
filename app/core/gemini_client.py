@@ -24,6 +24,7 @@ class GeminiClient:
         self.storage = storage or Storage()
         self.responder = responder
         self.request_count = 0
+        self.cache_hit_count = 0
         self.token_usage: dict[str, int] = {}
         self.last_cache_hit = False
 
@@ -67,12 +68,22 @@ class GeminiClient:
 
     def generate_structured(self, prompt: str, *, prompt_name: str, response_schema: type[BaseModel]) -> dict:
         """prompt_name(prompts/{prompt_name}.yaml)의 system_instruction/생성 설정으로 Gemini를
-        호출하고, 응답 JSON 전체를 dict로 반환한다 (도메인 파싱은 호출자 책임)."""
+        호출하고, 응답 JSON 전체를 dict로 반환한다 (도메인 파싱은 호출자 책임).
+
+        `token_usage`는 이 클라이언트 인스턴스가 실제로 과금된(=캐시 미스) 호출의 누적 합계다.
+        매뉴얼 개정 검증처럼 한 인스턴스로 변경 건마다 여러 번 호출하는 경우 마지막 호출값만
+        남으면 전체 비용을 과소집계하게 되어 누적 방식으로 두되, 캐시 Hit는 실제 비용이 0이므로
+        (README의 "동일 입력 재분석 시 캐시로 비용 없음") 합산하지 않는다 — 이전에는 캐시로
+        재사용해도 원래 호출의 토큰 수가 다시 집계되어 일일 토큰 한도를 실제보다 과다 소모한
+        것처럼 보이게 하는 문제가 있었다."""
         prompt_cfg = load_prompt(prompt_name)
         cache_key = hashlib.sha256((self.settings.secrets.gemini_model + prompt_name + str(prompt_cfg.version) + prompt).encode()).hexdigest()
         cached = self.storage.cache_get(cache_key) if self.settings.get("analysis.cache_enabled", True) else None
         self.last_cache_hit = cached is not None
-        raw = cached or self._request(
+        if self.last_cache_hit:
+            self.cache_hit_count += 1
+            return cached
+        raw = self._request(
             prompt,
             system_instruction=prompt_cfg.system_instruction,
             response_schema=response_schema,
@@ -80,7 +91,7 @@ class GeminiClient:
             max_output_tokens=prompt_cfg.max_output_tokens,
             thinking_budget=prompt_cfg.thinking_budget,
         )
-        if not cached:
-            self.storage.cache_set(cache_key, raw)
-        self.token_usage = {key: int(value) for key, value in raw.get("token_usage", {}).items()}
+        self.storage.cache_set(cache_key, raw)
+        for key, value in raw.get("token_usage", {}).items():
+            self.token_usage[key] = self.token_usage.get(key, 0) + int(value)
         return raw

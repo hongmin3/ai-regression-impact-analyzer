@@ -164,6 +164,25 @@ def test_design_review_fail_forces_human_review_signal(tmp_path):
     assert "DESIGN_REVIEW_FAILED" in matched["ai_judgment"]["reason_codes"]
 
 
+def test_reviewer_result_includes_ai_audit_for_cost_dashboard(tmp_path):
+    storage = Storage(tmp_path / "app.db")
+    revision_path = tmp_path / "revised.docx"
+    _write_revision_docx(revision_path)
+
+    first = ManualRevisionReviewer(ai_client=_mock_ai_client(storage), storage=storage).run(revision_path, "VXvue", "Service Manual", "W1")
+    assert first["ai_audit"]["request_count"] == 2  # 1개 functional change에 quick+detail 2회 호출
+    assert first["ai_audit"]["cache_hit_count"] == 0
+    assert first["ai_audit"]["request_count"] == first["request_count"]
+
+    # 같은 위치(paragraph_index)에 동일한 변경을 가진 새 리비전을 다시 검증하면 GeminiClient의
+    # sha256 캐시(모델+prompt+버전+payload)에 걸려 실제 호출 없이 캐시로만 처리된다.
+    repeat_path = tmp_path / "revised_again.docx"
+    _write_revision_docx(repeat_path)
+    second = ManualRevisionReviewer(ai_client=_mock_ai_client(storage), storage=storage).run(repeat_path, "VXvue", "Service Manual", "W2")
+    assert second["ai_audit"]["request_count"] == 0
+    assert second["ai_audit"]["cache_hit_count"] == 2
+
+
 def test_reviewer_records_stage_progress_when_analysis_id_given(tmp_path):
     storage = Storage(tmp_path / "app.db")
     storage.create_analysis("job-1", stage_total=6)

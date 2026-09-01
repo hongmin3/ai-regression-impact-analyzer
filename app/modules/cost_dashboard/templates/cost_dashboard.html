@@ -44,11 +44,11 @@
   <section>
     <h2>캐시 재사용 현황</h2>
     {% if stats.cache_sample_size %}
-    <p>캐시 Hit율 {{ (stats.cache_hit_rate * 100) | round(1) }}% ({{ stats.cache_sample_size }}건 중 확인)</p>
+    <p>캐시 Hit율 {{ (stats.cache_hit_rate * 100) | round(1) }}% (Gemini 호출 {{ stats.cache_sample_size }}건 기준)</p>
+    <p class="hint">Regression 영향 분석은 분석당 호출 1회, 매뉴얼 개정 검증은 변경 건마다 여러 번 호출하므로 "호출 1건" 단위로 두 기능을 함께 집계합니다.</p>
     {% else %}
     <p class="hint">캐시 Hit 여부가 기록된 분석이 없습니다.</p>
     {% endif %}
-    <p class="hint">캐시 Hit 여부는 현재 Regression 영향 분석(<code>ai_audit.cache_hit</code>)만 기록합니다. 매뉴얼 개정 검증은 아직 이 값을 저장하지 않아 통계에서 제외됩니다(알려진 v1 범위 — 필요 시 확장).</p>
   </section>
 </div>
 
@@ -80,7 +80,7 @@
   {% if stats.recent %}
   <div class="table-wrap">
     <table class="history">
-      <thead><tr><th>완료 시각(UTC)</th><th>기능</th><th>제품</th><th>tokens</th><th>캐시 Hit</th><th>ID</th></tr></thead>
+      <thead><tr><th>완료 시각(UTC)</th><th>기능</th><th>제품</th><th>tokens</th><th>캐시 Hit/호출</th><th>ID</th></tr></thead>
       <tbody>
         {% for item in stats.recent %}
         <tr>
@@ -88,7 +88,7 @@
           <td>{{ module_labels.get(item.module, item.module) }}</td>
           <td>{{ item.product or '-' }}</td>
           <td>{{ "{:,}".format(item.tokens) }}</td>
-          <td>{% if item.cache_hit is none %}-{% elif item.cache_hit %}<span class="badge DONE">Hit</span>{% else %}<span class="badge">Miss</span>{% endif %}</td>
+          <td>{% if item.cache_calls is none %}-{% else %}{{ item.cache_hits }}/{{ item.cache_calls }}{% endif %}</td>
           <td>{{ item.id }}</td>
         </tr>
         {% endfor %}

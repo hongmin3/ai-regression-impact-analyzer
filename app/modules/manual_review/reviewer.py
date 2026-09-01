@@ -90,6 +90,7 @@ class ManualRevisionReviewer:
                     "release_scope_missing_suspected": 0, "pdf_baseline": True,
                     "cross_manual_review_required": 0,
                     "token_usage": self.ai_client.token_usage, "request_count": self.ai_client.request_count,
+                    "ai_audit": {"request_count": self.ai_client.request_count, "cache_hit_count": self.ai_client.cache_hit_count},
                 }
             if suffix == ".pdf":
                 parent = self.storage.get_manual_revision(parent_revision_id) if parent_revision_id else None
@@ -161,6 +162,7 @@ class ManualRevisionReviewer:
                 "cross_manual_review_required": len(cross_impacts),
                 "token_usage": self.ai_client.token_usage,
                 "request_count": self.ai_client.request_count,
+                "ai_audit": {"request_count": self.ai_client.request_count, "cache_hit_count": self.ai_client.cache_hit_count},
             }
             self.logger.info(
                 "manual_review_finished revision_id=%s requests=%s functional=%s missing_suspected=%s elapsed=%.3f",
