@@ -27,7 +27,9 @@
   바뀌었다(대시보드 UI 문구도 갱신).
 - 테스트 4건 추가/보강(`test_gemini_and_report.py`, `test_manual_review_reviewer.py`,
   `test_cost_dashboard.py`) — `pytest -q` **178 passed**. 실제 로컬 서버 렌더링도 재확인.
-- 아직 커밋/push/배포는 하지 않음.
+- 커밋(`af0287a`)·push·배포 완료. 원격 `177 passed, 1 skipped`(real-file E2E는 예상대로
+  skip), 포트 12000만 PID `1258104` → `1260054`로 재기동, 다른 포트(5000/5001/5002/5003/
+  8000/10000/18800) PID 그대로 유지, 주요 6개 페이지 200 확인.
 
 ## 2026-09-01 실제 파일 기반 E2E pytest 편입 (OPEN_QUESTIONS.md #5 완료)
 
