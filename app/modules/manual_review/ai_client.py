@@ -41,6 +41,8 @@ class ManualReviewAIClient:
                 "author": change.author,
                 "text": change.text,
                 "paragraph_index": change.paragraph_index,
+                "source_page": change.source_page,
+                "review_required": change.review_required,
             },
             "candidate_srs": [chunk.model_dump() for chunk in candidates],
         }

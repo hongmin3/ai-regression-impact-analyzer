@@ -32,6 +32,8 @@ class TrackedChange:
     date: str
     text: str
     paragraph_index: int
+    source_page: int | None = None
+    review_required: bool = False
 
 
 @dataclass

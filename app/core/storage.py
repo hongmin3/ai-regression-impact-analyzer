@@ -62,7 +62,8 @@ class Storage:
                     kind TEXT NOT NULL, author TEXT, change_date TEXT, paragraph_index INTEGER,
                     text TEXT NOT NULL, functional INTEGER NOT NULL DEFAULT 1,
                     decision TEXT, confidence REAL, qa_decision TEXT, qa_note TEXT,
-                    ai_judgment_json TEXT, created_at TEXT NOT NULL
+                    ai_judgment_json TEXT, source_page INTEGER, review_required INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL
                 );
                 CREATE TABLE IF NOT EXISTS manual_comments (
                     id INTEGER PRIMARY KEY AUTOINCREMENT, change_id INTEGER NOT NULL REFERENCES manual_changes(id),
@@ -89,6 +90,10 @@ class Storage:
             ):
                 if column not in existing:
                     db.execute(f"ALTER TABLE analyses ADD COLUMN {column} {ddl}")
+            manual_change_columns = {row["name"] for row in db.execute("PRAGMA table_info(manual_changes)")}
+            for column, ddl in (("source_page", "INTEGER"), ("review_required", "INTEGER NOT NULL DEFAULT 0")):
+                if column not in manual_change_columns:
+                    db.execute(f"ALTER TABLE manual_changes ADD COLUMN {column} {ddl}")
             now = datetime.now(timezone.utc).isoformat()
             for name in self.DEFAULT_PRODUCTS:
                 db.execute("INSERT OR IGNORE INTO products(name,created_at) VALUES(?,?)", (name, now))
@@ -316,11 +321,13 @@ class Storage:
         paragraph_index: int,
         text: str,
         functional: bool = True,
+        source_page: int | None = None,
+        review_required: bool = False,
     ) -> int:
         with self.connect() as db:
             cursor = db.execute(
-                "INSERT INTO manual_changes(revision_id,kind,author,change_date,paragraph_index,text,functional,created_at) VALUES(?,?,?,?,?,?,?,?)",
-                (revision_id, kind, author, change_date, paragraph_index, text, int(functional), datetime.now(timezone.utc).isoformat()),
+                "INSERT INTO manual_changes(revision_id,kind,author,change_date,paragraph_index,text,functional,source_page,review_required,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                (revision_id, kind, author, change_date, paragraph_index, text, int(functional), source_page, int(review_required), datetime.now(timezone.utc).isoformat()),
             )
             return int(cursor.lastrowid)
 

@@ -16,6 +16,11 @@ Knowledge에서 추가·삭제할 수 있다. 이전 Round의 미해결 Comment�
 이어받고, 현재 Track Changes와 로컬 유사도를 비교해 `반영 의심/미반영 의심/판단 불가`를
 참고 표시한다. QA가 `해결/미해결/재오픈/제외`를 확정하기 전에는 상태를 자동 변경하지 않는다.
 
+**5차 (PDF 매뉴얼 리비전 diff)**: 첫 PDF를 Baseline으로 등록하고 다음 PDF부터 이전 PDF를
+선택해 페이지별 텍스트 추가·삭제·수정을 추출한다. PDF 변경은 위치/레이아웃 해석 오차를
+감안해 AI confidence를 최대 60%로 제한하고 모든 항목에 `PDF_DIFF_REVIEW_REQUIRED`를
+표시한다. PDF에는 Word Comment를 생성하지 않으며 QA가 결과 화면에서 직접 최종 판정한다.
+
 **1차 (스켈레톤 → 동작하는 파이프라인)**: 코드 구조 리팩터링(`app/core/`·`app/prompts/`·
 `app/modules/{impact_analyzer,manual_review}/`·`app/web/`), DOCX Track Changes 파서,
 NON_FUNCTIONAL_CHANGE 필터, SRS 근거 로컬 검색(impact_analyzer가 이미 관리하는 등록 사양서
@@ -50,19 +55,18 @@ NON_FUNCTIONAL_CHANGE 필터, SRS 근거 로컬 검색(impact_analyzer가 이미
 
 ## 아직 미착수 (우선순위 순)
 
-1. **PDF 매뉴얼 리비전 diff** (스펙 §9) — 지금은 DOCX Track Changes만 지원.
-2. **Release Note "Description for Each Version" 절의 상세 설명 활용** — 지금은 이 절을
+1. **Release Note "Description for Each Version" 절의 상세 설명 활용** — 지금은 이 절을
    중복 방지를 위해 건너뛰지만, Before/Now 형식의 상세 설명은 AI 판정 시 추가 근거로 쓸 수
    있다. 파싱이 더 복잡해(표 형태 아님, 산문형 Before/Now 쌍) 이번 세션에서는 보류.
-3. **설계검토보고서 "변경 결과" 표 자체 활용** — PyMuPDF가 표를 컬럼 구분 없이 풀어버려 이번
+2. **설계검토보고서 "변경 결과" 표 자체 활용** — PyMuPDF가 표를 컬럼 구분 없이 풀어버려 이번
    세션에서는 "문제 분석" 절의 제목으로 대체했다(실제 검증 결과 제목이 동일해 대체 가능).
    "결과: Pass/Fail" 컬럼까지 활용하면(예: Fail 항목만 별도 강조) 더 정교해질 수 있음.
-4. **Cross-Manual 영향분석** (스펙 §11) — 한 SRS/Release 변경이 여러 Manual에 영향을 주는지
+3. **Cross-Manual 영향분석** (스펙 §11) — 한 SRS/Release 변경이 여러 Manual에 영향을 주는지
    추적. 지금 Reverse 검증은 "이 Manual 안에서" 만 확인하고 다른 Manual은 보지 않는다.
-5. **이미지 변경 Human Review Gate** (스펙 §8-1) — 아직 미착수. 실제 이미지 포함 매뉴얼
+4. **이미지 변경 Human Review Gate** (스펙 §8-1) — 아직 미착수. 실제 이미지 포함 매뉴얼
    예시로 검증 필요.
-6. **비용/캐시 대시보드 UI** — 토큰 사용량은 이미 기록되지만 화면 노출 UI는 없음.
-7. **실제 예시 파일 기반 E2E pytest 테스트 추가** — 이번 세션에서 수동으로 스크립트를 돌려
+5. **비용/캐시 대시보드 UI** — 토큰 사용량은 이미 기록되지만 화면 노출 UI는 없음.
+6. **실제 예시 파일 기반 E2E pytest 테스트 추가** — 이번 세션에서 수동으로 스크립트를 돌려
    검증은 했지만(실제 회사 문서라 테스트 fixture로 커밋하지 않음), 이 실제 파일들을 pytest
    fixture로 안전하게 참조할 방법(예: 사내망 접근 가능한 CI에서만 skip 없이 실행)을 정하면
    정식 E2E 테스트로 승격 가능.

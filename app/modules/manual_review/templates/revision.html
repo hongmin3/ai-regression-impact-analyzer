@@ -8,7 +8,7 @@
     {%- for label, count in decision_counts.items() %} {{ label|judgment_ko }} {{ count }}건{% endfor %}
     {%- if not decision_counts %} (분석 대상 변경 없음){% endif %}
   </p>
-  <p><a href="/manual-review/revisions/{{ revision.id }}/comment-docx">[Word Comment 삽입 DOCX 생성]</a> <span class="hint">— 문제로 판정된 항목마다 원본 위치에 Comment를 추가한 새 파일을 내려받습니다 (원본 Track Changes·기존 Comment는 유지).</span></p>
+  {% if revision.source_path.lower().endswith('.docx') %}<p><a href="/manual-review/revisions/{{ revision.id }}/comment-docx">[Word Comment 삽입 DOCX 생성]</a> <span class="hint">— 문제로 판정된 항목마다 원본 위치에 Comment를 추가한 새 파일을 내려받습니다.</span></p>{% else %}<p class="hint">PDF 변경은 페이지 텍스트 비교 결과이며 모든 항목에 사람 확인이 필요합니다. Word Comment 생성은 지원하지 않습니다.</p>{% endif %}
 </section>
 
 {% if missing_findings %}
@@ -49,14 +49,15 @@
   {% for c in changes %}
   <div style="border-bottom:1px solid #e2e8f0;padding:14px 0">
     <div>
-      <span class="badge">{{ {'insertion':'추가','deletion':'삭제','move_from':'이동(출발)','move_to':'이동(도착)'}.get(c.kind, c.kind) }}</span>
+      <span class="badge">{{ {'insertion':'추가','deletion':'삭제','move_from':'이동(출발)','move_to':'이동(도착)','pdf_addition':'PDF 추가','pdf_deletion':'PDF 삭제','pdf_modification':'PDF 수정'}.get(c.kind, c.kind) }}</span>
+      {% if c.review_required %}<span class="badge">PDF_DIFF_REVIEW_REQUIRED</span>{% endif %}
       {% if not c.functional %}<span class="badge">단순 변경 (NON_FUNCTIONAL)</span>
       {% else %}<span class="badge">{{ c.decision|judgment_ko }}</span>{% if c.confidence is not none %}<span class="hint"> confidence {{ '%.2f'|format(c.confidence) }}</span>{% endif %}
       {% endif %}
       {% if c.qa_decision %}<span class="badge">QA 재판정: {{ c.qa_decision|judgment_ko }}</span>{% endif %}
     </div>
     <p>{{ c.text }}</p>
-    <p class="hint">작성자 {{ c.author or '-' }} · {{ c.change_date or '-' }} · 문단 #{{ c.paragraph_index }}</p>
+    <p class="hint">{% if c.source_page %}PDF 페이지 {{ c.source_page }}{% else %}작성자 {{ c.author or '-' }} · {{ c.change_date or '-' }} · 문단 #{{ c.paragraph_index }}{% endif %}</p>
     {% if c.functional and c.ai_judgment %}
       {% if c.ai_judgment.problem %}<p><strong>문제:</strong> {{ c.ai_judgment.problem }}</p>{% endif %}
       {% if c.ai_judgment.qa_comment %}<p><strong>QA Comment 초안:</strong> {{ c.ai_judgment.qa_comment }}</p>{% endif %}

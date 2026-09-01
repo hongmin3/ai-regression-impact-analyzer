@@ -68,13 +68,13 @@ def test_home_shows_registered_srs_sources(monkeypatch, tmp_path):
     assert "VXvue SRS.pdf" in response.text
 
 
-def test_upload_rejects_non_docx(monkeypatch, tmp_path):
+def test_upload_rejects_unsupported_extension(monkeypatch, tmp_path):
     storage = Storage(tmp_path / "app.db")
     monkeypatch.setattr(manual_review_router, "storage", storage)
 
     response = TestClient(app).post(
         "/manual-review/revisions",
-        files={"file": ("change.pdf", b"%PDF-", "application/pdf")},
+        files={"file": ("change.txt", b"plain", "text/plain")},
         data={"product": "VXvue", "manual_name": "Service Manual", "revision_label": "W1"},
     )
 

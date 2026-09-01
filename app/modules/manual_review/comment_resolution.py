@@ -53,7 +53,7 @@ def suggest_comment_resolution(comment: dict, current_changes: list[dict]) -> di
         ranked.append((score, change))
     score, candidate = max(ranked, key=lambda item: item[0])
 
-    if score >= 0.55 and candidate.get("kind") in {"insertion", "move_to"}:
+    if score >= 0.55 and candidate.get("kind") in {"insertion", "move_to", "pdf_addition", "pdf_modification"}:
         status = "REFLECTED_SUSPECTED"
     elif score < 0.2:
         status = "NOT_REFLECTED_SUSPECTED"

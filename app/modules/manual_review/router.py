@@ -105,8 +105,8 @@ def start_revision(
     design_review_file: UploadFile | None = File(None),
 ):
     suffix = Path(file.filename or "").suffix.lower()
-    if suffix != ".docx":
-        raise HTTPException(400, "현재는 Word Track Changes(.docx)만 지원합니다.")
+    if suffix not in {".docx", ".pdf"}:
+        raise HTTPException(400, "Word Track Changes(.docx) 또는 PDF 파일만 지원합니다.")
     storage.ensure_product(product)
     path = get_settings().path("storage.manual_revision_dir") / f"{uuid.uuid4().hex}{suffix}"
     with path.open("wb") as target:
@@ -219,6 +219,8 @@ def download_comment_docx(revision_id: int):
     source_path = Path(revision["source_path"])
     if not source_path.exists():
         raise HTTPException(404, "원본 리비전 파일을 찾을 수 없습니다.")
+    if source_path.suffix.lower() != ".docx":
+        raise HTTPException(400, "Word Comment 삽입은 DOCX 리비전에서만 사용할 수 있습니다.")
     changes = storage.list_manual_changes(revision_id)
     filename = output_filename(revision["manual_name"], revision["revision_label"])
     output_path = get_settings().path("storage.manual_review_comment_dir") / f"{revision_id}-{filename}"

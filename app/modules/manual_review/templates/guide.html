@@ -5,9 +5,10 @@
   <p class="hint">개정본을 등록하고, AI의 1차 검토 결과를 QA가 확정한 뒤, Comment가 삽입된 Word 파일을 내려받습니다.</p>
 
   <h3>1. 검증 등록</h3>
-  <p><a href="/manual-review">매뉴얼 검증</a> 화면에서 제품, Manual 종류, Revision 표기를 입력하고 Word Track Changes가 켜진 <code>.docx</code>를 첨부합니다.</p>
+  <p><a href="/manual-review">매뉴얼 검증</a> 화면에서 제품, Manual 종류, Revision 표기를 입력하고 Word Track Changes가 켜진 <code>.docx</code> 또는 <code>.pdf</code>를 첨부합니다.</p>
   <ul>
     <li>재검증이라면 이전 리비전을 선택합니다. Round 계보와 이전 QA 지적사항이 자동 연결됩니다.</li>
+    <li>PDF는 첫 파일을 이전 Round 없이 Baseline으로 등록한 뒤, 다음 PDF부터 그 이전 PDF를 선택해 비교합니다. 페이지 텍스트 차이에는 항상 사람 확인이 필요합니다.</li>
     <li>Release Note와 설계검토보고서를 선택적으로 첨부할 수 있습니다. 첨부하지 않으면 해당 제품에 등록된 최신 문서를 재사용합니다.</li>
     <li>최신 SRS는 Regression 분석 기능이 관리하는 공용 문서 저장소의 제품 사양서를 재사용하며, 별도로 다시 업로드하지 않습니다.</li>
   </ul>
@@ -25,8 +26,8 @@
 
   <h3>현재 지원 범위</h3>
   <ul>
-    <li>지원: DOCX Track Changes, Round 계보, SRS 근거 검색, Release Scope 누락 의심, QA Override, Word Comment 생성</li>
-    <li>준비 중: PDF 리비전 diff, Cross-Manual 영향분석, 이미지 변경 Human Review Gate, 이전 Round Comment 자동 반영 판정</li>
+    <li>지원: DOCX Track Changes, PDF 페이지 텍스트 diff, Round 계보와 이전 Comment 참고 판정, SRS 근거 검색, Release Scope 누락 의심, QA Override, DOCX Word Comment 생성</li>
+    <li>준비 중: Cross-Manual 영향분석, 이미지 변경 Human Review Gate</li>
   </ul>
   <p class="hint">AI 검토는 QA 판단을 보조하며 최종 승인이나 사양 확정을 대체하지 않습니다.</p>
 </section>

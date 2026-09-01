@@ -133,6 +133,8 @@ class ManualChange(BaseModel):
     author: str = ""
     change_date: str = ""
     paragraph_index: int = 0
+    source_page: int | None = None
+    review_required: bool = False
     text: str = ""
     functional: bool = True
     decision: str | None = None

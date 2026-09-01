@@ -12,12 +12,13 @@ from app.core.storage import Storage
 from app.modules.manual_review.ai_client import ManualReviewAIClient
 from app.modules.manual_review.change_filter import is_functional_change
 from app.modules.manual_review.docx_track_changes import TrackedChange, extract_track_changes
+from app.modules.manual_review.pdf_revision_diff import extract_pdf_revision_diff
 from app.modules.manual_review.release_scope import extract_design_review_changes, extract_release_note_changes, match_release_changes
 from app.modules.manual_review.srs_evidence import load_srs_chunks, search_candidates
 from app.parsers.document_parser import extract_document_text
 
 MANUAL_REVIEW_STAGES: tuple[str, ...] = (
-    "문서 파싱 (Track Changes 추출)",
+    "문서 파싱 (Track Changes/PDF Diff 추출)",
     "SRS 근거 준비",
     "Release Scope 대조",
     "AI 판정",
@@ -72,7 +73,26 @@ class ManualRevisionReviewer:
 
         try:
             stage(1)
-            track_result = extract_track_changes(revision_path)
+            suffix = revision_path.suffix.lower()
+            if suffix == ".pdf" and not parent_revision_id:
+                extract_pdf_revision_diff(revision_path, revision_path)  # Baseline도 실제로 열리는 PDF인지 검증
+                for stage_index in range(2, len(MANUAL_REVIEW_STAGES) + 1):
+                    stage(stage_index)
+                self.storage.update_manual_revision_status(revision_id, "BASELINE")
+                return {
+                    "revision_id": revision_id, "round_number": round_number,
+                    "total_changes": 0, "functional_changes": 0, "decision_counts": {},
+                    "prior_open_comments": [], "release_scope_total": 0,
+                    "release_scope_missing_suspected": 0, "pdf_baseline": True,
+                    "token_usage": self.ai_client.token_usage, "request_count": self.ai_client.request_count,
+                }
+            if suffix == ".pdf":
+                parent = self.storage.get_manual_revision(parent_revision_id) if parent_revision_id else None
+                if not parent or Path(parent["source_path"]).suffix.lower() != ".pdf":
+                    raise ValueError("PDF 리비전은 이전 PDF 리비전을 비교 기준으로 선택해야 합니다.")
+                track_result = extract_pdf_revision_diff(Path(parent["source_path"]), revision_path)
+            else:
+                track_result = extract_track_changes(revision_path)
 
             stage(2)
             chunks, _doc_labels = load_srs_chunks(self.storage, product)
@@ -83,7 +103,8 @@ class ManualRevisionReviewer:
             for change in track_result.changes:
                 functional = is_functional_change(change)
                 change_id = self.storage.add_manual_change(
-                    revision_id, change.kind, change.author, change.date, change.paragraph_index, change.text, functional=functional
+                    revision_id, change.kind, change.author, change.date, change.paragraph_index, change.text,
+                    functional=functional, source_page=change.source_page, review_required=change.review_required,
                 )
                 if functional:
                     functional_pairs.append((change_id, change))
@@ -96,6 +117,11 @@ class ManualRevisionReviewer:
             for change_id, change in functional_pairs:
                 candidates = search_candidates(chunks, change.text, max_candidates)
                 judgment = self.ai_client.judge(change, candidates)
+                if change.review_required:
+                    judgment.confidence = min(judgment.confidence, 0.6)
+                    judgment.needs_human_review = True
+                    if "PDF_DIFF_REVIEW_REQUIRED" not in judgment.reason_codes:
+                        judgment.reason_codes.append("PDF_DIFF_REVIEW_REQUIRED")
                 self.storage.update_manual_change_judgment(change_id, judgment.decision.value, judgment.confidence, judgment.model_dump(mode="json"))
                 decision_counts[judgment.decision.value] = decision_counts.get(judgment.decision.value, 0) + 1
 

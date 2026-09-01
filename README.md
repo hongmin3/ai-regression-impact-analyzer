@@ -40,7 +40,8 @@ app/
 단순 변경(NON_FUNCTIONAL_CHANGE) 필터링 → SRS 근거 로컬 BM25 검색 → 2단계 AI 판정(1차
 PASS면 2차 상세 호출 생략) → 결과 화면(QA Override 가능) → Word Comment 삽입 DOCX 다운로드.
 Round 계보를 추적하며 이전 지적사항은 로컬 유사도 기반 참고 판정을 제공하고 QA가 최종 상태를
-확정합니다. 남은 작업은 [`NEXT_STEPS.md`](NEXT_STEPS.md), 결정이
+확정합니다. PDF는 Baseline과 다음 리비전의 페이지 텍스트를 비교하고 모든 변경을 사람 확인
+필수로 표시합니다. 남은 작업은 [`NEXT_STEPS.md`](NEXT_STEPS.md), 결정이
 필요한 항목은 [`OPEN_QUESTIONS.md`](OPEN_QUESTIONS.md)를 참고하세요.
 
 ## 주요 기능
