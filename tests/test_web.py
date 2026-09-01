@@ -44,3 +44,11 @@ def test_legacy_guide_redirects_to_impact_guide():
     response = TestClient(app).get("/guide", follow_redirects=False)
     assert response.status_code == 308
     assert response.headers["location"] == "/impact-analyzer/guide"
+
+
+def test_knowledge_is_presented_as_shared_workspace():
+    response = TestClient(app).get("/knowledge")
+    assert response.status_code == 200
+    assert "공용 Knowledge" in response.text
+    assert 'href="/impact-analyzer"' in response.text
+    assert 'href="/manual-review"' in response.text

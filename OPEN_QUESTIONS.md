@@ -12,7 +12,9 @@
    - `manual_revisions`: `round_number`/`parent_revision_id`/`baseline_revision_id`로 Round 계보 추적 (Round N의 baseline은 항상 최초 Round 0을 가리킴)
    - `manual_changes`: `functional`(NON_FUNCTIONAL_CHANGE 필터 결과) + `decision`/`confidence`/`ai_judgment_json`(AI 판정) + `qa_decision`/`qa_note`(QA Override, AI 원본은 보존)
    - `manual_comments`: `status`(OPEN/RESOLVED/NOT_RESOLVED/REOPENED/IGNORED_BY_QA) + `resolved_in_revision_id`
-   - Round N+1 검증 시 Round N의 OPEN 상태 Comment를 "이전 지적사항"으로 화면에 보여주지만, **자동으로 반영 여부를 판정하지는 않습니다** (오탐 위험이 커서 QA가 직접 확인하도록 설계 — NEXT_STEPS.md 참고).
+   - Round N+1 검증 시 전체 이전 Round의 OPEN/NOT_RESOLVED/REOPENED Comment를 이어받고,
+     현재 Track Changes와 로컬 유사도를 비교해 `반영 의심/미반영 의심/판단 불가`를 참고
+     표시합니다. 자동으로 해결 상태를 확정하지 않으며 QA가 직접 최종 상태를 선택합니다.
    - Cross-Manual 영향분석 저장 위치는 아직 미착수(SRS/Release Note/Design Review 파서가 없어 스코프 자체가 없음).
 3. **`python-docx` 의존성**: 추가했습니다(`requirements.txt`, 실제 설치된 버전 `1.2.0`). Word Comment 삽입(`app/modules/manual_review/comment_writer.py`)에 사용 중이며, `Document.add_comment()` + 직접 lxml로 `<w:ins>/<w:del>` 내부 run을 찾아 앵커링하는 방식으로 구현했습니다(python-docx의 `Paragraph.runs`는 이런 wrapper 내부 run을 못 찾아서 우회 필요).
 
@@ -20,8 +22,8 @@
 
 ### 4. ALM 크롤러 서브프로세스를 이 기능에도 재사용할지 — 부분 해결
 
-**SRS**: 이미 impact_analyzer가 관리하는 `documents(kind='specification')` 테이블(=
-`vxvue_spec_sync.py`가 매주 자동 최신화하는 바로 그 SRS)을 그대로 재사용하도록 구현했습니다
+**SRS**: 공용 `knowledge` 모듈이 관리하는 `documents(kind='specification')` 테이블(=
+`vxvue_spec_sync.py`가 매주 자동 최신화하는 바로 그 SRS)을 두 검증 기능이 재사용하도록 구현했습니다
 (`app/modules/manual_review/srs_evidence.py`). 별도 크롤러 연동이 필요 없습니다.
 
 **Release Note/설계검토보고서**: 자격증명이 걸린 새 자동화는 만들지 않고, 대신 **수동 업로드 +

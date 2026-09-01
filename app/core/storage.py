@@ -374,15 +374,35 @@ class Storage:
                 (status, resolved_in_revision_id, comment_id),
             )
 
-    def list_open_comments_for_revision(self, revision_id: int) -> list[dict]:
-        """이전 Round(revision_id)에서 아직 해결되지 않은 QA Comment 목록. 다음 Round 검증 시
-        '이전 지적사항'으로 QA 화면에 참고 표시한다 (자동 반영 판정은 하지 않음)."""
+    def get_manual_comment(self, comment_id: int) -> dict | None:
         with self.connect() as db:
+            row = db.execute(
+                "SELECT manual_comments.*, manual_changes.revision_id AS source_revision_id, "
+                "manual_changes.text AS change_text FROM manual_comments "
+                "JOIN manual_changes ON manual_changes.id=manual_comments.change_id "
+                "WHERE manual_comments.id=?",
+                (comment_id,),
+            ).fetchone()
+            return dict(row) if row else None
+
+    def list_open_comments_for_revision(self, revision_id: int) -> list[dict]:
+        """revision_id와 그 조상 Round에서 아직 해결되지 않은 QA Comment 목록."""
+        with self.connect() as db:
+            lineage_ids: list[int] = []
+            current_id: int | None = revision_id
+            while current_id:
+                lineage_ids.append(current_id)
+                row = db.execute("SELECT parent_revision_id FROM manual_revisions WHERE id=?", (current_id,)).fetchone()
+                current_id = row["parent_revision_id"] if row else None
+            if not lineage_ids:
+                return []
+            placeholders = ",".join("?" for _ in lineage_ids)
             rows = db.execute(
                 "SELECT manual_comments.*, manual_changes.text AS change_text FROM manual_comments "
                 "JOIN manual_changes ON manual_changes.id = manual_comments.change_id "
-                "WHERE manual_changes.revision_id=? AND manual_comments.status='OPEN' ORDER BY manual_comments.id",
-                (revision_id,),
+                f"WHERE manual_changes.revision_id IN ({placeholders}) "
+                "AND manual_comments.status IN ('OPEN','NOT_RESOLVED','REOPENED') ORDER BY manual_comments.id",
+                lineage_ids,
             ).fetchall()
             return [dict(row) for row in rows]
 

@@ -22,8 +22,24 @@
 {% if prior_open_comments %}
 <section>
   <h2>이전 Round 미해결 지적사항</h2>
-  <p class="hint">자동 반영 여부 판정은 하지 않습니다 — 이번 리비전에서 실제로 반영됐는지 QA가 직접 확인하세요.</p>
-  <ul>{% for c in prior_open_comments %}<li>{{ c.comment_text }} <span class="hint">(관련 변경: {{ c.change_text[:80] }})</span></li>{% endfor %}</ul>
+  <p class="hint">로컬 유사도 분석으로 관련 변경 후보를 찾은 참고 결과입니다. 문서 전체 의미를 판정한 결과가 아니므로 QA가 원문을 확인하고 최종 상태를 확정하세요.</p>
+  {% for c in prior_open_comments %}
+  <div style="border-bottom:1px solid #e2e8f0;padding:14px 0">
+    <p><strong>{{ c.comment_text }}</strong></p>
+    <p class="hint">이전 관련 변경: {{ c.change_text[:120] }}</p>
+    <p><span class="badge">{{ c.resolution_suggestion.label }}</span>
+      <span class="hint">유사도 {{ '%.0f'|format(c.resolution_suggestion.confidence * 100) }}%{% if c.resolution_suggestion.candidate_text %} · 현재 변경 후보: {{ c.resolution_suggestion.candidate_text[:120] }}{% endif %}</span>
+    </p>
+    <form method="post" action="/manual-review/revisions/{{ revision.id }}/comments/{{ c.id }}/status" style="display:flex;gap:8px;align-items:center">
+      <select name="status" required>
+        <option value="">QA 최종 상태...</option>
+        <option value="RESOLVED">해결됨</option><option value="NOT_RESOLVED">미해결</option>
+        <option value="REOPENED">재오픈</option><option value="IGNORED_BY_QA">QA 판단으로 제외</option>
+      </select>
+      <button type="submit">확정</button>
+    </form>
+  </div>
+  {% endfor %}
 </section>
 {% endif %}
 

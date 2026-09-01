@@ -81,3 +81,20 @@ def test_comment_status_update_removes_it_from_open_list(tmp_path):
     storage.update_manual_comment_status(comment_id, "RESOLVED", resolved_in_revision_id=revision_id)
 
     assert storage.list_open_comments_for_revision(revision_id) == []
+
+
+def test_unresolved_comment_carries_across_full_round_lineage(tmp_path):
+    storage = Storage(tmp_path / "app.db")
+    round1 = storage.add_manual_revision("VXvue", "Service Manual", "W1", tmp_path / "w1.docx")
+    change_id = storage.add_manual_change(round1, "insertion", "연구소", "", 0, "인증서 만료 조건", functional=True)
+    comment_id = storage.add_manual_comment(change_id, round_number=1, comment_text="만료 동작을 추가하세요.")
+    storage.update_manual_comment_status(comment_id, "NOT_RESOLVED")
+    round2 = storage.add_manual_revision(
+        "VXvue", "Service Manual", "W2", tmp_path / "w2.docx", round_number=1,
+        parent_revision_id=round1, baseline_revision_id=round1,
+    )
+
+    comments = storage.list_open_comments_for_revision(round2)
+
+    assert [comment["id"] for comment in comments] == [comment_id]
+    assert comments[0]["status"] == "NOT_RESOLVED"

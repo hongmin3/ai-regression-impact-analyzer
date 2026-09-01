@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.core.storage import Storage
 from app.modules.impact_analyzer import router as routes
+from app.modules.knowledge import router as knowledge_routes
 from app.modules.impact_analyzer.schemas import AnalysisResult, ChangeAnalysis
 
 
@@ -111,7 +112,7 @@ def test_active_documents_keeps_multiple_distinct_documents(tmp_path):
 
 def test_record_sync_log_endpoint(monkeypatch, tmp_path):
     persisted = Storage(tmp_path / "app.db")
-    monkeypatch.setattr(routes, "storage", persisted)
+    monkeypatch.setattr(knowledge_routes, "storage", persisted)
 
     response = TestClient(app).post("/knowledge/sync-log", data={"product": "VXvue", "kind": "specification", "source": "alm_crawler", "status": "SUCCESS", "detail": "3 files"})
 
@@ -122,7 +123,7 @@ def test_record_sync_log_endpoint(monkeypatch, tmp_path):
 
 def test_trigger_specification_sync_blocked_when_unavailable(monkeypatch, tmp_path):
     persisted = Storage(tmp_path / "app.db")
-    monkeypatch.setattr(routes, "storage", persisted)
+    monkeypatch.setattr(knowledge_routes, "storage", persisted)
     import app.modules.impact_analyzer.vxvue_spec_sync as vxvue_spec
     monkeypatch.setattr(vxvue_spec, "is_available_on_this_host", lambda *a, **k: False)
 
@@ -134,7 +135,7 @@ def test_trigger_specification_sync_blocked_when_unavailable(monkeypatch, tmp_pa
 def test_trigger_specification_sync_blocked_when_already_running(monkeypatch, tmp_path):
     persisted = Storage(tmp_path / "app.db")
     persisted.sync_start("VXvue", "specification", "alm_crawler")
-    monkeypatch.setattr(routes, "storage", persisted)
+    monkeypatch.setattr(knowledge_routes, "storage", persisted)
 
     response = TestClient(app).post("/knowledge/sync/specification")
 
@@ -151,7 +152,7 @@ def test_delete_document_removes_row_and_file(tmp_path, monkeypatch):
     file_path = tmp_path / "spec.pdf"
     file_path.write_bytes(b"%PDF-")
     doc_id = storage.add_document("specification", "VXvue", "1.0", "Rev.1", "spec.pdf", file_path)
-    monkeypatch.setattr(routes, "storage", storage)
+    monkeypatch.setattr(knowledge_routes, "storage", storage)
 
     response = TestClient(app).post(f"/knowledge/delete/{doc_id}", follow_redirects=False)
 
@@ -162,7 +163,7 @@ def test_delete_document_removes_row_and_file(tmp_path, monkeypatch):
 
 def test_delete_missing_document_returns_404(monkeypatch, tmp_path):
     storage = Storage(tmp_path / "app.db")
-    monkeypatch.setattr(routes, "storage", storage)
+    monkeypatch.setattr(knowledge_routes, "storage", storage)
 
     response = TestClient(app).post("/knowledge/delete/999", follow_redirects=False)
 

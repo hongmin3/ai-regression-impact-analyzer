@@ -25,8 +25,9 @@ app/
 ├─ core/       공용 인프라 (설정, 저장소, Gemini 클라이언트, 프롬프트 로더, 스케줄러)
 ├─ prompts/    AI 프롬프트 YAML (버전 관리)
 ├─ modules/
-│   ├─ impact_analyzer/   이 문서가 설명하는 Regression 영향도 분석 기능 (URL: /, /analyses, /knowledge ...)
-│   └─ manual_review/     VXvue 매뉴얼 개정 검증 기능 (URL: /manual-review) — 아래 참고
+│   ├─ impact_analyzer/   Regression 영향도 분석 기능 (URL: /impact-analyzer, /analyses ...)
+│   ├─ manual_review/     매뉴얼 개정 검증 기능 (URL: /manual-review)
+│   └─ knowledge/         두 기능이 공유하는 사양서·TC 관리 (URL: /knowledge)
 └─ web/        모듈별 라우터를 한 서버에 취합하는 얇은 공용 계층 + 공용 template/static
 ```
 
@@ -38,8 +39,8 @@ app/
 동기화하는 등록 사양서)를 정확히 반영했는지 AI로 1차 검토합니다: Track Changes 구조화 추출 →
 단순 변경(NON_FUNCTIONAL_CHANGE) 필터링 → SRS 근거 로컬 BM25 검색 → 2단계 AI 판정(1차
 PASS면 2차 상세 호출 생략) → 결과 화면(QA Override 가능) → Word Comment 삽입 DOCX 다운로드.
-Round 계보(이전 리비전과의 부모-자식 관계)를 추적하지만, 이전 Round 지적사항의 자동 반영
-판정은 아직 하지 않습니다(QA가 직접 확인). 남은 작업은 [`NEXT_STEPS.md`](NEXT_STEPS.md), 결정이
+Round 계보를 추적하며 이전 지적사항은 로컬 유사도 기반 참고 판정을 제공하고 QA가 최종 상태를
+확정합니다. 남은 작업은 [`NEXT_STEPS.md`](NEXT_STEPS.md), 결정이
 필요한 항목은 [`OPEN_QUESTIONS.md`](OPEN_QUESTIONS.md)를 참고하세요.
 
 ## 주요 기능

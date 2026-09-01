@@ -10,6 +10,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 from app.modules.impact_analyzer.router import router as impact_analyzer_router
+from app.modules.knowledge.router import router as knowledge_router
 from app.modules.manual_review.router import router as manual_review_router
 
 
@@ -24,6 +25,7 @@ def hub(request: Request):
 def build_router() -> APIRouter:
     api = APIRouter()
     api.add_api_route("/", hub, methods=["GET"], response_class=HTMLResponse, name="hub")
+    api.include_router(knowledge_router)
     api.include_router(impact_analyzer_router)
     api.include_router(manual_review_router, prefix="/manual-review")
     return api

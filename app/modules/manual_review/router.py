@@ -13,6 +13,7 @@ from fastapi.templating import Jinja2Templates
 from app.core.config import get_settings
 from app.core.storage import Storage
 from app.modules.manual_review.comment_writer import insert_comments, output_filename
+from app.modules.manual_review.comment_resolution import suggest_prior_comments
 from app.modules.manual_review.reviewer import MANUAL_REVIEW_STAGES, ManualRevisionReviewer
 from app.modules.manual_review.schemas import JUDGMENT_LABELS_KO, ManualJudgment
 
@@ -24,14 +25,26 @@ templates.env.filters["judgment_ko"] = lambda value: JUDGMENT_LABELS_KO.get(valu
 storage = Storage()
 
 
+def _srs_status_by_product(products: list[str]) -> dict[str, dict]:
+    return {
+        product: {
+            "documents": storage.active_documents("specification", product),
+            "latest_sync": storage.latest_sync(product, "specification"),
+        }
+        for product in products
+    }
+
+
 @router.get("", response_class=HTMLResponse)
 def home(request: Request):
+    products = storage.list_products()
     return templates.TemplateResponse(
         request,
         "index.html",
         {
-            "products": storage.list_products(),
+            "products": products,
             "revisions": storage.list_manual_revisions(),
+            "srs_status_by_product": _srs_status_by_product(products),
         },
     )
 
@@ -144,6 +157,7 @@ def view_revision(request: Request, revision_id: int):
         raise HTTPException(404, "리비전을 찾을 수 없습니다.")
     changes = storage.list_manual_changes(revision_id)
     prior_open_comments = storage.list_open_comments_for_revision(revision["parent_revision_id"]) if revision["parent_revision_id"] else []
+    prior_open_comments = suggest_prior_comments(prior_open_comments, changes)
     release_findings = storage.list_release_findings(revision_id)
     return templates.TemplateResponse(
         request,
@@ -175,6 +189,23 @@ def set_qa_decision(revision_id: int, change_id: int, qa_decision: str = Form(..
     if not change or change["revision_id"] != revision_id:
         raise HTTPException(404, "변경 항목을 찾을 수 없습니다.")
     storage.update_manual_change_qa_decision(change_id, qa_decision, qa_note)
+    return RedirectResponse(f"/manual-review/revisions/{revision_id}/view", status_code=303)
+
+
+@router.post("/revisions/{revision_id}/comments/{comment_id}/status")
+def set_comment_status(revision_id: int, comment_id: int, status: str = Form(...)):
+    revision = storage.get_manual_revision(revision_id)
+    comment = storage.get_manual_comment(comment_id)
+    allowed = {"RESOLVED", "NOT_RESOLVED", "REOPENED", "IGNORED_BY_QA"}
+    carried_ids = {
+        item["id"] for item in storage.list_open_comments_for_revision(revision["parent_revision_id"])
+    } if revision and revision["parent_revision_id"] else set()
+    if not revision or not comment or comment_id not in carried_ids:
+        raise HTTPException(404, "이전 Round Comment를 찾을 수 없습니다.")
+    if status not in allowed:
+        raise HTTPException(400, "지원하지 않는 Comment 상태입니다.")
+    resolved_in = revision_id if status == "RESOLVED" else None
+    storage.update_manual_comment_status(comment_id, status, resolved_in_revision_id=resolved_in)
     return RedirectResponse(f"/manual-review/revisions/{revision_id}/view", status_code=303)
 
 

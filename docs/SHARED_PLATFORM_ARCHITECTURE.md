@@ -17,6 +17,7 @@ SQLite 파일은 당분간 하나를 공유하되 **테이블 소유권은 모�
 - `app/web/`: 허브, 공용 HTML 골격·정적 파일, 모듈 라우터 취합
 - `app/modules/impact_analyzer/`: Regression 영향 분석
 - `app/modules/manual_review/`: 매뉴얼 개정 검증
+- `app/modules/knowledge/`: 두 기능이 함께 사용하는 제품 사양서·TC 등록·삭제·동기화
 - `app/prompts/`: 버전 관리되는 기능별 AI prompt
 
 ## DB 확장 원칙

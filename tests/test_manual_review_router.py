@@ -50,9 +50,22 @@ def test_navigation_is_manual_review_specific():
     assert response.status_code == 200
     assert 'href="/"' in response.text
     assert 'href="/manual-review/guide"' in response.text
+    assert 'href="/knowledge"' in response.text
     assert 'href="/impact-analyzer"' not in response.text
     assert 'href="/analyses"' not in response.text
-    assert 'href="/knowledge"' not in response.text
+
+
+def test_home_shows_registered_srs_sources(monkeypatch, tmp_path):
+    storage = Storage(tmp_path / "app.db")
+    storage.ensure_product("VXvue")
+    storage.add_document("specification", "VXvue", "1.2.0", "", "VXvue SRS.pdf", tmp_path / "srs.pdf")
+    monkeypatch.setattr(manual_review_router, "storage", storage)
+
+    response = TestClient(app).get("/manual-review")
+
+    assert response.status_code == 200
+    assert "현재 검증 근거 SRS" in response.text
+    assert "VXvue SRS.pdf" in response.text
 
 
 def test_upload_rejects_non_docx(monkeypatch, tmp_path):
@@ -185,3 +198,25 @@ def test_qa_decision_for_wrong_revision_returns_404(monkeypatch, tmp_path):
     )
 
     assert response.status_code == 404
+
+
+def test_qa_can_confirm_prior_comment_as_resolved(monkeypatch, tmp_path):
+    storage = Storage(tmp_path / "app.db")
+    monkeypatch.setattr(manual_review_router, "storage", storage)
+    round1 = storage.add_manual_revision("VXvue", "Service Manual", "W1", tmp_path / "w1.docx")
+    change_id = storage.add_manual_change(round1, "insertion", "연구소", "", 0, "조건 설명", functional=True)
+    comment_id = storage.add_manual_comment(change_id, round_number=1, comment_text="조건을 보강하세요.")
+    round2 = storage.add_manual_revision(
+        "VXvue", "Service Manual", "W2", tmp_path / "w2.docx", round_number=1,
+        parent_revision_id=round1, baseline_revision_id=round1,
+    )
+
+    response = TestClient(app).post(
+        f"/manual-review/revisions/{round2}/comments/{comment_id}/status",
+        data={"status": "RESOLVED"}, follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    comment = storage.get_manual_comment(comment_id)
+    assert comment["status"] == "RESOLVED"
+    assert comment["resolved_in_revision_id"] == round2

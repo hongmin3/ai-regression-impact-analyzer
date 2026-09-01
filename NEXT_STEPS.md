@@ -9,6 +9,13 @@
 로컬/서버 `pytest -q` 132건 통과 후 실서버 재배포·재기동과 주요 6개 페이지 200 응답까지
 검증했다.
 
+**4차 (공용 Knowledge + 이전 Comment 반영 참고 판정)**: 사양서·TC 관리 기능을
+`app/modules/knowledge/` 독립 모듈로 분리해 회귀 분석과 매뉴얼 검증이 함께 사용하도록
+재구현했다. 매뉴얼 화면에서 제품별 SRS 파일명·등록 시각·최근 동기화 상태를 확인하고 공용
+Knowledge에서 추가·삭제할 수 있다. 이전 Round의 미해결 Comment는 전체 조상 계보에서
+이어받고, 현재 Track Changes와 로컬 유사도를 비교해 `반영 의심/미반영 의심/판단 불가`를
+참고 표시한다. QA가 `해결/미해결/재오픈/제외`를 확정하기 전에는 상태를 자동 변경하지 않는다.
+
 **1차 (스켈레톤 → 동작하는 파이프라인)**: 코드 구조 리팩터링(`app/core/`·`app/prompts/`·
 `app/modules/{impact_analyzer,manual_review}/`·`app/web/`), DOCX Track Changes 파서,
 NON_FUNCTIONAL_CHANGE 필터, SRS 근거 로컬 검색(impact_analyzer가 이미 관리하는 등록 사양서
@@ -43,23 +50,19 @@ NON_FUNCTIONAL_CHANGE 필터, SRS 근거 로컬 검색(impact_analyzer가 이미
 
 ## 아직 미착수 (우선순위 순)
 
-1. **이전 Round 미해결 Comment 자동 반영 판정** — 여전히 화면 참고 표시만 하고 자동 판정은
-   하지 않음(오탐 위험). 이번 세션에서 확인한 BM25의 "말뭉치가 작으면 관련 있어도 점수가
-   0이 되는" 특성(`release_scope.py::match_release_changes` docstring 참고)을 감안하면,
-   자동 판정을 붙이더라도 반드시 신뢰도 낮은 "참고용"으로 설계해야 한다.
-2. **PDF 매뉴얼 리비전 diff** (스펙 §9) — 지금은 DOCX Track Changes만 지원.
-3. **Release Note "Description for Each Version" 절의 상세 설명 활용** — 지금은 이 절을
+1. **PDF 매뉴얼 리비전 diff** (스펙 §9) — 지금은 DOCX Track Changes만 지원.
+2. **Release Note "Description for Each Version" 절의 상세 설명 활용** — 지금은 이 절을
    중복 방지를 위해 건너뛰지만, Before/Now 형식의 상세 설명은 AI 판정 시 추가 근거로 쓸 수
    있다. 파싱이 더 복잡해(표 형태 아님, 산문형 Before/Now 쌍) 이번 세션에서는 보류.
-4. **설계검토보고서 "변경 결과" 표 자체 활용** — PyMuPDF가 표를 컬럼 구분 없이 풀어버려 이번
+3. **설계검토보고서 "변경 결과" 표 자체 활용** — PyMuPDF가 표를 컬럼 구분 없이 풀어버려 이번
    세션에서는 "문제 분석" 절의 제목으로 대체했다(실제 검증 결과 제목이 동일해 대체 가능).
    "결과: Pass/Fail" 컬럼까지 활용하면(예: Fail 항목만 별도 강조) 더 정교해질 수 있음.
-5. **Cross-Manual 영향분석** (스펙 §11) — 한 SRS/Release 변경이 여러 Manual에 영향을 주는지
+4. **Cross-Manual 영향분석** (스펙 §11) — 한 SRS/Release 변경이 여러 Manual에 영향을 주는지
    추적. 지금 Reverse 검증은 "이 Manual 안에서" 만 확인하고 다른 Manual은 보지 않는다.
-6. **이미지 변경 Human Review Gate** (스펙 §8-1) — 아직 미착수. 실제 이미지 포함 매뉴얼
+5. **이미지 변경 Human Review Gate** (스펙 §8-1) — 아직 미착수. 실제 이미지 포함 매뉴얼
    예시로 검증 필요.
-7. **비용/캐시 대시보드 UI** — 토큰 사용량은 이미 기록되지만 화면 노출 UI는 없음.
-8. **실제 예시 파일 기반 E2E pytest 테스트 추가** — 이번 세션에서 수동으로 스크립트를 돌려
+6. **비용/캐시 대시보드 UI** — 토큰 사용량은 이미 기록되지만 화면 노출 UI는 없음.
+7. **실제 예시 파일 기반 E2E pytest 테스트 추가** — 이번 세션에서 수동으로 스크립트를 돌려
    검증은 했지만(실제 회사 문서라 테스트 fixture로 커밋하지 않음), 이 실제 파일들을 pytest
    fixture로 안전하게 참조할 방법(예: 사내망 접근 가능한 CI에서만 skip 없이 실행)을 정하면
    정식 E2E 테스트로 승격 가능.
