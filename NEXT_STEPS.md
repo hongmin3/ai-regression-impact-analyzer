@@ -5,6 +5,14 @@
 > 폴더를 작업 디렉터리로 물고 있어 세션 내부에서는 구조적으로 rename이 불가능하다(2026-09-01
 > 재시도로 재확인) — 세션 창을 모두 닫은 뒤 사용자가 직접 실행해야 한다.
 
+## 2026-09-01 실제 파일 기반 E2E pytest 편입 (OPEN_QUESTIONS.md #5 완료)
+
+`tests/test_manual_review_real_files_e2e.py` 신규 추가 — 상세 내용은 `OPEN_QUESTIONS.md` #5
+참고. 요약: 고정 경로 참조 + skip 방식으로 결정, 경로 자체는 `.deploy.env`와 동일하게
+`real_fixtures.local.env`(Git 제외)로 분리해 공개 repo에 사내망 IP/부서 폴더 체계를
+노출하지 않는다. `pytest -q` **175 passed** (이 PC 기준 약 80초, 경로 미설정 환경에서는
+skip되어 기존과 동일하게 빠름).
+
 ## 2026-09-01 비용/캐시 대시보드 UI 구현
 
 "아직 미착수" 3번 항목(비용/캐시 대시보드 UI)을 구현했다.
@@ -160,10 +168,12 @@ NON_FUNCTIONAL_CHANGE 필터, SRS 근거 로컬 검색(impact_analyzer가 이미
 3. ~~**비용/캐시 대시보드 UI**~~ → 완료(위 참고). 매뉴얼 개정 검증의 캐시 Hit 기록은 아직
    없음(위 "알려진 v1 범위" 참고) — 필요 시 `manual_review/ai_client.py`에도
    `ai_audit`/`cache_hit` 기록 추가 검토.
-4. **실제 예시 파일 기반 E2E pytest 테스트 추가** — 이번 세션에서 수동으로 스크립트를 돌려
-   검증은 했지만(실제 회사 문서라 테스트 fixture로 커밋하지 않음), 이 실제 파일들을 pytest
-   fixture로 안전하게 참조할 방법(예: 사내망 접근 가능한 CI에서만 skip 없이 실행)을 정하면
-   정식 E2E 테스트로 승격 가능.
+4. ~~**실제 예시 파일 기반 E2E pytest 테스트 추가**~~ → 완료. `tests/test_manual_review_real_files_e2e.py`,
+   경로는 Git 제외 대상 `real_fixtures.local.env`(`.example` 참고)에서 읽는다. 상세는
+   `OPEN_QUESTIONS.md` #5 참고. **주의**: 이 PC(`real_fixtures.local.env` 설정됨)에서는
+   `pytest -q` 전체 실행 시간이 약 10초 → 약 80초로 늘어난다(대용량 실제 PDF/DOCX 파싱 +
+   BM25 후보 검색을 779건 functional change에 대해 반복 수행하기 때문). 경로가 없는 다른
+   환경(원격 서버, CI)에서는 즉시 skip되어 영향 없음.
 ## 알려진 설계상 단순화 (버그 아님, 의도적 v1 범위)
 
 - Word Comment는 항상 "변경이 속한 문단 전체"에 앵커링된다 — 정확한 run 범위는 추적 안 함.

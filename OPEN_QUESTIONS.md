@@ -32,18 +32,20 @@
 해당 제품에 등록된 가장 최근 문서를 자동으로 사용합니다(`router.py::_register_or_reuse_reference_doc`).
 매주 자동 확보(Windows 작업 스케줄러 연동)까지는 아직 하지 않았습니다 — 필요하시면 말씀해주세요.
 
-### 5. E2E 테스트용 실제 예시 파일 — 위치 확보 완료, pytest 편입은 미결정
+### 5. E2E 테스트용 실제 예시 파일 — 완료 (2026-09-01, 고정 경로 참조 + skip 방식으로 편입)
 
-사용자가 사내 문서 저장소의 실제 파일 위치를 제공해주셔서(대화 중 공유, 이 문서에는 경로를
-남기지 않음) VXvue 1.1.0의 실제 Round 1 매뉴얼(Track Changes 포함)·Release Note·설계검토
-보고서·등록 사양서(SRS)로 파이프라인 전체(`ManualRevisionReviewer.run()`)를 실제로 실행해
-검증했습니다.
+**결정**: 실제 파일을 리포지토리 밖 고정 경로에 두고 테스트에서 그 경로를 참조하되(옵션 1),
+경로 자체(사내망 서버 IP·부서 폴더 체계)도 `.deploy.env`와 동일하게 Git 제외 대상인
+`real_fixtures.local.env`로 분리했다(공개 GitHub repo에 사내 폴더 구조를 노출하지 않기
+위함, 사용자 확인 완료). 값 없는 예제는 `real_fixtures.local.env.example`로 공개.
 
-이 검증 과정에서 `release_scope.py`의 실제 버그 여러 건을 발견해 수정했습니다(자세한 내용은
-`NEXT_STEPS.md`). 다만 이 파일들은 **사내 기밀 문서라 리포지토리에 커밋하거나 pytest fixture로
-포함하지 않았습니다** — 이번 검증은 임시 스크립트로 수동 실행 후 삭제하는 방식으로 진행했습니다.
+**구현**: `tests/test_manual_review_real_files_e2e.py`. `real_fixtures.local.env`가 없거나
+경로에 접근할 수 없는 환경(GitHub Actions 등)에서는 `pytest.mark.skipif`로 자동 skip.
+이 PC에서는 실제 VXvue 1.1.0 Round 1 Service Manual(.docx, Track Changes 799건)·Release
+Note(67건)·설계검토보고서(40건)·SRS 사양서 6개로 `ManualRevisionReviewer.run()` 전체를
+mock AI로 실행해 통과 확인(약 70초 소요 — `pytest -q` 전체 실행 시간에 그대로 반영됨을
+인지할 것).
 
-남은 질문: 이 실제 파일들을 정식 pytest E2E 테스트로 편입하고 싶으신가요? 편입한다면
-1) 파일을 리포지토리 밖 고정 경로에 두고 테스트에서 그 경로를 참조(경로가 없는 환경에서는
-skip), 2) 아예 별도의 비공개 테스트 저장소를 두는 방법 중 어느 쪽을 원하시는지 확인이
-필요합니다. 결정 전까지는 지금처럼 합성(sanitized) fixture 기반 유닛 테스트만 pytest에 남깁니다.
+이 파일들은 여전히 **리포지토리에 커밋하지 않는다** — 테스트는 사용자 PC의 로컬/사내망
+경로만 참조한다. 다른 팀원 PC나 CI 환경에서는 `real_fixtures.local.env.example`을 복사해
+값을 채우지 않는 한 이 테스트가 자동으로 skip되며, 이는 의도된 동작이다.

@@ -157,6 +157,12 @@ Set-Location $newRoot
   설계검토보고서의 변경 결과 절에서 Pass/Fail을 문제 분석 제목과 연결하며 Fail 항목은 서버가
   `DESIGN_REVIEW_FAILED`와 Human Review 필요 상태를 강제. 최종 기능 사실 판단은 계속 SRS를
   최우선으로 함
+- **2026-09-01 9차 (실제 파일 기반 E2E pytest 편입)**: `tests/test_manual_review_real_files_e2e.py`.
+  OPEN_QUESTIONS.md #5를 "고정 경로 참조 + skip" 방식으로 결정. 사내망 서버 IP·부서 폴더
+  체계를 공개 repo에 노출하지 않도록 `.deploy.env`와 동일하게 `real_fixtures.local.env`(Git
+  제외, `.example`만 공개)로 경로를 분리. 이 PC에서는 실제 Round 1 매뉴얼·Release Note·
+  설계검토보고서·SRS 6개로 전체 파이프라인이 mock AI로 통과(`pytest -q` 175 passed, 약
+  80초 — 대용량 실제 문서 파싱 때문에 이 PC에서만 느려짐, 경로 없는 환경은 즉시 skip).
 - **2026-09-01 8차 (비용/캐시 대시보드 UI)**: `/cost-dashboard` 신규 페이지. `analyses`
   테이블에 `module` 컬럼을 추가해 Regression 영향 분석/매뉴얼 개정 검증 토큰 사용량을 구분
   집계하고(`Storage.cost_dashboard_stats`), 일별 토큰 사용량·기능별 사용량·캐시 Hit율·최근
@@ -261,6 +267,10 @@ ss -ltnp 'sport = :12000'
 - `.env`: 기존 방식. 계속 동작하며 우선순위는 가장 낮다. Git 제외
 - 값 우선순위: OS 환경변수 > `secrets.json` > `secrets.txt` > `.env` > 기본값
 - `.deploy.env`: SSH Host/User/Target만 저장, Git 제외
+- `real_fixtures.local.env`: `tests/test_manual_review_real_files_e2e.py` 전용, 사내망 실제
+  VXvue 1.1.0 예시 파일의 기준 폴더 경로 2개만 저장. Git 제외(`.example`만 공개). 비밀정보는
+  아니지만 사내 서버 IP·부서 폴더 체계를 공개 repo에 노출하지 않기 위해 `.deploy.env`와
+  동일하게 취급
 - `secrets.example.txt`, `secrets.example.json`, `.env.example`, `.deploy.env.example`: 값 없는 공개 예제
 - `SERVER_SUDO_PASSWORD`: `secrets.txt`에 저장하는 서버(`10.13.0.222`, 사내망 전용) `sudo` 비밀번호. 2026-08-31 사용자 결정으로 도입. 앱은 이 키를 읽지 않으며(`secrets_loader.py` 미인식 키), 서버 운영 자동화(SSH/`sudo -S`)에서만 로컬로 사용한다. 값은 파일 → stdin으로만 전달하고 화면/로그에 출력하지 않는다.
 

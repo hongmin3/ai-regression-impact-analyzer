@@ -11,6 +11,8 @@ node_modules/
 .env.*
 !.env.example
 .deploy.env
+real_fixtures.local.env
+!real_fixtures.local.env.example
 data/uploads/
 data/specifications/
 data/testcases/
