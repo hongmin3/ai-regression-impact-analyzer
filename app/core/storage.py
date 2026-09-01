@@ -218,9 +218,33 @@ class Storage:
             value.pop("result_json")
         return value
 
-    def list_analyses(self, limit: int = 100) -> list[dict]:
+    def list_analyses(
+        self, limit: int = 100, offset: int = 0,
+        status: str | None = None, product: str | None = None, search: str | None = None,
+    ) -> tuple[list[dict], int]:
+        """분석 이력을 최신순으로 페이지네이션해 반환한다. 반환값은 (이 페이지의 행,
+        필터 적용 후 전체 건수)다. `product`는 등록 당시 `request_json`에 저장된 값을
+        `json_extract`로 대조한다(별도 컬럼 없음). `search`는 작업 ID와 변경 문서명에서
+        부분일치한다."""
+        conditions: list[str] = []
+        params: list[str] = []
+        if status:
+            conditions.append("status=?")
+            params.append(status)
+        if product:
+            conditions.append("json_extract(request_json, '$.product')=?")
+            params.append(product)
+        if search:
+            conditions.append("(id LIKE ? OR json_extract(result_json, '$.change_file') LIKE ?)")
+            like = f"%{search}%"
+            params.extend([like, like])
+        where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
         with self.connect() as db:
-            rows = db.execute("SELECT * FROM analyses ORDER BY created_at DESC LIMIT ?", (limit,)).fetchall()
+            total = db.execute(f"SELECT COUNT(*) FROM analyses {where}", params).fetchone()[0]
+            rows = db.execute(
+                f"SELECT * FROM analyses {where} ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                (*params, limit, offset),
+            ).fetchall()
         values = []
         for row in rows:
             value = dict(row)
@@ -229,7 +253,7 @@ class Storage:
             value["result"] = json.loads(raw) if raw else None
             value["request"] = json.loads(raw_request) if raw_request else None
             values.append(value)
-        return values
+        return values, total
 
     def tokens_used_since(self, since_iso: str) -> int:
         """지정 시각 이후 완료된 분석의 total_tokens 합계. 한도 체크용이라 대략치면 충분하다."""

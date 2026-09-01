@@ -49,9 +49,16 @@ def legacy_guide_redirect():
     return RedirectResponse("/impact-analyzer/guide", status_code=308)
 
 
+ANALYSIS_HISTORY_PAGE_SIZE = 25
+
+
 @router.get("/analyses", response_class=HTMLResponse)
-def analysis_history(request: Request):
-    analyses = storage.list_analyses()
+def analysis_history(request: Request, status: str = "", product: str = "", q: str = "", page: int = 1):
+    page = max(page, 1)
+    analyses, total = storage.list_analyses(
+        limit=ANALYSIS_HISTORY_PAGE_SIZE, offset=(page - 1) * ANALYSIS_HISTORY_PAGE_SIZE,
+        status=status or None, product=product or None, search=q or None,
+    )
     for item in analyses:
         result = item.get("result") or {}
         decisions = result.get("decisions") or []
@@ -60,7 +67,16 @@ def analysis_history(request: Request):
             impact: sum(decision.get("impact") == impact for decision in decisions)
             for impact in ("HIGH", "MEDIUM", "LOW", "NONE")
         }
-    return templates.TemplateResponse(request, "analyses.html", {"analyses": analyses})
+    total_pages = max((total + ANALYSIS_HISTORY_PAGE_SIZE - 1) // ANALYSIS_HISTORY_PAGE_SIZE, 1)
+    return templates.TemplateResponse(
+        request,
+        "analyses.html",
+        {
+            "analyses": analyses, "total": total, "page": page, "total_pages": total_pages,
+            "filters": {"status": status, "product": product, "q": q},
+            "products": storage.list_products(),
+        },
+    )
 
 
 @router.get("/analyses/{job_id}/view", response_class=HTMLResponse)

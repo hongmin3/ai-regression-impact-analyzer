@@ -7,6 +7,18 @@
 > - Release Note/설계검토보고서 주간 자동 확보(`OPEN_QUESTIONS.md` #4) — 현재 수동
 >   업로드+자동 재사용으로 충분하다고 판단해 보류.
 
+## 2026-09-01 분석 이력 검색·필터·페이지네이션 (`/analyses`)
+
+- `Storage.list_analyses`: `status`/`product`/`search`(ID·변경 문서명 부분일치) 필터와
+  `limit`/`offset` 페이지네이션 추가, 반환값을 `(행 목록, 필터 적용 후 전체 건수)`로 변경
+  (기존 유일한 호출부인 `impact_analyzer/router.py`도 함께 갱신). `product` 필터는 전용
+  컬럼이 없어 `request_json`을 `json_extract`로 대조한다(SQLite JSON1, 이 환경에서 동작 확인).
+- `/analyses` 라우트에 `status`/`product`/`q`/`page` 쿼리 파라미터 추가, 페이지 크기 25.
+  `analyses.html`에 검색창·상태/제품 드롭다운·이전/다음 페이지 링크 추가(필터 값은 페이지
+  이동 시에도 유지).
+- 테스트 7건 추가(`test_persistent_analyses.py`) — `pytest -q` **183 passed**(real-file E2E
+  제외 기준). 실제 로컬 서버 데이터(분석 9건, DONE 5건)로 필터·검색·빈 결과 모두 확인.
+
 ## 2026-09-01 매뉴얼 개정 검증 캐시 Hit 기록 추가 (비용 대시보드 v1 공백 해소)
 
 비용 대시보드에서 드러난 공백 — `impact_analyzer`만 `ai_audit.cache_hit`을 기록해 매뉴얼 개정

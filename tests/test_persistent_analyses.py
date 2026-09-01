@@ -228,6 +228,96 @@ def test_analysis_history_renders_persisted_results(monkeypatch, tmp_path):
     assert f'/analyses/history-job/view' in response.text
 
 
+def test_list_analyses_filters_by_status(tmp_path):
+    storage = Storage(tmp_path / "app.db")
+    storage.create_analysis("done-job")
+    storage.update_analysis("done-job", "DONE", result=_result("done-job"))
+    storage.create_analysis("failed-job", status="FAILED")
+
+    rows, total = storage.list_analyses(status="DONE")
+
+    assert total == 1
+    assert [row["id"] for row in rows] == ["done-job"]
+
+
+def test_list_analyses_filters_by_product(tmp_path):
+    storage = Storage(tmp_path / "app.db")
+    storage.create_analysis("vxvue-job", request={"product": "VXvue"})
+    storage.update_analysis("vxvue-job", "DONE", result=_result("vxvue-job"))
+    storage.create_analysis("other-job", request={"product": "Bellalun Viewer"})
+    storage.update_analysis("other-job", "DONE", result=_result("other-job"))
+
+    rows, total = storage.list_analyses(product="VXvue")
+
+    assert total == 1
+    assert rows[0]["id"] == "vxvue-job"
+
+
+def test_list_analyses_search_matches_id_or_change_file(tmp_path):
+    storage = Storage(tmp_path / "app.db")
+    matching = _result("job-a")
+    matching["change_file"] = "release-note.pdf"
+    storage.create_analysis("job-a")
+    storage.update_analysis("job-a", "DONE", result=matching)
+    other = _result("job-b")
+    other["change_file"] = "unrelated.pdf"
+    storage.create_analysis("job-b")
+    storage.update_analysis("job-b", "DONE", result=other)
+
+    by_id, _ = storage.list_analyses(search="job-a")
+    by_file, _ = storage.list_analyses(search="release-note")
+
+    assert [row["id"] for row in by_id] == ["job-a"]
+    assert [row["id"] for row in by_file] == ["job-a"]
+
+
+def test_list_analyses_paginates_with_limit_and_offset(tmp_path):
+    storage = Storage(tmp_path / "app.db")
+    for index in range(5):
+        job_id = f"job-{index}"
+        storage.create_analysis(job_id)
+        storage.update_analysis(job_id, "DONE", result=_result(job_id))
+
+    first_page, total = storage.list_analyses(limit=2, offset=0)
+    second_page, _ = storage.list_analyses(limit=2, offset=2)
+
+    assert total == 5
+    assert len(first_page) == 2
+    assert len(second_page) == 2
+    assert {row["id"] for row in first_page}.isdisjoint({row["id"] for row in second_page})
+
+
+def test_analysis_history_status_filter_excludes_other_statuses(monkeypatch, tmp_path):
+    persisted = Storage(tmp_path / "app.db")
+    persisted.create_analysis("done-job")
+    persisted.update_analysis("done-job", "DONE", result=_result("done-job"))
+    persisted.create_analysis("failed-job", status="FAILED")
+    monkeypatch.setattr(routes, "storage", persisted)
+
+    response = TestClient(app).get("/analyses?status=FAILED")
+
+    assert response.status_code == 200
+    assert "failed-job" in response.text
+    assert "done-job" not in response.text
+
+
+def test_analysis_history_pagination_shows_second_page(monkeypatch, tmp_path):
+    persisted = Storage(tmp_path / "app.db")
+    for index in range(30):
+        job_id = f"job-{index:02d}"
+        persisted.create_analysis(job_id)
+        persisted.update_analysis(job_id, "DONE", result=_result(job_id))
+    monkeypatch.setattr(routes, "storage", persisted)
+    client = TestClient(app)
+
+    first_page = client.get("/analyses")
+    second_page = client.get("/analyses?page=2")
+
+    assert "1 / 2 페이지" in first_page.text
+    assert "2 / 2 페이지" in second_page.text
+    assert first_page.text != second_page.text
+
+
 def test_analysis_detail_renders_documents_and_exact_prompt_audit(monkeypatch, tmp_path):
     persisted = Storage(tmp_path / "app.db")
     persisted.create_analysis(
