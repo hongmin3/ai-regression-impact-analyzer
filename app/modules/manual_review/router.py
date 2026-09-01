@@ -158,7 +158,7 @@ def start_revision(
     release_note_path = _register_or_reuse_reference_doc("release_note", product, revision_label, release_note_file)
     design_review_path = _register_or_reuse_reference_doc("design_review", product, revision_label, design_review_file)
     job_id = uuid.uuid4().hex[:12]
-    storage.create_analysis(job_id, stage_total=len(MANUAL_REVIEW_STAGES))
+    storage.create_analysis(job_id, stage_total=len(MANUAL_REVIEW_STAGES), module="manual_review")
     background_tasks.add_task(_run_job, job_id, path, product, manual_name, revision_label, parent_id, release_note_path, design_review_path, target_version)
     return {"job_id": job_id, "status_url": f"/manual-review/jobs/{job_id}"}
 

@@ -157,6 +157,12 @@ Set-Location $newRoot
   설계검토보고서의 변경 결과 절에서 Pass/Fail을 문제 분석 제목과 연결하며 Fail 항목은 서버가
   `DESIGN_REVIEW_FAILED`와 Human Review 필요 상태를 강제. 최종 기능 사실 판단은 계속 SRS를
   최우선으로 함
+- **2026-09-01 8차 (비용/캐시 대시보드 UI)**: `/cost-dashboard` 신규 페이지. `analyses`
+  테이블에 `module` 컬럼을 추가해 Regression 영향 분석/매뉴얼 개정 검증 토큰 사용량을 구분
+  집계하고(`Storage.cost_dashboard_stats`), 일별 토큰 사용량·기능별 사용량·캐시 Hit율·최근
+  분석 50건을 화면에 표시. 캐시 Hit 기록은 아직 Regression 영향 분석에만 있어 매뉴얼 개정
+  검증은 통계에서 제외됨을 화면에 명시(알려진 v1 범위). 테스트 7건 추가, `pytest -q`
+  **174 passed**. 상세는 `NEXT_STEPS.md` 참고. 아직 서버 미배포.
 - **2026-09-01 7차 (Cross-Manual 영향분석 + 이미지 변경 Human Review Gate, 프로젝트 명칭
   변경)**:
   - Cross-Manual 영향분석(스펙 §11): 같은 제품의 다른 매뉴얼 최신 리비전(없으면 Knowledge
@@ -192,9 +198,9 @@ Set-Location $newRoot
 13. 2026-09-01 코드 구조 리팩터링 반영 서버 재배포 — 아직 미착수 (로컬 변경만 완료, 동작 100% 동일하므로 급하지 않지만 다음 배포 시 포함 필요)
 14. "매뉴얼 개정 검증"(`app/modules/manual_review/`) — 업로드/AI 2단계 판정/결과 화면/QA
     Override/Word Comment 삽입/PDF diff/Release Note·설계검토보고서 파서/Cross-Manual
-    영향분석/이미지 변경 Human Review Gate까지 전부 구현·테스트 완료(위 4장 참고). 남은 것은
-    실제 예시 파일 기반 E2E 승격, 비용/캐시 대시보드 UI — `NEXT_STEPS.md`, 결정 필요 항목은
-    `OPEN_QUESTIONS.md` 참고
+    영향분석/이미지 변경 Human Review Gate까지 전부 구현·테스트 완료(위 4장 참고).
+15. **비용/캐시 대시보드 UI** (`/cost-dashboard`) → **완료** (위 8차 참고). 남은 것은 실제
+    예시 파일 기반 E2E 승격 — `NEXT_STEPS.md`, 결정 필요 항목은 `OPEN_QUESTIONS.md` 참고
 
 ## 6. systemd 승인 대기안
 

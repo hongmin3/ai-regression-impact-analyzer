@@ -107,7 +107,7 @@ def start_analysis(background_tasks: BackgroundTasks, product: str = Form(...), 
             for kind in ("specification", "testcase") for doc in storage.active_documents(kind, product)
         ],
     }
-    storage.create_analysis(job_id, stage_total=len(ANALYSIS_STAGES), request=request_snapshot)
+    storage.create_analysis(job_id, stage_total=len(ANALYSIS_STAGES), request=request_snapshot, module="impact_analyzer")
     background_tasks.add_task(_run_job, job_id, changes, product, notes)
     return {"job_id": job_id, "status_url": f"/analyses/{job_id}"}
 

@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block page_title %}비용/캐시 대시보드{% endblock %}
+{% block header_title %}비용/캐시 대시보드{% endblock %}
+{% block header_subtitle %}Gemini 토큰 사용량과 캐시 재사용 현황을 확인합니다.{% endblock %}
+{% block header_nav %}<nav><a href="/">QA 홈</a><a href="/impact-analyzer">Regression 분석</a><a href="/manual-review">매뉴얼 검증</a><a href="/knowledge">Knowledge</a></nav>{% endblock %}
+{% block content %}
+<section>
+  <h2>오늘 토큰 사용량</h2>
+  {% if daily_token_status.limit %}
+  <p>
+    {{ daily_token_status.used }} / {{ daily_token_status.limit }} tokens
+    {% if daily_token_status.exceeded %}<span class="badge FAILED">한도 초과</span>{% else %}<span class="badge DONE">정상</span>{% endif %}
+  </p>
+  {% else %}
+  <p>{{ daily_token_status.used }} tokens 사용 (config.yaml의 <code>analysis.daily_token_limit</code>이 0이라 한도 없음)</p>
+  {% endif %}
+  <p class="hint">Regression 영향 분석과 매뉴얼 개정 검증이 같은 <code>analyses</code> 테이블에 기록되므로 두 기능의 사용량을 합산합니다.</p>
+</section>
+
+<section>
+  <h2>조회 기간</h2>
+  <p style="display:flex;gap:10px;flex-wrap:wrap">
+    <a href="/cost-dashboard?days=7">{% if days == 7 %}<b>[최근 7일]</b>{% else %}최근 7일{% endif %}</a>
+    <a href="/cost-dashboard?days=30">{% if days == 30 %}<b>[최근 30일]</b>{% else %}최근 30일{% endif %}</a>
+    <a href="/cost-dashboard?days=90">{% if days == 90 %}<b>[최근 90일]</b>{% else %}최근 90일{% endif %}</a>
+  </p>
+</section>
+
+<div class="grid">
+  <section>
+    <h2>기능별 사용량</h2>
+    {% if stats.modules %}
+    <ul>
+      {% for module, values in stats.modules.items() %}
+      <li><b>{{ module_labels.get(module, module) }}</b> — 분석 {{ values.count }}건 · 총 {{ "{:,}".format(values.tokens) }} tokens
+        · 건당 평균 {{ "{:,}".format((values.tokens / values.count) | round | int) if values.count else 0 }} tokens</li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="hint">선택한 기간에 완료된 분석이 없습니다.</p>
+    {% endif %}
+  </section>
+
+  <section>
+    <h2>캐시 재사용 현황</h2>
+    {% if stats.cache_sample_size %}
+    <p>캐시 Hit율 {{ (stats.cache_hit_rate * 100) | round(1) }}% ({{ stats.cache_sample_size }}건 중 확인)</p>
+    {% else %}
+    <p class="hint">캐시 Hit 여부가 기록된 분석이 없습니다.</p>
+    {% endif %}
+    <p class="hint">캐시 Hit 여부는 현재 Regression 영향 분석(<code>ai_audit.cache_hit</code>)만 기록합니다. 매뉴얼 개정 검증은 아직 이 값을 저장하지 않아 통계에서 제외됩니다(알려진 v1 범위 — 필요 시 확장).</p>
+  </section>
+</div>
+
+<section>
+  <h2>일별 토큰 사용량</h2>
+  {% if stats.daily %}
+  <div class="table-wrap">
+    <table class="history">
+      <thead><tr><th>날짜</th><th>분석 건수</th><th>총 tokens</th><th></th></tr></thead>
+      <tbody>
+        {% for day in stats.daily %}
+        <tr>
+          <td>{{ day.date }}</td>
+          <td>{{ day.count }}</td>
+          <td>{{ "{:,}".format(day.tokens) }}</td>
+          <td><div class="progress-track"><div class="progress-fill" style="width:{{ ((day.tokens / max_daily_tokens * 100) | round | int) if max_daily_tokens else 0 }}%"></div></div></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="hint">선택한 기간에 완료된 분석이 없습니다.</p>
+  {% endif %}
+</section>
+
+<section>
+  <h2>최근 분석 (최대 50건)</h2>
+  {% if stats.recent %}
+  <div class="table-wrap">
+    <table class="history">
+      <thead><tr><th>완료 시각(UTC)</th><th>기능</th><th>제품</th><th>tokens</th><th>캐시 Hit</th><th>ID</th></tr></thead>
+      <tbody>
+        {% for item in stats.recent %}
+        <tr>
+          <td>{{ item.created_at[:19].replace('T', ' ') }}</td>
+          <td>{{ module_labels.get(item.module, item.module) }}</td>
+          <td>{{ item.product or '-' }}</td>
+          <td>{{ "{:,}".format(item.tokens) }}</td>
+          <td>{% if item.cache_hit is none %}-{% elif item.cache_hit %}<span class="badge DONE">Hit</span>{% else %}<span class="badge">Miss</span>{% endif %}</td>
+          <td>{{ item.id }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="hint">선택한 기간에 완료된 분석이 없습니다.</p>
+  {% endif %}
+</section>
+{% endblock %}

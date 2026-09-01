@@ -9,6 +9,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
+from app.modules.cost_dashboard.router import router as cost_dashboard_router
 from app.modules.impact_analyzer.router import router as impact_analyzer_router
 from app.modules.knowledge.router import router as knowledge_router
 from app.modules.manual_review.router import router as manual_review_router
@@ -28,4 +29,5 @@ def build_router() -> APIRouter:
     api.include_router(knowledge_router)
     api.include_router(impact_analyzer_router)
     api.include_router(manual_review_router, prefix="/manual-review")
+    api.include_router(cost_dashboard_router)
     return api

@@ -1,5 +1,33 @@
 # Next Steps — 매뉴얼 개정 검증 기능 진행 상황 (우선순위 순)
 
+> **미완료 로컬 폴더 rename 대상 이름(= GitHub repo slug와 동일)**: `qa-verification-management-system`
+> (현재: `ai-regression-impact-analyzer`). 정확한 명령은 `HANDOFF.md` §2 참고. 이 세션이
+> 폴더를 작업 디렉터리로 물고 있어 세션 내부에서는 구조적으로 rename이 불가능하다(2026-09-01
+> 재시도로 재확인) — 세션 창을 모두 닫은 뒤 사용자가 직접 실행해야 한다.
+
+## 2026-09-01 비용/캐시 대시보드 UI 구현
+
+"아직 미착수" 3번 항목(비용/캐시 대시보드 UI)을 구현했다.
+
+- `analyses` 테이블에 `module` 컬럼 추가(`ALTER TABLE`, 기존 배포와 호환). `create_analysis()`가
+  `module="impact_analyzer"`/`"manual_review"`를 명시적으로 기록해 이후 통계에서 기능별로 구분
+  가능. 이 컬럼이 없던 과거 행은 `result_json`에 `revision_id` 키가 있는지로 `manual_review`
+  여부를 추정해 하위 호환을 유지한다(`Storage.cost_dashboard_stats`).
+- 신규 `Storage.cost_dashboard_stats(days=30)`: 토큰/캐시 전용 컬럼이 없으므로 `result_json`을
+  런타임 파싱해 일별 토큰 합계, 기능별(Regression 영향 분석/매뉴얼 개정 검증) 토큰·건수, 캐시
+  Hit율, 최근 50건 목록을 계산한다. 데이터量이 현재 매우 적어(실서버 완료 분석 5건) 성능 문제
+  없음을 확인.
+- **알려진 v1 범위(버그 아님)**: 캐시 Hit 여부는 Regression 영향 분석의 `ai_audit.cache_hit`만
+  기록하고 있어 매뉴얼 개정 검증은 캐시 통계에서 제외된다(대시보드 화면에 안내 문구 표시).
+  `ai_cache` 테이블 자체에 재사용 횟수 카운터가 없어 "몇 번 재사용됐는지"는 계산 불가.
+- 신규 모듈 `app/modules/cost_dashboard/`(`/cost-dashboard`): 오늘 토큰 한도/사용량(기존
+  `daily_token_status()` 재사용), 조회 기간(7/30/90일), 기능별 사용량, 캐시 Hit율, 일별 토큰
+  사용량(막대), 최근 분석 50건 표를 표시. 기존 3개 모듈의 nav에 링크 추가, hub 카드는 추가하지
+  않음(Knowledge와 동일하게 nav 전용 운영 페이지로 취급).
+- 테스트 7건 추가(`tests/test_cost_dashboard.py`) — `pytest -q` **174 passed**. 실제 로컬 서버로
+  기존 완료 분석 5건(합계 313,844 tokens) 렌더링까지 확인.
+- 서버 재배포는 아직 하지 않음 — 다음 배포 시 포함 필요.
+
 ## 2026-09-01 Cross-Manual/이미지 Gate 마무리 + 명칭 통일 (로컬 폴더 rename만 미완료)
 
 이전 세션이 미완료 상태로 남긴 작업을 이어받아 완료했다. 이 절 아래 두 하위 절
@@ -124,9 +152,11 @@ NON_FUNCTIONAL_CHANGE 필터, SRS 근거 로컬 검색(impact_analyzer가 이미
 
 ## 아직 미착수 (우선순위 순)
 
-1. **Cross-Manual 영향분석** (스펙 §11) — 구현 완료, 테스트/문서/커밋 마무리 필요.
-2. **이미지 변경 Human Review Gate** (스펙 §8-1) — 구현 중, 합성 PDF 이미지 테스트 1건 수정 필요.
-3. **비용/캐시 대시보드 UI** — 토큰 사용량은 이미 기록되지만 화면 노출 UI는 없음.
+1. ~~**Cross-Manual 영향분석**~~ (스펙 §11) → 완료(위 7차 세션 참고).
+2. ~~**이미지 변경 Human Review Gate**~~ (스펙 §8-1) → 완료(위 7차 세션 참고).
+3. ~~**비용/캐시 대시보드 UI**~~ → 완료(위 참고). 매뉴얼 개정 검증의 캐시 Hit 기록은 아직
+   없음(위 "알려진 v1 범위" 참고) — 필요 시 `manual_review/ai_client.py`에도
+   `ai_audit`/`cache_hit` 기록 추가 검토.
 4. **실제 예시 파일 기반 E2E pytest 테스트 추가** — 이번 세션에서 수동으로 스크립트를 돌려
    검증은 했지만(실제 회사 문서라 테스트 fixture로 커밋하지 않음), 이 실제 파일들을 pytest
    fixture로 안전하게 참조할 방법(예: 사내망 접근 가능한 CI에서만 skip 없이 실행)을 정하면

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from app.core.config import get_settings
@@ -98,6 +98,7 @@ class Storage:
                 ("started_at", "TEXT"),
                 ("stage_updated_at", "TEXT"),
                 ("request_json", "TEXT"),
+                ("module", "TEXT"),
             ):
                 if column not in existing:
                     db.execute(f"ALTER TABLE analyses ADD COLUMN {column} {ddl}")
@@ -174,13 +175,13 @@ class Storage:
         with self.connect() as db:
             db.execute("DELETE FROM documents WHERE id=?", (document_id,))
 
-    def create_analysis(self, analysis_id: str, status: str = "QUEUED", stage_total: int = 0, request: dict | None = None) -> None:
+    def create_analysis(self, analysis_id: str, status: str = "QUEUED", stage_total: int = 0, request: dict | None = None, module: str = "impact_analyzer") -> None:
         now = datetime.now(timezone.utc).isoformat()
         with self.connect() as db:
             db.execute(
-                "INSERT OR REPLACE INTO analyses(id,status,result_json,request_json,error,created_at,updated_at,stage,stage_index,stage_total,started_at,stage_updated_at) "
-                "VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
-                (analysis_id, status, None, json.dumps(request, ensure_ascii=False) if request else None, None, now, now, "대기 중", 0, stage_total, now, now),
+                "INSERT OR REPLACE INTO analyses(id,status,result_json,request_json,error,created_at,updated_at,stage,stage_index,stage_total,started_at,stage_updated_at,module) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (analysis_id, status, None, json.dumps(request, ensure_ascii=False) if request else None, None, now, now, "대기 중", 0, stage_total, now, now, module),
             )
 
     def update_stage(self, analysis_id: str, index: int, name: str, stage_total: int | None = None) -> None:
@@ -244,6 +245,61 @@ class Storage:
             except (TypeError, ValueError, json.JSONDecodeError):
                 continue
         return total
+
+    def cost_dashboard_stats(self, days: int = 30) -> dict:
+        """비용/캐시 대시보드 집계. analyses에 토큰/캐시 전용 컬럼이 없어 result_json을 그때그때 파싱한다.
+
+        module 컬럼이 없는 과거 행(이 기능 도입 이전 분석)은 result_json에 manual_review 전용
+        키(revision_id)가 있는지로 모듈을 추정한다.
+        """
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+        with self.connect() as db:
+            rows = db.execute(
+                "SELECT id, module, request_json, result_json, created_at FROM analyses "
+                "WHERE status='DONE' AND created_at>=? AND result_json IS NOT NULL ORDER BY created_at",
+                (cutoff,),
+            ).fetchall()
+        daily: dict[str, dict] = {}
+        modules: dict[str, dict] = {}
+        cache_hits = 0
+        cache_checked = 0
+        recent: list[dict] = []
+        for row in rows:
+            try:
+                result = json.loads(row["result_json"])
+            except (TypeError, json.JSONDecodeError):
+                continue
+            module = row["module"] or ("manual_review" if "revision_id" in result else "impact_analyzer")
+            tokens = int((result.get("token_usage") or {}).get("total_tokens", 0) or 0)
+            day = row["created_at"][:10]
+            day_bucket = daily.setdefault(day, {"date": day, "tokens": 0, "count": 0})
+            day_bucket["tokens"] += tokens
+            day_bucket["count"] += 1
+            module_bucket = modules.setdefault(module, {"tokens": 0, "count": 0})
+            module_bucket["tokens"] += tokens
+            module_bucket["count"] += 1
+            cache_hit = (result.get("ai_audit") or {}).get("cache_hit")
+            if cache_hit is not None:
+                cache_checked += 1
+                if cache_hit:
+                    cache_hits += 1
+            request = json.loads(row["request_json"]) if row["request_json"] else {}
+            product = request.get("product")
+            if not product and module == "manual_review" and result.get("revision_id"):
+                revision = self.get_manual_revision(int(result["revision_id"]))
+                product = revision["product"] if revision else None
+            recent.append({
+                "id": row["id"], "module": module, "product": product,
+                "created_at": row["created_at"], "tokens": tokens, "cache_hit": cache_hit,
+            })
+        return {
+            "days": days,
+            "daily": sorted(daily.values(), key=lambda item: item["date"]),
+            "modules": modules,
+            "cache_hit_rate": (cache_hits / cache_checked) if cache_checked else None,
+            "cache_sample_size": cache_checked,
+            "recent": list(reversed(recent))[:50],
+        }
 
     def fail_incomplete_analyses(self, error: str = "서버 재시작으로 분석이 중단되었습니다.") -> int:
         """A process restart cannot resume in-memory BackgroundTasks safely."""
