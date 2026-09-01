@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
@@ -10,10 +11,16 @@ from app.core.config import get_settings
 from app.core.storage import Storage
 from app.core.uploads import save_upload
 from app.parsers.document_parser import parse_document
+from app.parsers.excel_parser import parse_testcases, preview_workbook, suggest_columns
 
 router = APIRouter()
 templates = Jinja2Templates(directory=[Path(__file__).parent / "templates", get_settings().root / "app" / "web" / "templates"])
 storage = Storage()
+
+TC_FIELD_LABELS = {
+    "tc_id": "TC ID (필수)", "category": "분류", "feature": "기능명", "precondition": "사전조건",
+    "step": "시험절차", "expected_result": "예상결과", "result": "결과", "remark": "비고",
+}
 
 
 @router.post("/knowledge/products")
@@ -67,7 +74,81 @@ def register_testcase(file: UploadFile = File(...), product: str = Form(...), ve
     storage.ensure_product(product)
     storage.ensure_version(product, version)
     path = save_upload(file, get_settings().path("storage.testcase_dir"), {".xlsx"})
-    storage.add_document("testcase", product, version, "", file.filename or path.name, path)
+    original_name = file.filename or path.name
+    try:
+        parse_testcases(path)
+    except ValueError:
+        # 자동 탐지 실패 — 파일은 이미 storage.testcase_dir에 저장돼 있으니 삭제하지 않고
+        # 수동 매핑 화면으로 보낸다. 사용자가 매핑을 확정해야 documents 테이블에 등록된다.
+        params = urlencode({"filename": path.name, "product": product, "version": version, "original_name": original_name})
+        return RedirectResponse(f"/knowledge/testcase/map?{params}", status_code=303)
+    storage.add_document("testcase", product, version, "", original_name, path)
+    return RedirectResponse("/knowledge", status_code=303)
+
+
+def _testcase_upload_path(filename: str) -> Path:
+    if filename != Path(filename).name:
+        raise HTTPException(400, "잘못된 파일명입니다.")
+    path = get_settings().path("storage.testcase_dir") / filename
+    if not path.exists():
+        raise HTTPException(404, "업로드된 파일을 찾을 수 없습니다. TC 파일을 다시 첨부하세요.")
+    return path
+
+
+@router.get("/knowledge/testcase/map", response_class=HTMLResponse)
+def testcase_mapping_form(
+    request: Request, filename: str, product: str, version: str = "", original_name: str = "",
+    sheet: str = "", header_row: int = 0, error: str = "",
+):
+    """`register_testcase`가 TC ID 컬럼을 자동으로 못 찾았을 때 QA가 시트/헤더 행/컬럼을
+    직접 지정하는 화면. 시트 선택·헤더 행 입력까지는 GET으로 미리보기만 갱신하고, 실제
+    등록은 아래 POST에서 확정한다."""
+    path = _testcase_upload_path(filename)
+    preview = preview_workbook(path)
+    sheet_names = list(preview.keys())
+    selected_sheet = sheet if sheet in preview else (sheet_names[0] if sheet_names else "")
+    preview_rows = preview.get(selected_sheet, [])
+    suggested: dict[str, str] = {}
+    if header_row and 1 <= header_row <= len(preview_rows):
+        header_cells = preview_rows[header_row - 1]
+        suggested = {field: header_cells[index] for index, field in suggest_columns(header_cells).items() if header_cells[index]}
+    return templates.TemplateResponse(
+        request,
+        "testcase_mapping.html",
+        {
+            "filename": filename, "product": product, "version": version, "original_name": original_name,
+            "sheets": sheet_names, "selected_sheet": selected_sheet, "preview_rows": preview_rows,
+            "header_row": header_row, "fields": TC_FIELD_LABELS, "suggested": suggested, "error": error,
+        },
+    )
+
+
+@router.post("/knowledge/testcase/map")
+def register_testcase_with_mapping(
+    filename: str = Form(...), product: str = Form(...), version: str = Form(""), original_name: str = Form(""),
+    sheet: str = Form(...), header_row: int = Form(...),
+    tc_id: str = Form(""), category: str = Form(""), feature: str = Form(""), precondition: str = Form(""),
+    step: str = Form(""), expected_result: str = Form(""), result: str = Form(""), remark: str = Form(""),
+):
+    path = _testcase_upload_path(filename)
+    mapping = {
+        key: value for key, value in {
+            "tc_id": tc_id, "category": category, "feature": feature, "precondition": precondition,
+            "step": step, "expected_result": expected_result, "result": result, "remark": remark,
+        }.items() if value
+    }
+    try:
+        parse_testcases(path, mapping=mapping, sheet_name=sheet, header_row=header_row)
+    except ValueError as exc:
+        params = urlencode({
+            "filename": filename, "product": product, "version": version, "original_name": original_name,
+            "sheet": sheet, "header_row": header_row, "error": str(exc),
+        })
+        return RedirectResponse(f"/knowledge/testcase/map?{params}", status_code=303)
+    storage.ensure_product(product)
+    storage.ensure_version(product, version)
+    document_id = storage.add_document("testcase", product, version, "", original_name or filename, path)
+    storage.update_document_metadata(document_id, {"column_mapping": mapping, "sheet_name": sheet, "header_row": header_row})
     return RedirectResponse("/knowledge", status_code=303)
 
 

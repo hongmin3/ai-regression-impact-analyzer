@@ -190,8 +190,9 @@ Set-Location $newRoot
 
 1. ~~실제 변경 전용 문서와 서로 다른 기준 사양서를 사용한 업무 정확도 E2E 검증~~ → 완료 (위 4장 참고). 단, 다른 사양서(2~5)·다른 TC Set으로도 추가 검증 권장
 2. VXvue Rev.1.7의 근거 수준(evidence_level)·원본 개정 표시 확인 여부(revision_mark) 결과 모델 구조화 → **스키마 단위 완료** (`ImpactDecision.evidence_level`/`revision_mark`, Report/CSV/XLSX 노출). PDF 실제 취소선/밑줄 서식을 시각적으로 자동 인식하는 것은 별도 기술 검토가 필요해 미착수 (`page.get_text('rawdict')` + `get_drawings()` 조합 검토 필요, PyMuPDF에 취소선 플래그가 없어 오탐 가능) — 지금은 항상 `UNVERIFIED`로 표시하고 원본 확인을 사용자에게 안내
-3. 분석 이력의 검색·필터·페이지네이션 보강 — 아직 미착수
-4. 자동 탐지로 해결되지 않는 TC용 수동 컬럼/시트 매핑 UI 추가 — 아직 미착수
+3. ~~분석 이력의 검색·필터·페이지네이션 보강~~ → **완료** (2026-09-01, `NEXT_STEPS.md` 참고)
+4. ~~자동 탐지로 해결되지 않는 TC용 수동 컬럼/시트 매핑 UI 추가~~ → **완료** (2026-09-01,
+   `NEXT_STEPS.md` 참고)
 5. BM25 인덱스 직렬화 및 재사용 — 아직 미착수
 6. 사용자 승인 후 최신 서버 코드 활성화 또는 systemd 등록 → **완료**: 세션 중 여러 차례 배포+재시작 승인받아 진행함(현재 PID는 최신). systemd 전환 자체는 별도 승인 대기
 6-b. VXvue 사양서 동기화 Windows 작업 스케줄러 등록 → **완료** (`AIRegressionAnalyzer_VXvueSpecSync`, 매주 월 07:30 KST)

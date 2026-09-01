@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import time
 import uuid
 from datetime import datetime, timezone
@@ -54,7 +55,13 @@ class RegressionAnalyzer:
             doc_labels[path.stem] = doc["name"]
         cases: list[TestCase] = []
         for doc in tc_docs:
-            cases.extend(parse_testcases(Path(doc["path"])))
+            # register_testcase가 자동 탐지에 실패하면 QA가 /knowledge/testcase/map에서
+            # 수동으로 지정한 컬럼/시트/헤더 행을 metadata_json에 저장해둔다(없으면 자동 탐지).
+            metadata = json.loads(doc.get("metadata_json") or "{}")
+            cases.extend(parse_testcases(
+                Path(doc["path"]), mapping=metadata.get("column_mapping"),
+                sheet_name=metadata.get("sheet_name"), header_row=metadata.get("header_row"),
+            ))
         spec_label = ", ".join(doc["name"] for doc in spec_docs)
         tc_label = ", ".join(doc["name"] for doc in tc_docs)
         knowledge_documents = [

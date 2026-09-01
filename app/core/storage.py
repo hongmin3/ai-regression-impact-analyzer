@@ -175,6 +175,10 @@ class Storage:
         with self.connect() as db:
             db.execute("DELETE FROM documents WHERE id=?", (document_id,))
 
+    def update_document_metadata(self, document_id: int, metadata: dict) -> None:
+        with self.connect() as db:
+            db.execute("UPDATE documents SET metadata_json=? WHERE id=?", (json.dumps(metadata, ensure_ascii=False), document_id))
+
     def create_analysis(self, analysis_id: str, status: str = "QUEUED", stage_total: int = 0, request: dict | None = None, module: str = "impact_analyzer") -> None:
         now = datetime.now(timezone.utc).isoformat()
         with self.connect() as db:

@@ -7,6 +7,30 @@
 > - Release Note/설계검토보고서 주간 자동 확보(`OPEN_QUESTIONS.md` #4) — 현재 수동
 >   업로드+자동 재사용으로 충분하다고 판단해 보류.
 
+## 2026-09-01 TC 컬럼/시트 수동 매핑 UI (`HANDOFF.md` §5 4번, MVP 최초 커밋부터 9개월 미착수)
+
+TC Excel의 헤더가 별칭 목록(`app/parsers/excel_parser.py::ALIASES`)에 없어 TC ID 컬럼을
+자동으로 못 찾으면, 이전에는 업로드는 조용히 성공하고 한참 뒤 분석 실행 시점에야
+`ValueError`로 실패가 드러났다(원인 파악 방법이 "TC 파일을 다른 헤더명으로 재작성"뿐).
+
+- `app/parsers/excel_parser.py`: `parse_testcases(path, mapping=None, sheet_name=None,
+  header_row=None)` — `sheet_name`+`header_row`를 둘 다 주면 자동 탐지를 건너뛰고 그 위치를
+  강제 사용(실패 시 다른 시트로 넘어가지 않고 즉시 에러 반환). `suggest_columns(headers)`(예외
+  없이 컬럼 인덱스→필드 추정), `preview_workbook(path)`(시트별 상위 15행 미리보기) 추가.
+- `app/modules/knowledge/router.py`: `register_testcase`가 업로드 시점에 `parse_testcases`를
+  실제로 호출해 검증한다(이전에는 저장만 하고 끝). 실패하면 `/knowledge/testcase/map`으로
+  리다이렉트 — 시트/헤더 행을 선택하면(GET) 그 행의 실제 셀 값으로 8개 필드(TC ID 필수 등)
+  드롭다운을 보여주고(별칭 매칭되는 값은 미리 선택), 확정하면(POST) 매핑을 검증 후
+  `documents.metadata_json`에 `column_mapping`/`sheet_name`/`header_row`로 저장한다.
+- `regression_analyzer.py::run_for_product`가 TC 문서의 저장된 metadata를 읽어
+  `parse_testcases`에 그대로 전달 — 매핑이 없는(기존) 문서는 지금처럼 완전 자동 탐지 그대로
+  동작해 하위 호환 유지.
+- 알려진 제약(v1): 같은 헤더 텍스트가 같은 행에 중복되면 첫 번째 열만 매핑된다(값 자체로
+  대조하는 방식의 한계, 필요시 인덱스 기반 매핑으로 확장 검토).
+- 테스트 13건 추가(`test_excel_parser.py`, 신규 `test_knowledge_testcase_mapping.py`) —
+  `pytest -q` **196 passed**. 실제 로컬 서버에 업로드→매핑→등록 전체 흐름 수동 검증(생성한
+  테스트 제품/문서는 검증 후 정리 완료).
+
 ## 2026-09-01 분석 이력 검색·필터·페이지네이션 (`/analyses`)
 
 - `Storage.list_analyses`: `status`/`product`/`search`(ID·변경 문서명 부분일치) 필터와

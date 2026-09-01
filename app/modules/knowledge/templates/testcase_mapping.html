@@ -1,0 +1,72 @@
+{% extends "knowledge_base.html" %}
+{% block page_title %}TC 컬럼 매핑{% endblock %}
+{% block header_title %}TC 컬럼 매핑{% endblock %}
+{% block header_subtitle %}자동으로 TC ID 컬럼을 찾지 못한 파일을 시트/헤더 행/컬럼을 직접 지정해 등록합니다.{% endblock %}
+{% block content %}
+<section>
+  <h2>{{ original_name }}</h2>
+  {% if error %}<p class="hint" style="color:#b42318">{{ error }}</p>{% endif %}
+  <p class="hint">이 Excel에서 TC ID 등 필수 컬럼을 자동으로 인식하지 못했습니다. 아래에서 시트와 헤더 행(항목명이 적힌 행)을 먼저 선택하고, 각 항목이 어느 열에 해당하는지 지정한 뒤 등록하세요.</p>
+
+  <form method="get" action="/knowledge/testcase/map" style="display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin:16px 0">
+    <input type="hidden" name="filename" value="{{ filename }}">
+    <input type="hidden" name="product" value="{{ product }}">
+    <input type="hidden" name="version" value="{{ version }}">
+    <input type="hidden" name="original_name" value="{{ original_name }}">
+    <label>시트
+      <select name="sheet">
+        {% for s in sheets %}<option value="{{ s }}"{% if s == selected_sheet %} selected{% endif %}>{{ s }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>헤더 행 번호(아래 표의 "행" 열 참고)<input type="number" name="header_row" min="1" value="{{ header_row or '' }}" style="width:100px"></label>
+    <button type="submit">미리보기 갱신</button>
+  </form>
+
+  {% if preview_rows %}
+  <div class="table-wrap">
+    <table class="history">
+      <thead><tr><th>행</th>{% for _ in preview_rows[0] %}<th>열 {{ loop.index }}</th>{% endfor %}</tr></thead>
+      <tbody>
+      {% for row in preview_rows %}
+        <tr{% if loop.index == header_row %} style="background:#edf6f9;font-weight:700"{% endif %}>
+          <td>{{ loop.index }}</td>
+          {% for cell in row %}<td>{{ cell }}</td>{% endfor %}
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="hint">선택한 시트에 데이터가 없습니다.</p>
+  {% endif %}
+
+  {% if header_row and header_row <= (preview_rows | length) %}
+  {% set header_cells = preview_rows[header_row - 1] %}
+  <h3>항목별 컬럼 지정 (행 {{ header_row }} 기준)</h3>
+  <form method="post" action="/knowledge/testcase/map">
+    <input type="hidden" name="filename" value="{{ filename }}">
+    <input type="hidden" name="product" value="{{ product }}">
+    <input type="hidden" name="version" value="{{ version }}">
+    <input type="hidden" name="original_name" value="{{ original_name }}">
+    <input type="hidden" name="sheet" value="{{ selected_sheet }}">
+    <input type="hidden" name="header_row" value="{{ header_row }}">
+    <div class="grid">
+      {% for field, label in fields.items() %}
+      <label>{{ label }}
+        <select name="{{ field }}">
+          <option value="">매핑 안 함</option>
+          {% for cell in header_cells %}
+          {% if cell %}<option value="{{ cell }}"{% if suggested.get(field) == cell %} selected{% endif %}>{{ cell }}</option>{% endif %}
+          {% endfor %}
+        </select>
+      </label>
+      {% endfor %}
+    </div>
+    <p class="hint">같은 이름의 열이 여러 개면 첫 번째 열이 사용됩니다. TC ID는 필수입니다.</p>
+    <button type="submit" style="margin-top:14px">이 매핑으로 등록</button>
+  </form>
+  {% elif header_row %}
+  <p class="hint">헤더 행 번호가 이 시트의 미리보기 범위를 벗어났습니다. 값을 다시 확인하세요.</p>
+  {% endif %}
+</section>
+{% endblock %}
