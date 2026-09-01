@@ -1,4 +1,4 @@
-﻿# AGENTS.md — ai-regression-impact-analyzer
+﻿# AGENTS.md — qa-verification-management-system (QA 검증 관리 시스템)
 
 SW 변경사항과 제품 사양서 및 Test Case를 분석하여 Regression 검증 대상을 자동 추천하는 QA 업무자동화 서비스
 

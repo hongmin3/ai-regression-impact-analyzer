@@ -166,7 +166,7 @@ def test_design_review_fail_forces_human_review_signal(tmp_path):
 
 def test_reviewer_records_stage_progress_when_analysis_id_given(tmp_path):
     storage = Storage(tmp_path / "app.db")
-    storage.create_analysis("job-1", stage_total=5)
+    storage.create_analysis("job-1", stage_total=6)
     revision_path = tmp_path / "revised.docx"
     _write_revision_docx(revision_path)
 
@@ -175,5 +175,5 @@ def test_reviewer_records_stage_progress_when_analysis_id_given(tmp_path):
     )
 
     job = storage.get_analysis("job-1")
-    assert job["stage_index"] == 5
+    assert job["stage_index"] == 6
     assert job["stage"] == "결과 저장"

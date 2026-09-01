@@ -202,6 +202,7 @@ def view_revision(request: Request, revision_id: int):
     prior_open_comments = storage.list_open_comments_for_revision(revision["parent_revision_id"]) if revision["parent_revision_id"] else []
     prior_open_comments = suggest_prior_comments(prior_open_comments, changes)
     release_findings = storage.list_release_findings(revision_id)
+    cross_manual_impacts = storage.list_cross_manual_impacts(revision_id)
     return templates.TemplateResponse(
         request,
         "revision.html",
@@ -212,8 +213,20 @@ def view_revision(request: Request, revision_id: int):
             "decision_counts": _decision_counts(changes),
             "judgment_options": JUDGMENT_OPTIONS,
             "missing_findings": [f for f in release_findings if f["status"] == "MISSING_SUSPECTED"],
+            "cross_manual_impacts": cross_manual_impacts,
         },
     )
+
+
+@router.post("/revisions/{revision_id}/cross-manual/{impact_id}/status")
+def set_cross_manual_status(revision_id: int, impact_id: int, qa_status: str = Form(...)):
+    impacts = {item["id"] for item in storage.list_cross_manual_impacts(revision_id)}
+    if impact_id not in impacts:
+        raise HTTPException(404, "다른 Manual 영향 후보를 찾을 수 없습니다.")
+    if qa_status not in {"REVIEW_REQUIRED", "IMPACT_CONFIRMED", "NO_IMPACT"}:
+        raise HTTPException(400, "지원하지 않는 QA 상태입니다.")
+    storage.update_cross_manual_impact_status(impact_id, qa_status)
+    return RedirectResponse(f"/manual-review/revisions/{revision_id}/view", status_code=303)
 
 
 def _decision_counts(changes: list[dict]) -> dict[str, int]:

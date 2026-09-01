@@ -11,6 +11,7 @@ from app.core.logger import configure_logging
 from app.core.storage import Storage
 from app.modules.manual_review.ai_client import ManualReviewAIClient
 from app.modules.manual_review.change_filter import is_functional_change
+from app.modules.manual_review.cross_manual import find_cross_manual_impacts
 from app.modules.manual_review.docx_track_changes import TrackedChange, extract_track_changes
 from app.modules.manual_review.pdf_revision_diff import extract_pdf_revision_diff
 from app.modules.manual_review.release_scope import extract_design_review_changes, extract_release_note_changes, match_release_changes
@@ -21,6 +22,7 @@ MANUAL_REVIEW_STAGES: tuple[str, ...] = (
     "문서 파싱 (Track Changes/PDF Diff 추출)",
     "SRS 근거 준비",
     "Release Scope 대조",
+    "다른 Manual 영향 추적",
     "AI 판정",
     "결과 저장",
 )
@@ -86,6 +88,7 @@ class ManualRevisionReviewer:
                     "total_changes": 0, "functional_changes": 0, "decision_counts": {},
                     "prior_open_comments": [], "release_scope_total": 0,
                     "release_scope_missing_suspected": 0, "pdf_baseline": True,
+                    "cross_manual_review_required": 0,
                     "token_usage": self.ai_client.token_usage, "request_count": self.ai_client.request_count,
                 }
             if suffix == ".pdf":
@@ -112,9 +115,18 @@ class ManualRevisionReviewer:
                     functional_pairs.append((change_id, change))
 
             stage(3)
-            missing_count, release_scope_total, release_context = self._match_release_scope(revision_id, release_note_path, design_review_path, functional_pairs)
+            missing_count, release_scope_total, release_context, release_changes = self._match_release_scope(revision_id, release_note_path, design_review_path, functional_pairs)
 
             stage(4)
+            cross_impacts = find_cross_manual_impacts(self.storage, product, manual_name, release_changes)
+            for impact in cross_impacts:
+                self.storage.add_cross_manual_impact(
+                    revision_id, impact.target_manual, impact.source_document,
+                    impact.release_change.source_document, impact.release_change.category,
+                    impact.release_change.title, impact.evidence_text, impact.relevance_score,
+                )
+
+            stage(5)
             decision_counts: dict[str, int] = {}
             for change_id, change in functional_pairs:
                 candidates = search_candidates(chunks, change.text, max_candidates)
@@ -127,12 +139,13 @@ class ManualRevisionReviewer:
                 if change.review_required:
                     judgment.confidence = min(judgment.confidence, 0.6)
                     judgment.needs_human_review = True
-                    if "PDF_DIFF_REVIEW_REQUIRED" not in judgment.reason_codes:
-                        judgment.reason_codes.append("PDF_DIFF_REVIEW_REQUIRED")
+                    reason = "IMAGE_CHANGE_REVIEW_REQUIRED" if "image" in change.kind else "PDF_DIFF_REVIEW_REQUIRED"
+                    if reason not in judgment.reason_codes:
+                        judgment.reason_codes.append(reason)
                 self.storage.update_manual_change_judgment(change_id, judgment.decision.value, judgment.confidence, judgment.model_dump(mode="json"))
                 decision_counts[judgment.decision.value] = decision_counts.get(judgment.decision.value, 0) + 1
 
-            stage(5)
+            stage(6)
             prior_open_comments = self.storage.list_open_comments_for_revision(parent_revision_id) if parent_revision_id else []
             self.storage.update_manual_revision_status(revision_id, "REVIEWED")
 
@@ -145,6 +158,7 @@ class ManualRevisionReviewer:
                 "prior_open_comments": prior_open_comments,
                 "release_scope_total": release_scope_total,
                 "release_scope_missing_suspected": missing_count,
+                "cross_manual_review_required": len(cross_impacts),
                 "token_usage": self.ai_client.token_usage,
                 "request_count": self.ai_client.request_count,
             }
@@ -164,7 +178,7 @@ class ManualRevisionReviewer:
         release_note_path: Path | None,
         design_review_path: Path | None,
         functional_pairs: list[tuple[int, TrackedChange]],
-    ) -> tuple[int, int, dict[int, list[dict]]]:
+    ) -> tuple[int, int, dict[int, list[dict]], list]:
         """등록된(선택) Release Note/설계검토보고서에서 변경 Scope를 추출해 이번 리비전의
         functional 변경들과 BM25로 대조한다. 매칭되지 않으면 MISSING_SUSPECTED로 저장한다
         (스펙 §13 Reverse 검증). 반환값은 (누락 의심 건수, 전체 Release Scope 건수)."""
@@ -174,7 +188,7 @@ class ManualRevisionReviewer:
         if design_review_path and design_review_path.exists():
             release_changes.extend(extract_design_review_changes(extract_document_text(design_review_path), design_review_path.name))
         if not release_changes:
-            return 0, 0, {}
+            return 0, 0, {}, []
 
         functional_texts = [(change_id, change.text) for change_id, change in functional_pairs]
         matched = match_release_changes(release_changes, functional_texts)
@@ -195,4 +209,4 @@ class ManualRevisionReviewer:
                     "title": release_change.title, "description": release_change.description,
                     "result_status": release_change.result_status,
                 })
-        return missing_count, len(release_changes), context_by_change
+        return missing_count, len(release_changes), context_by_change, release_changes

@@ -13,8 +13,8 @@ README는 포트폴리오용으로 핵심만 담고 있어서, 실제로 이 프
 ## 2. 로컬 설치
 
 ```powershell
-git clone https://github.com/hongmin3/ai-regression-impact-analyzer.git
-cd ai-regression-impact-analyzer
+git clone https://github.com/hongmin3/qa-verification-management-system.git
+cd qa-verification-management-system
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 Copy-Item secrets.example.txt secrets.txt -Force
@@ -47,8 +47,8 @@ macOS/Linux는 `.venv/bin/python`을 쓰고, `secrets.example.txt`를 `secrets.t
 
 ```bash
 ssh your-user@your-server
-mkdir -p /path/to/ai-regression-impact-analyzer
-cd /path/to/ai-regression-impact-analyzer
+mkdir -p /path/to/qa-verification-management-system
+cd /path/to/qa-verification-management-system
 python3 -m venv .venv
 ```
 
@@ -63,7 +63,7 @@ python3 -m venv .venv
 ```text
 DEPLOY_SSH_HOST=your-server-ip
 DEPLOY_SSH_USER=your-user
-DEPLOY_TARGET_DIRECTORY=/path/to/ai-regression-impact-analyzer
+DEPLOY_TARGET_DIRECTORY=/path/to/qa-verification-management-system
 ```
 
 ```powershell
@@ -78,7 +78,7 @@ DEPLOY_TARGET_DIRECTORY=/path/to/ai-regression-impact-analyzer
 
 ```bash
 ssh your-user@your-server
-cd /path/to/ai-regression-impact-analyzer
+cd /path/to/qa-verification-management-system
 .venv/bin/pip install -r requirements.txt
 ```
 
@@ -98,7 +98,7 @@ nano secrets.txt   # GEMINI_API_KEY=...
 ### 4-5. 실행
 
 ```bash
-cd /path/to/ai-regression-impact-analyzer
+cd /path/to/qa-verification-management-system
 nohup .venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 12000 > output/logs/uvicorn.out 2>&1 &
 disown
 curl -fsS http://127.0.0.1:12000/health
@@ -133,16 +133,16 @@ sudo ufw status | grep 12000
 환경에 맞게 바꾼다):
 
 ```ini
-# /etc/systemd/system/ai-regression-impact.service
+# /etc/systemd/system/qa-verification-management-system.service
 [Unit]
-Description=AI Regression Impact Analyzer
+Description=QA 검증 관리 시스템
 After=network.target
 
 [Service]
 Type=simple
 User=your-user
-WorkingDirectory=/path/to/ai-regression-impact-analyzer
-ExecStart=/path/to/ai-regression-impact-analyzer/.venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 12000
+WorkingDirectory=/path/to/qa-verification-management-system
+ExecStart=/path/to/qa-verification-management-system/.venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 12000
 Restart=on-failure
 
 [Install]
@@ -151,8 +151,8 @@ WantedBy=multi-user.target
 
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable --now ai-regression-impact.service
-sudo systemctl status ai-regression-impact.service
+sudo systemctl enable --now qa-verification-management-system.service
+sudo systemctl status qa-verification-management-system.service
 ```
 
 **주의**: 다른 서비스와 같은 서버를 공유한다면, 기존 systemd 유닛·nginx·방화벽·DB 설정을 건드리지

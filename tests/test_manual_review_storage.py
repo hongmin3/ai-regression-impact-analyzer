@@ -120,3 +120,18 @@ def test_release_finding_preserves_description_and_result_status(tmp_path):
     finding = storage.list_release_findings(revision_id)[0]
     assert finding["description"] == "Now: 신규 흐름"
     assert finding["result_status"] == "FAIL"
+
+
+def test_cross_manual_impact_status_is_persisted(tmp_path):
+    storage = Storage(tmp_path / "app.db")
+    revision_id = storage.add_manual_revision("VXvue", "Service Manual", "W1", tmp_path / "r.docx")
+    impact_id = storage.add_cross_manual_impact(
+        revision_id, "Operation Manual", "operation.pdf", "release.docx", "Added",
+        "로그인 기능", "로그인 절차 설명", 2.5,
+    )
+
+    storage.update_cross_manual_impact_status(impact_id, "IMPACT_CONFIRMED")
+
+    impact = storage.list_cross_manual_impacts(revision_id)[0]
+    assert impact["target_manual"] == "Operation Manual"
+    assert impact["qa_status"] == "IMPACT_CONFIRMED"

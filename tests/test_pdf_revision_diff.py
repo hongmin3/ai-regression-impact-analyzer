@@ -1,4 +1,5 @@
 import fitz
+import base64
 import pytest
 
 from app.core.storage import Storage
@@ -83,3 +84,23 @@ def test_pdf_diff_caps_confidence_and_requires_human_review(tmp_path):
     assert change["confidence"] == 0.6
     assert change["ai_judgment"]["needs_human_review"] is True
     assert "PDF_DIFF_REVIEW_REQUIRED" in change["ai_judgment"]["reason_codes"]
+
+
+def test_pdf_image_change_is_detected_and_requires_review(tmp_path):
+    previous = tmp_path / "previous.pdf"
+    current = tmp_path / "current.pdf"
+    _write_pdf(previous, ["Same text"])
+    image_path = tmp_path / "screen.png"
+    image_path.write_bytes(base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR42mM4IScHAAK2AQUKW6YGAAAAAElFTkSuQmCC"))
+    document = fitz.open()
+    page = document.new_page()
+    page.insert_text((72, 72), "Same text")
+    page.insert_image(fitz.Rect(72, 100, 120, 148), filename=str(image_path))
+    document.save(current)
+    document.close()
+
+    result = extract_pdf_revision_diff(previous, current)
+
+    image_change = next(change for change in result.changes if change.kind == "pdf_image_change")
+    assert image_change.source_page == 1
+    assert image_change.review_required is True

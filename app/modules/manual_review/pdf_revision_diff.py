@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from difflib import SequenceMatcher
+import hashlib
 from pathlib import Path
 
 import fitz
@@ -18,9 +19,26 @@ def _page_lines(path: Path) -> list[list[str]]:
         raise ValueError(f"PDF 매뉴얼을 읽을 수 없습니다: {path.name}") from exc
 
 
+def _page_image_hashes(path: Path) -> list[list[str]]:
+    try:
+        with fitz.open(path) as document:
+            pages = []
+            for page in document:
+                hashes = []
+                for image in page.get_images(full=True):
+                    payload = document.extract_image(image[0]).get("image", b"")
+                    hashes.append(hashlib.sha256(payload).hexdigest())
+                pages.append(hashes)
+            return pages
+    except Exception as exc:
+        raise ValueError(f"PDF 매뉴얼 이미지를 읽을 수 없습니다: {path.name}") from exc
+
+
 def extract_pdf_revision_diff(previous_path: Path, current_path: Path) -> TrackChangesResult:
     previous_pages = _page_lines(previous_path)
     current_pages = _page_lines(current_path)
+    previous_images = _page_image_hashes(previous_path)
+    current_images = _page_image_hashes(current_path)
     result = TrackChangesResult(plain_text="\n".join(line for page in current_pages for line in page))
     for page_index in range(max(len(previous_pages), len(current_pages))):
         before = previous_pages[page_index] if page_index < len(previous_pages) else []
@@ -44,4 +62,14 @@ def extract_pdf_revision_diff(previous_path: Path, current_path: Path) -> TrackC
                         review_required=True,
                     )
                 )
+        before_images = previous_images[page_index] if page_index < len(previous_images) else []
+        after_images = current_images[page_index] if page_index < len(current_images) else []
+        if before_images != after_images:
+            result.changes.append(
+                TrackedChange(
+                    kind="pdf_image_change", author="", date="",
+                    text=f"PDF 이미지 변경 (이전 {len(before_images)}개 → 현재 {len(after_images)}개)",
+                    paragraph_index=page_index, source_page=page_index + 1, review_required=True,
+                )
+            )
     return result

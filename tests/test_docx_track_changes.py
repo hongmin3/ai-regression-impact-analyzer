@@ -64,3 +64,18 @@ def test_extract_track_changes_reads_real_docx_zip(tmp_path):
 
     assert result.changes[0].kind == "insertion"
     assert result.plain_text == "추가"
+
+
+def test_image_inside_tracked_change_requires_human_review():
+    body = (
+        '<w:p><w:ins w:author="연구소" w:date="2026-08-01T00:00:00Z"><w:r><w:drawing>'
+        '<wp:docPr xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" id="1" name="로그인 화면"/>'
+        '</w:drawing></w:r></w:ins></w:p>'
+    )
+
+    result = extract_track_changes_from_xml(_document_xml(body))
+
+    assert len(result.changes) == 1
+    assert result.changes[0].kind == "image_insertion"
+    assert result.changes[0].text == "이미지 변경 (로그인 화면)"
+    assert result.changes[0].review_required is True

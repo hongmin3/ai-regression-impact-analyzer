@@ -80,6 +80,14 @@ class Storage:
                     description TEXT NOT NULL DEFAULT '', result_status TEXT NOT NULL DEFAULT '',
                     created_at TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS manual_cross_impacts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    revision_id INTEGER NOT NULL REFERENCES manual_revisions(id),
+                    target_manual TEXT NOT NULL, source_document TEXT NOT NULL,
+                    release_source TEXT NOT NULL, category TEXT, title TEXT NOT NULL,
+                    evidence_text TEXT NOT NULL DEFAULT '', relevance_score REAL NOT NULL DEFAULT 0,
+                    qa_status TEXT NOT NULL DEFAULT 'REVIEW_REQUIRED', created_at TEXT NOT NULL
+                );
             """)
             # analyses는 기존 배포에 이미 존재할 수 있어 ADD COLUMN으로 안전하게 확장한다 (SQLite는 컬럼 추가만 지원).
             existing = {row["name"] for row in db.execute("PRAGMA table_info(analyses)")}
@@ -439,4 +447,35 @@ class Storage:
     def list_release_findings(self, revision_id: int) -> list[dict]:
         with self.connect() as db:
             rows = db.execute("SELECT * FROM manual_release_findings WHERE revision_id=? ORDER BY id", (revision_id,)).fetchall()
+            return [dict(row) for row in rows]
+
+    def add_cross_manual_impact(
+        self, revision_id: int, target_manual: str, source_document: str, release_source: str,
+        category: str, title: str, evidence_text: str, relevance_score: float,
+    ) -> int:
+        with self.connect() as db:
+            cursor = db.execute(
+                "INSERT INTO manual_cross_impacts(revision_id,target_manual,source_document,release_source,category,title,evidence_text,relevance_score,created_at) VALUES(?,?,?,?,?,?,?,?,?)",
+                (revision_id, target_manual, source_document, release_source, category, title, evidence_text, relevance_score, datetime.now(timezone.utc).isoformat()),
+            )
+            return int(cursor.lastrowid)
+
+    def list_cross_manual_impacts(self, revision_id: int) -> list[dict]:
+        with self.connect() as db:
+            rows = db.execute(
+                "SELECT * FROM manual_cross_impacts WHERE revision_id=? ORDER BY relevance_score DESC,id",
+                (revision_id,),
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+    def update_cross_manual_impact_status(self, impact_id: int, qa_status: str) -> None:
+        with self.connect() as db:
+            db.execute("UPDATE manual_cross_impacts SET qa_status=? WHERE id=?", (qa_status, impact_id))
+
+    def latest_manual_revisions_by_name(self, product: str) -> list[dict]:
+        with self.connect() as db:
+            rows = db.execute(
+                "SELECT r.* FROM manual_revisions r JOIN (SELECT manual_name,MAX(id) id FROM manual_revisions WHERE product=? AND status IN ('REVIEWED','BASELINE') GROUP BY manual_name) latest ON latest.id=r.id ORDER BY r.manual_name",
+                (product,),
+            ).fetchall()
             return [dict(row) for row in rows]

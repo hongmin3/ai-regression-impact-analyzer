@@ -19,6 +19,21 @@
 </section>
 {% endif %}
 
+{% if cross_manual_impacts %}
+<section>
+  <h2>다른 Manual 영향 확인</h2>
+  <p class="hint">Release Note/설계변경 항목이 같은 제품의 다른 매뉴얼 원문과 관련된 후보입니다. 자동 확정이 아니므로 담당 QA가 실제 반영 필요 여부를 결정하세요.</p>
+  {% for item in cross_manual_impacts %}<div style="border-bottom:1px solid #e2e8f0;padding:14px 0">
+    <p><strong>{{ item.target_manual }}</strong> · {{ item.title }} <span class="badge {{ item.qa_status }}">{{ item.qa_status }}</span></p>
+    <p class="hint">근거 문서: {{ item.source_document }} · Release 출처: {{ item.release_source }} · BM25 {{ '%.3f'|format(item.relevance_score) }}</p>
+    <p>{{ item.evidence_text }}</p>
+    <form method="post" action="/manual-review/revisions/{{ revision.id }}/cross-manual/{{ item.id }}/status" style="display:flex;gap:8px;align-items:center">
+      <select name="qa_status"><option value="REVIEW_REQUIRED" {% if item.qa_status=='REVIEW_REQUIRED' %}selected{% endif %}>확인 필요</option><option value="IMPACT_CONFIRMED" {% if item.qa_status=='IMPACT_CONFIRMED' %}selected{% endif %}>영향 있음</option><option value="NO_IMPACT" {% if item.qa_status=='NO_IMPACT' %}selected{% endif %}>영향 없음</option></select><button type="submit">QA 확정</button>
+    </form>
+  </div>{% endfor %}
+</section>
+{% endif %}
+
 {% if prior_open_comments %}
 <section>
   <h2>이전 Round 미해결 지적사항</h2>
@@ -50,7 +65,7 @@
   <div style="border-bottom:1px solid #e2e8f0;padding:14px 0">
     <div>
       <span class="badge">{{ {'insertion':'추가','deletion':'삭제','move_from':'이동(출발)','move_to':'이동(도착)','pdf_addition':'PDF 추가','pdf_deletion':'PDF 삭제','pdf_modification':'PDF 수정'}.get(c.kind, c.kind) }}</span>
-      {% if c.review_required %}<span class="badge">PDF_DIFF_REVIEW_REQUIRED</span>{% endif %}
+      {% if c.review_required %}<span class="badge">{{ 'IMAGE_CHANGE_REVIEW_REQUIRED' if 'image' in c.kind else 'PDF_DIFF_REVIEW_REQUIRED' }}</span>{% endif %}
       {% if not c.functional %}<span class="badge">단순 변경 (NON_FUNCTIONAL)</span>
       {% else %}<span class="badge">{{ c.decision|judgment_ko }}</span>{% if c.confidence is not none %}<span class="hint"> confidence {{ '%.2f'|format(c.confidence) }}</span>{% endif %}
       {% endif %}

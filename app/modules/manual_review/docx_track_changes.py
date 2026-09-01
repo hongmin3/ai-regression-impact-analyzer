@@ -47,6 +47,17 @@ def _text_of(element: ET.Element) -> str:
     return "".join(node.text or "" for node in element.iter() if node.tag in (f"{W_NS}t", f"{W_NS}delText"))
 
 
+def _has_image(element: ET.Element) -> bool:
+    return any(node.tag.rsplit("}", 1)[-1] in {"drawing", "pict", "blip"} for node in element.iter())
+
+
+def _image_description(element: ET.Element) -> str:
+    for node in element.iter():
+        if node.tag.rsplit("}", 1)[-1] == "docPr":
+            return node.get("descr") or node.get("name") or ""
+    return ""
+
+
 def extract_track_changes_from_xml(xml_bytes: bytes) -> TrackChangesResult:
     root = ET.fromstring(xml_bytes)
     result = TrackChangesResult()
@@ -57,16 +68,21 @@ def extract_track_changes_from_xml(xml_bytes: bytes) -> TrackChangesResult:
             kind = _KIND_BY_TAG.get(child.tag)
             if kind:
                 text = _text_of(child)
+                has_image = _has_image(child)
+                if has_image and not text.strip():
+                    description = _image_description(child)
+                    text = f"이미지 변경{f' ({description})' if description else ''}"
                 result.changes.append(
                     TrackedChange(
-                        kind=kind,
+                        kind=f"image_{kind}" if has_image else kind,
                         author=child.get(f"{W_NS}author", ""),
                         date=child.get(f"{W_NS}date", ""),
                         text=text,
                         paragraph_index=paragraph_index,
+                        review_required=has_image,
                     )
                 )
-                if kind in _KEPT_IN_PLAIN_TEXT:
+                if kind in _KEPT_IN_PLAIN_TEXT and not has_image:
                     paragraph_plain.append(text)
             elif child.tag == f"{W_NS}r":
                 paragraph_plain.append(_text_of(child))

@@ -171,6 +171,27 @@ def test_view_renders_missing_suspected_release_findings(monkeypatch, tmp_path):
     assert "정상 반영된 기능" not in response.text  # FOUND 항목은 누락 의심 섹션에 표시하지 않음
 
 
+def test_qa_can_confirm_cross_manual_impact(monkeypatch, tmp_path):
+    storage = Storage(tmp_path / "app.db")
+    monkeypatch.setattr(manual_review_router, "storage", storage)
+    revision_id = storage.add_manual_revision("VXvue", "Service Manual", "W1", tmp_path / "r.docx")
+    impact_id = storage.add_cross_manual_impact(
+        revision_id, "Operation Manual", "operation.pdf", "release.docx", "Changed",
+        "로그인 흐름", "로그인 화면 설명", 1.25,
+    )
+
+    view = TestClient(app).get(f"/manual-review/revisions/{revision_id}/view")
+    updated = TestClient(app).post(
+        f"/manual-review/revisions/{revision_id}/cross-manual/{impact_id}/status",
+        data={"qa_status": "IMPACT_CONFIRMED"}, follow_redirects=False,
+    )
+
+    assert "다른 Manual 영향 확인" in view.text
+    assert "Operation Manual" in view.text
+    assert updated.status_code == 303
+    assert storage.list_cross_manual_impacts(revision_id)[0]["qa_status"] == "IMPACT_CONFIRMED"
+
+
 def test_qa_decision_override_persists(monkeypatch, tmp_path):
     storage = Storage(tmp_path / "app.db")
     monkeypatch.setattr(manual_review_router, "storage", storage)

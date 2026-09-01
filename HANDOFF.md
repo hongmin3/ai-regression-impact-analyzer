@@ -1,4 +1,8 @@
-# AI Regression Impact Analyzer — 작업 인수인계
+# QA 검증 관리 시스템 — 작업 인수인계
+
+(구 프로젝트명: AI Regression Impact Analyzer / `ai-regression-impact-analyzer`. 2026-09-01
+표시명·GitHub repo·로컬 폴더명을 변경했다. 원격 서버 배포 경로는 운영 리스크상 의도적으로
+이전 이름을 그대로 유지한다 — 아래 참고.)
 
 ## 1. 프로젝트 목적
 
@@ -6,9 +10,12 @@ SW 변경사항과 제품 사양서/Manual(PDF 또는 Word `.docx`), Test Case E
 
 ## 2. 작업 위치
 
-- Canonical source: `C:\Users\2024980\Documents\자동화\ai-regression-impact-analyzer`
-- Ubuntu 배포본: `/home/ubuntu/ai-regression-impact-analyzer`
-- 공개 GitHub: `https://github.com/hongmin3/ai-regression-impact-analyzer`
+- Canonical source: `C:\Users\2024980\Documents\자동화\qa-verification-management-system`
+- Ubuntu 배포본: `/home/ubuntu/ai-regression-impact-analyzer` (의도적으로 구 이름 유지 —
+  운영 중인 서비스 경로를 바꾸려면 systemd 없이 nohup으로 떠 있는 프로세스를 내리고
+  venv/경로 참조를 전부 재검증해야 해서 리스크 대비 실익이 낮다고 판단. `.deploy.env`의
+  `DEPLOY_TARGET_DIRECTORY`로 로컬 폴더명과 독립적으로 관리된다)
+- 공개 GitHub: `https://github.com/hongmin3/qa-verification-management-system`
 - 서버 접속: SSH config/key를 사용하며 비밀번호를 파일에 저장하지 않는다.
 
 로컬 소스를 기준으로 개발하고 테스트를 통과한 결과만 서버에 배포한다. 서버 배포 폴더는 Git 저장소가 아닌 일반 디렉터리다.
@@ -103,6 +110,40 @@ SW 변경사항과 제품 사양서/Manual(PDF 또는 Word `.docx`), Test Case E
   - **실제 파일 전체 파이프라인 E2E 검증**: 실제 Round 1 Service Manual(799건 변경, 704건 functional) + 실제 Release Note(68건) + 실제 설계검토보고서(40건) + 실제 등록 사양서로 `ManualRevisionReviewer.run()` 전체 실행(mock AI, 42초) — Release Scope 108건 중 102건 FOUND·6건 MISSING_SUSPECTED, 결과가 실제로 QA가 확인해볼 만한 합리적인 항목으로 확인됨 (검증용 스크립트는 사내 문서를 다루므로 실행 후 삭제, 리포지토리에는 합성 fixture 기반 테스트만 커밋)
   - 모든 코드에서 제품명 하드코딩 여부 재점검(사용자 요청) — `comment_writer.py`의 Author를 `{product} QA AI`로 조립하도록 수정, 그 외 로직은 이미 `product` 파라미터화되어 있었음을 확인
   - 테스트 19건 추가, `pytest -q` **130 passed**
+- **2026-09-01 3차 (QA 플랫폼 허브)**: 루트(`/`)를 공용 QA 자동화 허브로 전환하고 기존 Regression
+  분석 시작 화면을 `/impact-analyzer`로 분리. `/manual-review`와 함께 두 기능을 카드로 선택할 수
+  있으며 기존 `/analyses`·`/knowledge`·동기화 API 경로는 호환성 유지. 공유 DB와 새 QA 모듈의
+  확장 원칙은 `docs/SHARED_PLATFORM_ARCHITECTURE.md`에 정리. `pytest -q` 132 passed 후 실서버
+  재배포·재기동, 주요 6개 페이지 200 응답까지 검증
+- **2026-09-01 4차 (공용 Knowledge + 이전 Comment 참고 판정)**: 사양서·TC 관리를
+  `app/modules/knowledge/` 독립 모듈로 분리해 회귀 분석과 매뉴얼 검증이 함께 사용. 매뉴얼
+  화면에서 제품별 SRS 파일명·등록 시각·최근 동기화 상태 확인 및 공용 Knowledge에서 추가·삭제
+  가능. 이전 Round의 미해결 Comment는 전체 조상 계보에서 이어받아 현재 Track Changes와 로컬
+  유사도를 비교해 `반영 의심/미반영 의심/판단 불가`를 참고 표시(QA가 확정 전까지 상태 자동
+  변경 없음)
+- **2026-09-01 5차 (PDF 매뉴얼 리비전 diff)**: 첫 PDF를 Baseline으로 등록하고 다음 PDF부터
+  이전 PDF를 선택해 페이지별 텍스트 추가·삭제·수정을 추출. 위치/레이아웃 해석 오차를 감안해
+  AI confidence를 최대 60%로 제한하고 모든 항목에 `PDF_DIFF_REVIEW_REQUIRED` 표시. PDF에는
+  Word Comment를 생성하지 않고 QA가 결과 화면에서 직접 최종 판정
+- **2026-09-01 6차 (Release/설계검토 상세 근거)**: Release Note의 `Description for Each
+  Version`에서 기존 항목의 Before/Now 상세 설명을 추출해 검색·AI 보조 근거에 추가(중복 없음).
+  설계검토보고서의 변경 결과 절에서 Pass/Fail을 문제 분석 제목과 연결하며 Fail 항목은 서버가
+  `DESIGN_REVIEW_FAILED`와 Human Review 필요 상태를 강제. 최종 기능 사실 판단은 계속 SRS를
+  최우선으로 함
+- **2026-09-01 7차 (Cross-Manual 영향분석 + 이미지 변경 Human Review Gate, 프로젝트 명칭
+  변경)**:
+  - Cross-Manual 영향분석(스펙 §11): 같은 제품의 다른 매뉴얼 최신 리비전(없으면 Knowledge
+    문서)을 이번 Release/설계 변경과 BM25로 대조해 `manual_cross_impacts` 테이블에 저장하고
+    결과 화면에서 QA가 확인 필요/영향 있음/영향 없음으로 확정 (`app/modules/manual_review/cross_manual.py`)
+  - 이미지 변경 Human Review Gate(스펙 §8-1): DOCX Track Changes 내부 drawing/pict 삽입·삭제와
+    PDF 페이지 이미지 SHA-256 hash 변화를 감지해 `IMAGE_CHANGE_REVIEW_REQUIRED`를 강제
+    (`docx_track_changes.py::_has_image`, `pdf_revision_diff.py::_page_image_hashes`)
+  - reviewer 파이프라인에 "다른 Manual 영향 추적" 단계 추가(5→6단계)
+  - 테스트 37건 추가, 합성 PNG fixture의 zlib 오류(PyMuPDF `incorrect data check`)를 유효한
+    최소 PNG bytes로 교체해 해결 — `pytest -q` **167 passed**
+  - 프로젝트 표시명을 **QA 검증 관리 시스템**으로, GitHub repo/로컬 폴더 slug를
+    **qa-verification-management-system**으로 통일(위 2장 참고). 원격 서버 배포 경로는
+    의도적으로 변경하지 않음
 
 ## 5. 현재 남은 작업
 
@@ -122,7 +163,11 @@ SW 변경사항과 제품 사양서/Manual(PDF 또는 Word `.docx`), Test Case E
 11. Knowledge 제품별 필터, 분석 화면 제품 없음 안내 → **완료**
 12. VXvue 실제 지식파일(사양서 6개+매뉴얼 5개+TC 4개, 총 6,407 TC) 로컬·서버 모두 기본 등록 완료 (제품 "VXvue", 버전 "1.0")
 13. 2026-09-01 코드 구조 리팩터링 반영 서버 재배포 — 아직 미착수 (로컬 변경만 완료, 동작 100% 동일하므로 급하지 않지만 다음 배포 시 포함 필요)
-14. "매뉴얼 개정 검증"(`app/modules/manual_review/`) — 2026-09-01 업로드/AI 2단계 판정/결과 화면/QA Override/Word Comment 삽입까지 동작하는 파이프라인 완료(위 4장 참고). 남은 작업(PDF diff, Release Note/설계검토보고서 파서, Cross-Manual, 이미지 Human Review Gate, 실제 예시 파일 E2E)은 `NEXT_STEPS.md`, 결정 필요 항목은 `OPEN_QUESTIONS.md` 참고
+14. "매뉴얼 개정 검증"(`app/modules/manual_review/`) — 업로드/AI 2단계 판정/결과 화면/QA
+    Override/Word Comment 삽입/PDF diff/Release Note·설계검토보고서 파서/Cross-Manual
+    영향분석/이미지 변경 Human Review Gate까지 전부 구현·테스트 완료(위 4장 참고). 남은 것은
+    실제 예시 파일 기반 E2E 승격, 비용/캐시 대시보드 UI — `NEXT_STEPS.md`, 결정 필요 항목은
+    `OPEN_QUESTIONS.md` 참고
 
 ## 6. systemd 승인 대기안
 
@@ -152,7 +197,7 @@ SW 변경사항과 제품 사양서/Manual(PDF 또는 Word `.docx`), Test Case E
 ## 8. 개발 및 검증 명령
 
 ```powershell
-cd "C:\Users\2024980\Documents\자동화\ai-regression-impact-analyzer"
+cd "C:\Users\2024980\Documents\자동화\qa-verification-management-system"
 .\.venv\Scripts\python.exe -m pytest -q
 .\scripts\run.ps1
 ```
