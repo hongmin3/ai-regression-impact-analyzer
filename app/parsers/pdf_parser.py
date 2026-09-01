@@ -2,7 +2,7 @@ from pathlib import Path
 
 import fitz
 
-from app.core.schemas import SpecificationChunk
+from app.modules.impact_analyzer.schemas import SpecificationChunk
 
 
 def extract_pdf_text(path: Path) -> str:

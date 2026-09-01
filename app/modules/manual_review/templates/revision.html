@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block main_class %}wide{% endblock %}
+{% block content %}
+<section>
+  <h2>매뉴얼 개정 검증 결과</h2>
+  <p>{{ revision.product }} · {{ revision.manual_name }} · {{ revision.revision_label }} (Round {{ revision.round_number }}) · 상태 <span class="badge {{ revision.status }}">{{ revision.status }}</span></p>
+  <p class="hint">판정 요약:
+    {%- for label, count in decision_counts.items() %} {{ label|judgment_ko }} {{ count }}건{% endfor %}
+    {%- if not decision_counts %} (분석 대상 변경 없음){% endif %}
+  </p>
+  <p><a href="/manual-review/revisions/{{ revision.id }}/comment-docx">[Word Comment 삽입 DOCX 생성]</a> <span class="hint">— 문제로 판정된 항목마다 원본 위치에 Comment를 추가한 새 파일을 내려받습니다 (원본 Track Changes·기존 Comment는 유지).</span></p>
+</section>
+
+{% if missing_findings %}
+<section>
+  <h2>누락 의심 (Release Note/설계검토보고서 대비)</h2>
+  <p class="hint">Release Note 또는 설계검토보고서에는 있으나 이번 리비전의 매뉴얼 변경 중에서는 관련 항목을 찾지 못한 것들입니다. 자동 판정이 아니라 검색 기반 추정이므로 반드시 QA가 직접 확인하세요.</p>
+  <ul>{% for f in missing_findings %}<li>[{{ f.category or '-' }}] {{ f.title }} <span class="hint">(출처: {{ f.source }})</span></li>{% endfor %}</ul>
+</section>
+{% endif %}
+
+{% if prior_open_comments %}
+<section>
+  <h2>이전 Round 미해결 지적사항</h2>
+  <p class="hint">자동 반영 여부 판정은 하지 않습니다 — 이번 리비전에서 실제로 반영됐는지 QA가 직접 확인하세요.</p>
+  <ul>{% for c in prior_open_comments %}<li>{{ c.comment_text }} <span class="hint">(관련 변경: {{ c.change_text[:80] }})</span></li>{% endfor %}</ul>
+</section>
+{% endif %}
+
+<section>
+  <h2>변경사항 ({{ changes|length }}건)</h2>
+  {% if not changes %}<p>Track Changes가 감지되지 않았습니다.</p>{% endif %}
+  {% for c in changes %}
+  <div style="border-bottom:1px solid #e2e8f0;padding:14px 0">
+    <div>
+      <span class="badge">{{ {'insertion':'추가','deletion':'삭제','move_from':'이동(출발)','move_to':'이동(도착)'}.get(c.kind, c.kind) }}</span>
+      {% if not c.functional %}<span class="badge">단순 변경 (NON_FUNCTIONAL)</span>
+      {% else %}<span class="badge">{{ c.decision|judgment_ko }}</span>{% if c.confidence is not none %}<span class="hint"> confidence {{ '%.2f'|format(c.confidence) }}</span>{% endif %}
+      {% endif %}
+      {% if c.qa_decision %}<span class="badge">QA 재판정: {{ c.qa_decision|judgment_ko }}</span>{% endif %}
+    </div>
+    <p>{{ c.text }}</p>
+    <p class="hint">작성자 {{ c.author or '-' }} · {{ c.change_date or '-' }} · 문단 #{{ c.paragraph_index }}</p>
+    {% if c.functional and c.ai_judgment %}
+      {% if c.ai_judgment.problem %}<p><strong>문제:</strong> {{ c.ai_judgment.problem }}</p>{% endif %}
+      {% if c.ai_judgment.qa_comment %}<p><strong>QA Comment 초안:</strong> {{ c.ai_judgment.qa_comment }}</p>{% endif %}
+      {% if c.ai_judgment.recommended_manual_text %}<p><strong>권장 문구:</strong> {{ c.ai_judgment.recommended_manual_text }}</p>{% endif %}
+      {% if c.ai_judgment.evidence %}<ul>{% for e in c.ai_judgment.evidence %}<li>[{{ e.type }}] {{ e.srs_no or '-' }} {{ e.srs_title }} ({{ e.source_file }} p.{{ e.page }}) — 시각확인: {{ e.visual_verification_status }}</li>{% endfor %}</ul>{% endif %}
+    {% endif %}
+    {% if c.functional %}
+    <form method="post" action="/manual-review/revisions/{{ revision.id }}/changes/{{ c.id }}/qa-decision" style="display:flex;gap:8px;align-items:center;margin-top:8px">
+      <select name="qa_decision"><option value="">QA 판정 변경...</option>{% for value, label in judgment_options %}<option value="{{ value }}" {% if c.qa_decision==value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+      <input type="text" name="qa_note" placeholder="변경 사유 (선택)" value="{{ c.qa_note or '' }}">
+      <button type="submit">저장</button>
+    </form>
+    {% endif %}
+  </div>
+  {% endfor %}
+</section>
+{% endblock %}

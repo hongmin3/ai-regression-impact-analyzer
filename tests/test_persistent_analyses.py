@@ -3,9 +3,9 @@ from datetime import datetime, timezone
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.core.schemas import AnalysisResult, ChangeAnalysis
 from app.core.storage import Storage
-from app.web import routes
+from app.modules.impact_analyzer import router as routes
+from app.modules.impact_analyzer.schemas import AnalysisResult, ChangeAnalysis
 
 
 def _result(analysis_id: str) -> dict:
@@ -63,7 +63,7 @@ def test_job_status_reads_persisted_analysis(monkeypatch, tmp_path):
 
 def test_create_analysis_initializes_stage_tracking(tmp_path):
     storage = Storage(tmp_path / "app.db")
-    storage.create_analysis("job-stage")
+    storage.create_analysis("job-stage", stage_total=8)
 
     job = storage.get_analysis("job-stage")
 
@@ -75,9 +75,9 @@ def test_create_analysis_initializes_stage_tracking(tmp_path):
 
 def test_update_stage_advances_progress(tmp_path):
     storage = Storage(tmp_path / "app.db")
-    storage.create_analysis("job-stage-2")
+    storage.create_analysis("job-stage-2", stage_total=8)
 
-    storage.update_stage("job-stage-2", 3, "TC 후보 검색")
+    storage.update_stage("job-stage-2", 3, "TC 후보 검색", 8)
     job = storage.get_analysis("job-stage-2")
 
     assert job["stage"] == "TC 후보 검색"
@@ -123,7 +123,7 @@ def test_record_sync_log_endpoint(monkeypatch, tmp_path):
 def test_trigger_specification_sync_blocked_when_unavailable(monkeypatch, tmp_path):
     persisted = Storage(tmp_path / "app.db")
     monkeypatch.setattr(routes, "storage", persisted)
-    import app.sync.vxvue_spec as vxvue_spec
+    import app.modules.impact_analyzer.vxvue_spec_sync as vxvue_spec
     monkeypatch.setattr(vxvue_spec, "is_available_on_this_host", lambda *a, **k: False)
 
     response = TestClient(app).post("/knowledge/sync/specification")

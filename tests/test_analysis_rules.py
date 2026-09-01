@@ -1,7 +1,7 @@
-from app.analyzers.change_analyzer import analyze_change_rules, trim_by_relevance
-from app.analyzers.tc_candidate_selector import select_candidates
-from app.analyzers.validation import attach_specification_references, classify_confidence, validate_decisions, validate_draft_test_cases
-from app.core.schemas import DraftTestCase, EvidenceLevel, Impact, ImpactDecision, RevisionMark, SpecificationChunk, TestCase
+from app.modules.impact_analyzer.change_analyzer import analyze_change_rules, trim_by_relevance
+from app.modules.impact_analyzer.tc_candidate_selector import select_candidates
+from app.modules.impact_analyzer.validation import attach_specification_references, classify_confidence, validate_decisions, validate_draft_test_cases
+from app.modules.impact_analyzer.schemas import DraftTestCase, EvidenceLevel, Impact, ImpactDecision, RevisionMark, SpecificationChunk, TestCase
 
 
 def decision(confidence: float) -> ImpactDecision:

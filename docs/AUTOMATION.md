@@ -21,7 +21,7 @@ scripts/sync_vxvue_spec.py (Windows 작업 스케줄러)   ├─ BackgroundSche
 
 ## 2. AI 분석 Flow (8단계, 가짜 % 없음)
 
-`app/analyzers/regression_analyzer.py::RegressionAnalyzer._execute`가 아래 8단계를 순서대로
+`app/modules/impact_analyzer/regression_analyzer.py::RegressionAnalyzer._execute`가 아래 8단계를 순서대로
 지나가며, 각 단계 시작 시점에 `Storage.update_stage(job_id, index, name)`로 SQLite `analyses`
 테이블에 실제 진행 상태를 기록한다. 프론트엔드는 `stage_index/stage_total`로 퍼센트를 **계산**할
 뿐, AI 응답 여부와 무관하게 임의로 증가시키지 않는다.
@@ -49,9 +49,9 @@ scripts/sync_vxvue_spec.py (Windows 작업 스케줄러)   ├─ BackgroundSche
 읽는다.
 
 ```text
-app/sync/vxvue_spec.py   ← 실제 로직 (run, is_available_on_this_host, report_sync_log)
+app/modules/impact_analyzer/vxvue_spec_sync.py   ← 실제 로직 (run, is_available_on_this_host, report_sync_log)
   ├─ scripts/sync_vxvue_spec.py   (Windows 작업 스케줄러용 CLI, 위 모듈을 그대로 호출)
-  └─ app/web/routes.py            (POST /knowledge/sync/specification, 같은 프로세스에서 직접 호출)
+  └─ app/modules/impact_analyzer/router.py            (POST /knowledge/sync/specification, 같은 프로세스에서 직접 호출)
 ```
 
 동작:
@@ -162,7 +162,7 @@ Get-ScheduledTask -TaskName "AIRegressionAnalyzer_VXvueSpecSync" | Format-List T
   생략).
 - 같은 문서의 이전 리비전(파일명에서 `(YYMMDD)` 날짜 부분만 다른 동일 문서, 예:
   `VXvue 사양서2(260824).pdf` → `VXvue 사양서2(260831).pdf`)이 Knowledge에 남아 있으면, 신규
-  파일 업로드 성공 직후 자동으로 삭제된다(`app/sync/vxvue_spec.py::_replace_stale_revisions`).
+  파일 업로드 성공 직후 자동으로 삭제된다(`app/modules/impact_analyzer/vxvue_spec_sync.py::_replace_stale_revisions`).
   삭제는 신규 등록이 성공한 뒤에만 실행되므로 업로드가 실패하면 기존 리비전은 그대로 남는다.
 
 ## 11. 로그 위치
@@ -201,11 +201,11 @@ SharePoint 재도입 시 필요한 환경변수(`SHAREPOINT_TENANT_ID`/`SHAREPOI
 
 1. `config/products/<product>.yaml`을 새로 만든다(`vxvue.yaml` 구조 그대로 복사).
 2. 그 제품의 사양서 출처가 다르면 `specification.source`를 바꾸고(예: 다른 크롤러, 다른
-   폴더), `app/sync/`에 그 출처 전용 모듈을 하나 추가한다(`vxvue_spec.py`와 같은 패턴 —
+   폴더), `app/modules/impact_analyzer/`에 그 출처 전용 모듈을 하나 추가한다(`vxvue_spec.py`와 같은 패턴 —
    `run()`/`is_available_on_this_host()`/`report_sync_log()` 인터페이스만 맞추면 됨).
 3. `app/core/scheduler.py`의 `start_scheduler()`에 그 제품의 sync job을 추가한다.
-4. `app/web/routes.py`의 `/knowledge/sync/{kind}` 계열 엔드포인트와 `/knowledge` 페이지의
+4. `app/modules/impact_analyzer/router.py`의 `/knowledge/sync/{kind}` 계열 엔드포인트와 `/knowledge` 페이지의
    동기화 상태 카드는 제품명을 매개변수화하면 재사용 가능하다(현재는 VXvue 하드코딩 — 확장
    시 가장 먼저 손볼 지점).
 5. TC를 SharePoint 등 외부에서 자동 수집하고 싶다면 §4의 App Registration 절차를 먼저
-   진행한 뒤 `app/sync/sharepoint_client.py`(신규)를 같은 인터페이스로 추가한다.
+   진행한 뒤 `app/modules/impact_analyzer/sharepoint_client.py`(신규)를 같은 인터페이스로 추가한다.

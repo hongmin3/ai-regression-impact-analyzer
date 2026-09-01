@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from app.core.config import get_settings
-from app.core.schemas import AnalysisResult
+from app.modules.impact_analyzer.schemas import AnalysisResult
 
 CONFIRM_NEEDED = "확인 필요"
 

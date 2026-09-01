@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block main_class %}wide{% endblock %}
+{% block content %}
+<section>
+  <h2>매뉴얼 개정 검증</h2>
+  <p class="hint">연구소가 제출한 개정 Manual(Word Track Changes .docx)이 등록된 사양서(SRS)를 정확히 반영했는지 AI가 1차 검토합니다. Release Note/설계검토보고서를 함께 등록하면 매뉴얼에 반영되지 않은 것으로 보이는 항목(누락 의심)도 함께 표시합니다. 이미지 변경 검토, Cross-Manual 분석 등은 아직 준비 중입니다 (<code>NEXT_STEPS.md</code> 참고).</p>
+  <form id="revision-form">
+    <label>제품<select name="product" required><option value="">선택</option>{% for p in products %}<option value="{{ p }}">{{ p }}</option>{% endfor %}<option value="__new__">(새 제품 입력)</option></select></label>
+    <label id="new-product-label" hidden>새 제품명<input type="text" name="new_product"></label>
+    <label>Manual 종류<input type="text" name="manual_name" placeholder="예: VXvue Service Manual" required></label>
+    <label>Revision 표기<input type="text" name="revision_label" placeholder="예: V1.1.0 W1" required></label>
+    <label>이전 Round (선택, 없으면 최초 등록)
+      <select name="parent_revision_id"><option value="">없음 (Official Baseline)</option>{% for r in revisions %}<option value="{{ r.id }}">#{{ r.id }} · {{ r.product }} · {{ r.manual_name }} · {{ r.revision_label }} (Round {{ r.round_number }})</option>{% endfor %}</select>
+    </label>
+    <label>개정 Manual (Word Track Changes .docx)
+      <div class="dropzone" id="revision-dropzone" data-for="revision-file" data-placeholder="클릭하여 선택하거나 파일을 끌어놓으세요">클릭하여 선택하거나 파일을 끌어놓으세요</div>
+      <input type="file" id="revision-file" name="file" accept=".docx" hidden required>
+    </label>
+    <label>Release Note (선택, 미첨부 시 이 제품에 등록된 최신 문서를 자동 사용)
+      <input type="file" name="release_note_file" accept=".pdf,.docx">
+    </label>
+    <label>설계검토보고서 (선택, 미첨부 시 이 제품에 등록된 최신 문서를 자동 사용)
+      <input type="file" name="design_review_file" accept=".pdf,.docx">
+    </label>
+    <button>검증 시작</button>
+  </form>
+  <div id="progress" class="progress-panel" hidden>
+    <div class="progress-head"><span id="progress-stage">대기 중</span><span id="progress-percent">0%</span></div>
+    <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
+  </div>
+  <div id="status" class="status"></div>
+</section>
+<section>
+  <h2>검증 이력</h2>
+  {% if revisions %}
+  <div class="table-wrap"><table class="history">
+    <thead><tr><th>등록 시각</th><th>제품</th><th>Manual</th><th>Revision</th><th>Round</th><th>상태</th><th>결과</th></tr></thead>
+    <tbody>{% for r in revisions %}<tr>
+      <td><span data-utc-time="{{ r.created_at }}">{{ r.created_at[:19].replace('T', ' ') }} UTC</span></td>
+      <td>{{ r.product }}</td>
+      <td>{{ r.manual_name }}</td>
+      <td>{{ r.revision_label }}</td>
+      <td>{{ r.round_number }}</td>
+      <td><span class="badge {{ r.status }}">{{ r.status }}</span></td>
+      <td><a href="/manual-review/revisions/{{ r.id }}/view">결과 보기</a></td>
+    </tr>{% endfor %}</tbody>
+  </table></div>
+  {% else %}<p>아직 등록된 검증 이력이 없습니다.</p>{% endif %}
+</section>
+<script>
+const f=document.querySelector('#revision-form'),s=document.querySelector('#status');
+const progress=document.querySelector('#progress'),pStage=document.querySelector('#progress-stage'),pPercent=document.querySelector('#progress-percent'),pFill=document.querySelector('#progress-fill');
+f.querySelector('[name=product]').addEventListener('change',e=>{
+  document.querySelector('#new-product-label').hidden = e.target.value !== '__new__';
+});
+f.addEventListener('submit',async e=>{
+  e.preventDefault();
+  const fd=new FormData(f);
+  if(fd.get('product')==='__new__'){fd.set('product',(fd.get('new_product')||'').trim());}
+  fd.delete('new_product');
+  if(!fd.get('product')){s.textContent='제품을 선택하거나 입력하세요.';return}
+  s.textContent='';
+  progress.hidden=false;pStage.textContent='업로드 중...';pPercent.textContent='0%';pFill.style.width='0%';pFill.classList.remove('failed');
+  const r=await fetch('/manual-review/revisions',{method:'POST',body:fd});
+  const d=await r.json();
+  if(!r.ok){progress.hidden=true;s.textContent=d.detail||'실패';return}
+  const source=new EventSource(d.status_url+'/stream');
+  source.onmessage=(event)=>{
+    const job=JSON.parse(event.data);
+    const total=job.stage_total||5,index=job.stage_index||0;
+    const percent=Math.round((index/total)*100);
+    pStage.textContent=(job.status==='DONE')?'완료':(job.status==='FAILED')?`실패 (${job.stage||'-'})`:(job.stage||'대기 중');
+    pPercent.textContent=percent+'%';pFill.style.width=percent+'%';pFill.classList.toggle('failed',job.status==='FAILED');
+    if(job.status==='DONE'){
+      source.close();
+      const missing=job.result.release_scope_missing_suspected||0;
+      const missingText=job.result.release_scope_total?` · 누락 의심 ${missing}/${job.result.release_scope_total}건`:'';
+      s.innerHTML=`완료 · 변경 ${job.result.total_changes}건(분석 대상 ${job.result.functional_changes}건)${missingText} · <a href="/manual-review/revisions/${job.result.revision_id}/view">결과 보기</a>`;
+    }
+    if(job.status==='FAILED'){source.close();s.textContent=`실패 (${job.stage||'-'} 단계): `+(job.error||'알 수 없는 오류')}
+  };
+  source.onerror=()=>{source.close();if(!s.textContent)s.textContent='진행 상태 연결이 끊어졌습니다. 검증 이력에서 결과를 확인하세요.'};
+});
+</script>
+{% endblock %}

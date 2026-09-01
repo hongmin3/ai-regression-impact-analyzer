@@ -12,6 +12,32 @@ Change Document → Rule 기반 Change 추출(기준 사양서 diff) → BM25 Sp
 
 파싱·검색·후보 선정·검증·Report 생성은 Python Rule Engine이 담당합니다. 의미적인 변경 영향과 Regression 필요성만 Gemini가 판단하며, 사양서·TC 전체를 통째로 Gemini에 보내지 않습니다.
 
+### 코드 구조
+
+하나의 FastAPI 서버(`app/main.py`) 안에서 여러 기능을 독립적인 URL로 서비스합니다.
+
+```text
+app/
+├─ core/       공용 인프라 (설정, 저장소, Gemini 클라이언트, 프롬프트 로더, 스케줄러)
+├─ prompts/    AI 프롬프트 YAML (버전 관리)
+├─ modules/
+│   ├─ impact_analyzer/   이 문서가 설명하는 Regression 영향도 분석 기능 (URL: /, /analyses, /knowledge ...)
+│   └─ manual_review/     VXvue 매뉴얼 개정 검증 기능 (URL: /manual-review) — 아래 참고
+└─ web/        모듈별 라우터를 한 서버에 취합하는 얇은 공용 계층 + 공용 template/static
+```
+
+각 모듈은 자신의 라우터·스키마·서비스 로직·템플릿을 소유하며, `app/web/router.py`가 URL prefix만 결정해 하나의 서버에 붙입니다.
+
+### 매뉴얼 개정 검증 (`/manual-review`)
+
+연구소가 제출한 Word Track Changes(`.docx`) 개정 Manual이 최신 SRS(=impact_analyzer가 이미
+동기화하는 등록 사양서)를 정확히 반영했는지 AI로 1차 검토합니다: Track Changes 구조화 추출 →
+단순 변경(NON_FUNCTIONAL_CHANGE) 필터링 → SRS 근거 로컬 BM25 검색 → 2단계 AI 판정(1차
+PASS면 2차 상세 호출 생략) → 결과 화면(QA Override 가능) → Word Comment 삽입 DOCX 다운로드.
+Round 계보(이전 리비전과의 부모-자식 관계)를 추적하지만, 이전 Round 지적사항의 자동 반영
+판정은 아직 하지 않습니다(QA가 직접 확인). 남은 작업은 [`NEXT_STEPS.md`](NEXT_STEPS.md), 결정이
+필요한 항목은 [`OPEN_QUESTIONS.md`](OPEN_QUESTIONS.md)를 참고하세요.
+
 ## 주요 기능
 
 - PDF/Word(`.docx`) 사양서, 다중 시트 TC Excel 자동 파싱

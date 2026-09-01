@@ -1,6 +1,6 @@
 import httpx
 
-from app.sync.vxvue_spec import _base_name, _replace_stale_revisions
+from app.modules.impact_analyzer.vxvue_spec_sync import _base_name, _replace_stale_revisions
 import logging
 
 

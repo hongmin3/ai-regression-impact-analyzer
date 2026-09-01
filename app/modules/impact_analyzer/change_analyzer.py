@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 
-from app.core.schemas import ChangeAnalysis
+from app.modules.impact_analyzer.schemas import ChangeAnalysis
 from app.retrieval.bm25_retriever import BM25Retriever
 
 RISK_WORDS = ("저장", "설정", "호환", "마이그레이션", "DICOM", "인터페이스", "삭제", "변환", "workflow", "database", "UI")

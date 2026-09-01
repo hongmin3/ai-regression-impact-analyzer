@@ -1,12 +1,12 @@
 from datetime import datetime, timezone
 
-from app.core.gemini_client import GeminiClient
-from app.core.schemas import AnalysisResult, ChangeAnalysis, ChangeItem, DraftTestCase, Impact, ImpactDecision, SpecificationChunk, TestCase
 from app.core.storage import Storage
+from app.modules.impact_analyzer.ai_client import ImpactAnalysisAIClient
+from app.modules.impact_analyzer.schemas import AnalysisResult, ChangeAnalysis, ChangeItem, DraftTestCase, Impact, ImpactDecision, SpecificationChunk, TestCase
 from openpyxl import load_workbook
 
-from app.reports.html_report import create_html_report, create_xlsx_export
-from app.reports.tc_draft import create_tc_draft_markdown
+from app.modules.impact_analyzer.html_report import create_html_report, create_xlsx_export
+from app.modules.impact_analyzer.tc_draft import create_tc_draft_markdown
 
 
 def test_mock_gemini_structured_output(tmp_path):
@@ -15,7 +15,7 @@ def test_mock_gemini_structured_output(tmp_path):
         "draft_test_cases": [{"changed_feature": "신규 저장 옵션 추가", "evidence_chunk_ids": ["spec-p1-0"]}],
         "token_usage": {"prompt_tokens": 100, "candidate_tokens": 20, "total_tokens": 120},
     }
-    client = GeminiClient(Storage(tmp_path / "test.db"), responder=lambda _: response)
+    client = ImpactAnalysisAIClient(Storage(tmp_path / "test.db"), responder=lambda _: response)
     values = client.analyze(ChangeAnalysis(changed_features=["설정 저장"]), [TestCase(tc_id="TC-1")], [SpecificationChunk(chunk_id="spec-p1-0", document_id="spec", page=1, text="설정 저장")])
     assert values[0].impact is Impact.HIGH
     assert client.request_count == 1

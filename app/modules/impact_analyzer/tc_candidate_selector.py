@@ -1,4 +1,4 @@
-from app.core.schemas import ChangeAnalysis, TestCase
+from app.modules.impact_analyzer.schemas import ChangeAnalysis, TestCase
 from app.retrieval.bm25_retriever import BM25Retriever
 
 

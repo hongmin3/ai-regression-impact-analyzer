@@ -8,9 +8,9 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill
 
 from app.core.config import get_settings
-from app.core.schemas import AnalysisResult
+from app.modules.impact_analyzer.schemas import AnalysisResult
 
-_templates = Jinja2Templates(directory=str(get_settings().root / "app" / "web" / "templates"))
+_templates = Jinja2Templates(directory=[Path(__file__).parent / "templates", get_settings().root / "app" / "web" / "templates"])
 
 
 def _impact_areas(result: AnalysisResult) -> list[dict]:

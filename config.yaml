@@ -14,6 +14,12 @@ storage:
   export_dir: "output/exports"
   generated_tc_dir: "output/generated_tc"
   log_dir: "output/logs"
+  manual_revision_dir: "data/manual_revisions"
+  manual_review_comment_dir: "output/manual_review_comments"
+
+manual_review:
+  # 근거 SRS 후보 개수 상한 (토큰 절약, 스펙 §28-G)
+  max_srs_candidates: 6
 
 retrieval:
   engine: "bm25"

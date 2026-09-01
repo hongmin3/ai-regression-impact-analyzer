@@ -6,7 +6,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from app.core.config import get_settings
-from app.core.schemas import ANALYSIS_STAGES
 
 
 class Storage:
@@ -48,6 +47,35 @@ class Storage:
                 CREATE TABLE IF NOT EXISTS sync_log (
                     id INTEGER PRIMARY KEY AUTOINCREMENT, product TEXT NOT NULL, kind TEXT NOT NULL,
                     source TEXT NOT NULL, synced_at TEXT NOT NULL, status TEXT NOT NULL, detail TEXT NOT NULL DEFAULT ''
+                );
+                CREATE TABLE IF NOT EXISTS manual_revisions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT, product TEXT NOT NULL,
+                    manual_name TEXT NOT NULL, revision_label TEXT NOT NULL,
+                    round_number INTEGER NOT NULL DEFAULT 0,
+                    parent_revision_id INTEGER REFERENCES manual_revisions(id),
+                    baseline_revision_id INTEGER REFERENCES manual_revisions(id),
+                    source_path TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'REGISTERED',
+                    analysis_id TEXT, created_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS manual_changes (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT, revision_id INTEGER NOT NULL REFERENCES manual_revisions(id),
+                    kind TEXT NOT NULL, author TEXT, change_date TEXT, paragraph_index INTEGER,
+                    text TEXT NOT NULL, functional INTEGER NOT NULL DEFAULT 1,
+                    decision TEXT, confidence REAL, qa_decision TEXT, qa_note TEXT,
+                    ai_judgment_json TEXT, created_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS manual_comments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT, change_id INTEGER NOT NULL REFERENCES manual_changes(id),
+                    round_number INTEGER NOT NULL DEFAULT 1, comment_text TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'OPEN', resolved_in_revision_id INTEGER REFERENCES manual_revisions(id),
+                    created_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS manual_release_findings (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT, revision_id INTEGER NOT NULL REFERENCES manual_revisions(id),
+                    source TEXT NOT NULL, category TEXT, title TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'MISSING_SUSPECTED',
+                    matched_change_id INTEGER REFERENCES manual_changes(id),
+                    created_at TEXT NOT NULL
                 );
             """)
             # analyses는 기존 배포에 이미 존재할 수 있어 ADD COLUMN으로 안전하게 확장한다 (SQLite는 컬럼 추가만 지원).
@@ -123,21 +151,27 @@ class Storage:
         with self.connect() as db:
             db.execute("DELETE FROM documents WHERE id=?", (document_id,))
 
-    def create_analysis(self, analysis_id: str, status: str = "QUEUED") -> None:
+    def create_analysis(self, analysis_id: str, status: str = "QUEUED", stage_total: int = 0) -> None:
         now = datetime.now(timezone.utc).isoformat()
         with self.connect() as db:
             db.execute(
                 "INSERT OR REPLACE INTO analyses(id,status,result_json,error,created_at,updated_at,stage,stage_index,stage_total,started_at,stage_updated_at) "
                 "VALUES(?,?,?,?,?,?,?,?,?,?,?)",
-                (analysis_id, status, None, None, now, now, "대기 중", 0, len(ANALYSIS_STAGES), now, now),
+                (analysis_id, status, None, None, now, now, "대기 중", 0, stage_total, now, now),
             )
 
-    def update_stage(self, analysis_id: str, index: int, name: str) -> None:
+    def update_stage(self, analysis_id: str, index: int, name: str, stage_total: int | None = None) -> None:
         with self.connect() as db:
-            db.execute(
-                "UPDATE analyses SET stage=?, stage_index=?, stage_total=?, stage_updated_at=? WHERE id=?",
-                (name, index, len(ANALYSIS_STAGES), datetime.now(timezone.utc).isoformat(), analysis_id),
-            )
+            if stage_total is None:
+                db.execute(
+                    "UPDATE analyses SET stage=?, stage_index=?, stage_updated_at=? WHERE id=?",
+                    (name, index, datetime.now(timezone.utc).isoformat(), analysis_id),
+                )
+            else:
+                db.execute(
+                    "UPDATE analyses SET stage=?, stage_index=?, stage_total=?, stage_updated_at=? WHERE id=?",
+                    (name, index, stage_total, datetime.now(timezone.utc).isoformat(), analysis_id),
+                )
 
     def update_analysis(self, analysis_id: str, status: str, result: dict | None = None, error: str | None = None) -> None:
         with self.connect() as db:
@@ -231,3 +265,136 @@ class Storage:
                 "SELECT * FROM sync_log WHERE product=? AND kind=? ORDER BY id DESC LIMIT 1", (product, kind)
             ).fetchone()
         return dict(row) if row else None
+
+    # ------------------------------------------------------------------
+    # manual_review: 매뉴얼 개정 검증 (Revision Lineage / Track Changes / QA Comment)
+    # ------------------------------------------------------------------
+
+    def add_manual_revision(
+        self,
+        product: str,
+        manual_name: str,
+        revision_label: str,
+        source_path: Path,
+        round_number: int = 0,
+        parent_revision_id: int | None = None,
+        baseline_revision_id: int | None = None,
+        analysis_id: str | None = None,
+        status: str = "REGISTERED",
+    ) -> int:
+        with self.connect() as db:
+            cursor = db.execute(
+                "INSERT INTO manual_revisions(product,manual_name,revision_label,round_number,parent_revision_id,baseline_revision_id,source_path,status,analysis_id,created_at) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?)",
+                (product, manual_name, revision_label, round_number, parent_revision_id, baseline_revision_id, str(source_path), status, analysis_id, datetime.now(timezone.utc).isoformat()),
+            )
+            return int(cursor.lastrowid)
+
+    def get_manual_revision(self, revision_id: int) -> dict | None:
+        with self.connect() as db:
+            row = db.execute("SELECT * FROM manual_revisions WHERE id=?", (revision_id,)).fetchone()
+            return dict(row) if row else None
+
+    def list_manual_revisions(self, product: str | None = None) -> list[dict]:
+        with self.connect() as db:
+            if product:
+                rows = db.execute("SELECT * FROM manual_revisions WHERE product=? ORDER BY id DESC", (product,)).fetchall()
+            else:
+                rows = db.execute("SELECT * FROM manual_revisions ORDER BY id DESC").fetchall()
+            return [dict(row) for row in rows]
+
+    def update_manual_revision_status(self, revision_id: int, status: str) -> None:
+        with self.connect() as db:
+            db.execute("UPDATE manual_revisions SET status=? WHERE id=?", (status, revision_id))
+
+    def add_manual_change(
+        self,
+        revision_id: int,
+        kind: str,
+        author: str,
+        change_date: str,
+        paragraph_index: int,
+        text: str,
+        functional: bool = True,
+    ) -> int:
+        with self.connect() as db:
+            cursor = db.execute(
+                "INSERT INTO manual_changes(revision_id,kind,author,change_date,paragraph_index,text,functional,created_at) VALUES(?,?,?,?,?,?,?,?)",
+                (revision_id, kind, author, change_date, paragraph_index, text, int(functional), datetime.now(timezone.utc).isoformat()),
+            )
+            return int(cursor.lastrowid)
+
+    def update_manual_change_judgment(self, change_id: int, decision: str, confidence: float, ai_judgment: dict) -> None:
+        with self.connect() as db:
+            db.execute(
+                "UPDATE manual_changes SET decision=?, confidence=?, ai_judgment_json=? WHERE id=?",
+                (decision, confidence, json.dumps(ai_judgment, ensure_ascii=False), change_id),
+            )
+
+    def update_manual_change_qa_decision(self, change_id: int, qa_decision: str, qa_note: str = "") -> None:
+        with self.connect() as db:
+            db.execute("UPDATE manual_changes SET qa_decision=?, qa_note=? WHERE id=?", (qa_decision, qa_note, change_id))
+
+    def get_manual_change(self, change_id: int) -> dict | None:
+        with self.connect() as db:
+            row = db.execute("SELECT * FROM manual_changes WHERE id=?", (change_id,)).fetchone()
+        if not row:
+            return None
+        value = dict(row)
+        if value.get("ai_judgment_json"):
+            value["ai_judgment"] = json.loads(value.pop("ai_judgment_json"))
+        else:
+            value["ai_judgment"] = None
+            value.pop("ai_judgment_json", None)
+        return value
+
+    def list_manual_changes(self, revision_id: int) -> list[dict]:
+        with self.connect() as db:
+            rows = db.execute("SELECT * FROM manual_changes WHERE revision_id=? ORDER BY paragraph_index, id", (revision_id,)).fetchall()
+        values = []
+        for row in rows:
+            value = dict(row)
+            raw = value.pop("ai_judgment_json")
+            value["ai_judgment"] = json.loads(raw) if raw else None
+            values.append(value)
+        return values
+
+    def add_manual_comment(self, change_id: int, round_number: int, comment_text: str, status: str = "OPEN") -> int:
+        with self.connect() as db:
+            cursor = db.execute(
+                "INSERT INTO manual_comments(change_id,round_number,comment_text,status,created_at) VALUES(?,?,?,?,?)",
+                (change_id, round_number, comment_text, status, datetime.now(timezone.utc).isoformat()),
+            )
+            return int(cursor.lastrowid)
+
+    def update_manual_comment_status(self, comment_id: int, status: str, resolved_in_revision_id: int | None = None) -> None:
+        with self.connect() as db:
+            db.execute(
+                "UPDATE manual_comments SET status=?, resolved_in_revision_id=? WHERE id=?",
+                (status, resolved_in_revision_id, comment_id),
+            )
+
+    def list_open_comments_for_revision(self, revision_id: int) -> list[dict]:
+        """이전 Round(revision_id)에서 아직 해결되지 않은 QA Comment 목록. 다음 Round 검증 시
+        '이전 지적사항'으로 QA 화면에 참고 표시한다 (자동 반영 판정은 하지 않음)."""
+        with self.connect() as db:
+            rows = db.execute(
+                "SELECT manual_comments.*, manual_changes.text AS change_text FROM manual_comments "
+                "JOIN manual_changes ON manual_changes.id = manual_comments.change_id "
+                "WHERE manual_changes.revision_id=? AND manual_comments.status='OPEN' ORDER BY manual_comments.id",
+                (revision_id,),
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+    def add_release_finding(self, revision_id: int, source: str, category: str, title: str, status: str = "MISSING_SUSPECTED", matched_change_id: int | None = None) -> int:
+        with self.connect() as db:
+            cursor = db.execute(
+                "INSERT INTO manual_release_findings(revision_id,source,category,title,status,matched_change_id,created_at) VALUES(?,?,?,?,?,?,?)",
+                (revision_id, source, category, title, status, matched_change_id, datetime.now(timezone.utc).isoformat()),
+            )
+            return int(cursor.lastrowid)
+
+    def list_release_findings(self, revision_id: int) -> list[dict]:
+        with self.connect() as db:
+            rows = db.execute("SELECT * FROM manual_release_findings WHERE revision_id=? ORDER BY id", (revision_id,)).fetchall()
+            return [dict(row) for row in rows]

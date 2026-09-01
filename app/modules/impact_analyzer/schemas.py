@@ -159,6 +159,7 @@ class AnalysisResult(BaseModel):
     decisions: list[ImpactDecision]
     draft_test_cases: list[DraftTestCase] = Field(default_factory=list)
     token_usage: dict[str, int] = Field(default_factory=dict)
+    prompt_version: int = 0
     report_path: Path | None = None
     draft_tc_path: Path | None = None
     spec_sync: dict | None = None

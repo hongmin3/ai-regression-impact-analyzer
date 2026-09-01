@@ -15,6 +15,7 @@ data/uploads/
 data/specifications/
 data/testcases/
 data/indexes/
+data/manual_revisions/
 data/*.db
 data/spec_sync_state.json
 data/spec_sync.lock
@@ -22,6 +23,7 @@ output/reports/
 output/exports/
 output/generated_tc/
 output/logs/
+output/manual_review_comments/
 *.log
 app.pid
 output-bootstrap.log

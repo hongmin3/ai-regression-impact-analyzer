@@ -5,25 +5,25 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from app.analyzers.change_analyzer import analyze_change_rules, trim_by_relevance
-from app.analyzers.tc_candidate_selector import select_candidates
-from app.analyzers.validation import attach_specification_references, validate_decisions, validate_draft_test_cases
 from app.core.config import get_settings
-from app.core.gemini_client import GeminiClient
 from app.core.logger import configure_logging
-from app.core.schemas import ANALYSIS_STAGES, AnalysisResult, SpecificationChunk, TestCase
 from app.core.storage import Storage
+from app.modules.impact_analyzer.ai_client import ImpactAnalysisAIClient
+from app.modules.impact_analyzer.change_analyzer import analyze_change_rules, trim_by_relevance
+from app.modules.impact_analyzer.html_report import create_html_report, create_xlsx_export
+from app.modules.impact_analyzer.schemas import ANALYSIS_STAGES, AnalysisResult, SpecificationChunk, TestCase
+from app.modules.impact_analyzer.tc_candidate_selector import select_candidates
+from app.modules.impact_analyzer.tc_draft import create_tc_draft_markdown
+from app.modules.impact_analyzer.validation import attach_specification_references, validate_decisions, validate_draft_test_cases
 from app.parsers.excel_parser import parse_testcases
 from app.parsers.document_parser import extract_document_text, parse_document
-from app.reports.html_report import create_html_report, create_xlsx_export
-from app.reports.tc_draft import create_tc_draft_markdown
 from app.retrieval.bm25_retriever import BM25Retriever
 
 
 class RegressionAnalyzer:
-    def __init__(self, gemini: GeminiClient | None = None, storage: Storage | None = None) -> None:
+    def __init__(self, ai_client: ImpactAnalysisAIClient | None = None, storage: Storage | None = None) -> None:
         self.settings = get_settings()
-        self.gemini = gemini or GeminiClient()
+        self.ai_client = ai_client or ImpactAnalysisAIClient()
         self.storage = storage or Storage()
         self.logger = configure_logging()
 
@@ -79,7 +79,7 @@ class RegressionAnalyzer:
         self.logger.info("analysis_started id=%s change=%s spec=%s tc=%s model=%s", analysis_id, change_file_name, specification_label, testcase_label, self.settings.secrets.gemini_model)
 
         def stage(index: int) -> None:
-            self.storage.update_stage(analysis_id, index, ANALYSIS_STAGES[index - 1])
+            self.storage.update_stage(analysis_id, index, ANALYSIS_STAGES[index - 1], len(ANALYSIS_STAGES))
             self.logger.info("analysis_stage id=%s stage=%s/%s name=%s", analysis_id, index, len(ANALYSIS_STAGES), ANALYSIS_STAGES[index - 1])
 
         try:
@@ -100,18 +100,18 @@ class RegressionAnalyzer:
             candidates = select_candidates(change, cases, int(self.settings.get("retrieval.candidate_limit", 150)))
 
             stage(5)  # AI 영향도 분석
-            decisions = self.gemini.analyze(change, candidates, relevant_chunks)
-            change.change_items = self.gemini.change_items
+            decisions = self.ai_client.analyze(change, candidates, relevant_chunks)
+            change.change_items = self.ai_client.change_items
 
             stage(6)  # Regression TC 선정
             decisions = validate_decisions(decisions, cases, relevant_chunks, float(self.settings.get("analysis.recommended_confidence", .8)), float(self.settings.get("analysis.review_confidence", .6)))
             decisions = attach_specification_references(decisions, relevant_chunks, doc_labels)
 
             stage(7)  # 신규 TC 초안 검증
-            drafts = validate_draft_test_cases(self.gemini.draft_test_cases, relevant_chunks)
+            drafts = validate_draft_test_cases(self.ai_client.draft_test_cases, relevant_chunks)
 
             stage(8)  # HTML 결과 생성
-            result = AnalysisResult(analysis_id=analysis_id, created_at=datetime.now(timezone.utc), change_file=change_file_name, specification_file=specification_label, testcase_file=testcase_label, change=change, total_tc=len(cases), candidate_tc=len(candidates), decisions=decisions, draft_test_cases=drafts, token_usage=self.gemini.token_usage)
+            result = AnalysisResult(analysis_id=analysis_id, created_at=datetime.now(timezone.utc), change_file=change_file_name, specification_file=specification_label, testcase_file=testcase_label, change=change, total_tc=len(cases), candidate_tc=len(candidates), decisions=decisions, draft_test_cases=drafts, token_usage=self.ai_client.token_usage, prompt_version=self.ai_client.prompt_version)
             if product:
                 result.spec_sync = self.storage.latest_sync(product, "specification")
                 result.tc_sync = self.storage.latest_sync(product, "testcase")
@@ -119,7 +119,7 @@ class RegressionAnalyzer:
             create_xlsx_export(result)
             result.draft_tc_path = create_tc_draft_markdown(result)
 
-            self.logger.info("analysis_finished id=%s requests=%s prompt_tokens=%s candidate_tokens=%s total_tokens=%s manual_review=%s elapsed=%.3f", analysis_id, self.gemini.request_count, self.gemini.token_usage.get("prompt_tokens", 0), self.gemini.token_usage.get("candidate_tokens", 0), self.gemini.token_usage.get("total_tokens", 0), sum(item.manual_review_required for item in decisions), time.monotonic() - started)
+            self.logger.info("analysis_finished id=%s requests=%s prompt_tokens=%s candidate_tokens=%s total_tokens=%s manual_review=%s elapsed=%.3f", analysis_id, self.ai_client.request_count, self.ai_client.token_usage.get("prompt_tokens", 0), self.ai_client.token_usage.get("candidate_tokens", 0), self.ai_client.token_usage.get("total_tokens", 0), sum(item.manual_review_required for item in decisions), time.monotonic() - started)
             return result
         except Exception as exc:
             self.logger.exception("analysis_failed id=%s error_type=%s elapsed=%.3f", analysis_id, type(exc).__name__, time.monotonic() - started)

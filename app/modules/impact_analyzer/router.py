@@ -11,13 +11,14 @@ from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, Reque
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
-from app.analyzers.regression_analyzer import RegressionAnalyzer
 from app.core.config import get_settings, reload_settings
 from app.core.storage import Storage
+from app.modules.impact_analyzer.regression_analyzer import RegressionAnalyzer
+from app.modules.impact_analyzer.schemas import ANALYSIS_STAGES
 from app.parsers.document_parser import parse_document
 
 router = APIRouter()
-templates = Jinja2Templates(directory=str(get_settings().root / "app" / "web" / "templates"))
+templates = Jinja2Templates(directory=[Path(__file__).parent / "templates", get_settings().root / "app" / "web" / "templates"])
 storage = Storage()
 
 
@@ -145,8 +146,8 @@ def record_sync_log(product: str = Form(...), kind: str = Form(...), source: str
 
 @router.post("/knowledge/sync/specification")
 def trigger_specification_sync():
-    from app.sync.vxvue_spec import is_available_on_this_host
-    from app.sync.vxvue_spec import run as run_spec_sync
+    from app.modules.impact_analyzer.vxvue_spec_sync import is_available_on_this_host
+    from app.modules.impact_analyzer.vxvue_spec_sync import run as run_spec_sync
 
     product = "VXvue"
     if storage.is_sync_running(product, "specification"):
@@ -197,7 +198,7 @@ def start_analysis(background_tasks: BackgroundTasks, product: str = Form(...), 
         raise HTTPException(404, f"'{product}' 제품에 등록된 사양서 또는 TC가 없습니다. Knowledge 메뉴에서 먼저 등록하세요.")
     changes = [_save_upload(f, get_settings().path("storage.upload_dir"), {".pdf", ".docx"}) for f in uploads]
     job_id = uuid.uuid4().hex[:12]
-    storage.create_analysis(job_id)
+    storage.create_analysis(job_id, stage_total=len(ANALYSIS_STAGES))
     background_tasks.add_task(_run_job, job_id, changes, product, notes)
     return {"job_id": job_id, "status_url": f"/analyses/{job_id}"}
 

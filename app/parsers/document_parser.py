@@ -4,7 +4,7 @@ import zipfile
 from pathlib import Path
 from xml.etree import ElementTree
 
-from app.core.schemas import SpecificationChunk
+from app.modules.impact_analyzer.schemas import SpecificationChunk
 from app.parsers.pdf_parser import extract_pdf_text, parse_specification
 
 WORD_NS = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"

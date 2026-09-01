@@ -1,4 +1,4 @@
-from app.core.schemas import DraftTestCase, EvidenceLevel, ImpactDecision, SpecificationChunk, TestCase
+from app.modules.impact_analyzer.schemas import DraftTestCase, EvidenceLevel, ImpactDecision, SpecificationChunk, TestCase
 
 
 def classify_confidence(decision: ImpactDecision, recommended: float = 0.8, review: float = 0.6) -> ImpactDecision:

@@ -63,6 +63,33 @@ SW 변경사항과 제품 사양서/Manual(PDF 또는 Word `.docx`), Test Case E
   - VXvue 사양서 동기화 스케줄을 매일 07:00에서 **매주 월요일 07:30(KST)**로 변경 — 같은 PC에 이미 등록된 ALM 크롤러 작업(`VXvue_SRS_Spec_Automation`, 매주 월 07:00)이 끝날 시간을 확보하기 위해 정확히 30분 뒤로 맞춤 (`config/products/vxvue.yaml`의 `sync.day_of_week`/`sync.schedule_time`, `app/core/scheduler.py`)
   - **Windows 작업 스케줄러에 실제 등록 완료**: 작업명 `AIRegressionAnalyzer_VXvueSpecSync`, 매주 월요일 07:30 KST, `LogonType=S4U`(비밀번호 저장 없이 비로그인 상태에서도 실행), `StartWhenAvailable=True`(PC가 꺼져 있거나 잠겨 있어도 켜지는 즉시 실행) — 기존 ALM 크롤러 작업과 동일한 패턴을 그대로 따름. `Get-ScheduledTask -TaskName AIRegressionAnalyzer_VXvueSpecSync`로 확인 가능
   - Gemini 2.5 계열의 내부 thinking 토큰이 `max_output_tokens` 예산을 함께 소비해 대규모 후보(예: `candidate_limit=150`) 분석 시 구조화 JSON 응답이 중간에 잘리는 문제를 실제 대용량 다중 PDF E2E 테스트로 재현·확인. `max_output_tokens=65536` + `thinking_config=ThinkingConfig(thinking_budget=0)`로 수정해 해결 확인(`app/core/gemini_client.py`) — 이 작업은 별도 추론 과정 없이 근거 기반 구조화 추출만 하므로 thinking 비활성화가 안전함
+- **2026-09-01 코드 구조 리팩터링 (동작 변화 없음, 신규 "매뉴얼 개정 검증" 기능 통합을 위한 모듈형 구조 전환)**:
+  - 최상위 패키지 `app`은 그대로 유지(`uvicorn app.main:app` 불변). 그 안에 `app/core/`(공용 인프라) · `app/prompts/`(AI 프롬프트 YAML) · `app/modules/`(기능별 독립 모듈) · `app/web/`(공용 라우터 aggregator + 공용 template/static)로 재구성
+  - 기존 `app/analyzers/`·`app/reports/`·`app/sync/`·`app/web/routes.py`·`app/core/schemas.py`를 전부 `app/modules/impact_analyzer/`로 이동(`git mv`, 히스토리 보존). URL 경로는 변경 없음(prefix 없이 root 그대로) — ALM 크롤러 sync 스크립트의 하드코딩된 호출 경로와 실사용자 북마크를 보호하기 위함
+  - 신규 `app/modules/manual_review/`(스켈레톤): `/manual-review` 페이지(자리표시) + `docx_track_changes.py`(Word `<w:ins>/<w:del>/<w:moveFrom>/<w:moveTo>` 구조화 추출, 순수함수, `python-docx` 미사용) + draft 스키마. 아직 업로드/AI 분석/Word Comment 생성 기능 없음 — 상세 로드맵은 `NEXT_STEPS.md`, 결정 필요 항목은 `OPEN_QUESTIONS.md` 참고
+  - `core/storage.py`가 `core/scheduler.py`가 특정 모듈(`schemas.py`/`sync/vxvue_spec.py`)을 직접 import하던 역방향 의존성을 제거 — `Storage.create_analysis/update_stage`는 `stage_total`을 파라미터로 받고, VXvue 동기화 cron job 등록은 `app/modules/impact_analyzer/scheduled_jobs.py::register_scheduled_jobs`로 이동, `core/scheduler.py`는 범용 `job_registrars` 콜백만 실행
+  - AI 프롬프트 외부화: `app/prompts/impact_analysis.yaml`(기존 SYSTEM_INSTRUCTION 원문 그대로, byte-for-byte 검증 완료) + `app/core/prompt_manager.py` 로더. `app/core/gemini_client.py`는 도메인 무관 `generate_structured()`만 제공하고, 도메인 파싱(ImpactDecision 등)은 신규 `app/modules/impact_analyzer/ai_client.py::ImpactAnalysisAIClient`가 담당. `AnalysisResult.prompt_version` 필드 추가로 분석 결과에 사용된 prompt 버전 기록
+  - `app/core/storage.py`에 `manual_revisions`/`manual_changes`/`manual_comments` 테이블 추가(`CREATE TABLE IF NOT EXISTS`, 아직 아무 코드도 쓰지 않는 준비 단계)
+  - `scripts/deploy.ps1`은 이미 `app/` 폴더 전체를 복사하므로 수정 불필요 확인. **이번 리팩터링은 로컬에서만 진행했고 원격 서버 배포/재시작은 수행하지 않음** — 재배포 필요
+  - `pytest -q` 69 passed(리팩터링 전 65 + 신규 `test_docx_track_changes.py` 4건)로 동작 무변화 확인
+- **2026-09-01 "매뉴얼 개정 검증"(`app/modules/manual_review/`) 실제 파이프라인 구현 (스켈레톤 → 동작하는 기능)**:
+  - DB 스키마 확정: `manual_revisions`(round_number/parent_revision_id/baseline_revision_id로 Round 계보 추적), `manual_changes`(functional/decision/confidence/qa_decision/qa_note), `manual_comments`(status enum + resolved_in_revision_id). `Storage`에 CRUD 메서드 전체 추가
+  - **SRS 근거는 신규 크롤러 연동 없이 impact_analyzer가 이미 관리하는 등록 사양서(`documents(kind='specification')`, `vxvue_spec_sync.py`가 매주 최신화)를 그대로 재사용** (`app/modules/manual_review/srs_evidence.py`) — 기존 `app/parsers/document_parser.py`/`app/retrieval/bm25_retriever.py` 그대로 재사용
+  - NON_FUNCTIONAL_CHANGE 필터(`change_filter.py`): 페이지 번호/저작권/Revision 표기/목차 리더 점선 등 단순 변경은 기본 AI 분석 대상에서 제외
+  - 2단계 AI 판정(`app/prompts/manual_revision_{quick,detail}.yaml` + `ai_client.py`): 1차 짧은 판정에서 PASS면 2차 상세 호출을 생략해 비용 절감. 두 단계 모두 `core/gemini_client.py`의 기존 sha256 캐시를 그대로 활용해 동일 변경 재검증 시 중복 호출 없음
+  - `ManualRevisionReviewer`(`reviewer.py`): 문서 파싱→SRS 후보 검색→AI 판정→DB 저장의 4단계 파이프라인, `analyses` 테이블을 재사용해 impact_analyzer와 동일한 SSE 진행상태 패턴 제공
+  - 라우트: `GET /manual-review`(업로드+이력), `POST /manual-review/revisions`(업로드, BackgroundTasks), `GET /manual-review/jobs/{id}`/`/stream`(SSE), `GET /manual-review/revisions/{id}/view`(결과 화면), `POST .../changes/{id}/qa-decision`(QA Override — AI 원본 판정은 삭제하지 않고 별도 컬럼에 기록)
+  - Word Comment 자동 삽입(`comment_writer.py`, **신규 의존성 `python-docx==1.2.0` 추가**): 문제로 판정된 변경마다 원본 위치(문단 단위)에 Comment 삽입. python-docx의 `Paragraph.runs`가 `<w:ins>/<w:del>` 내부 run을 찾지 못하는 한계를 확인하고 lxml로 직접 문단 내 모든 `<w:r>`을 찾아 `Run` 객체로 감싸 앵커링하는 방식으로 우회(실제 python-docx 1.2.0 API로 삽입→저장→재오픈까지 검증 완료). 원본 Track Changes와 기존 연구소 Comment는 건드리지 않음
+  - 신규 config: `config.yaml`의 `manual_review.max_srs_candidates`(기본 6), `storage.manual_revision_dir`/`storage.manual_review_comment_dir`
+  - 테스트 42건 추가(`test_change_filter`, `test_srs_evidence`, `test_manual_review_ai_client`, `test_manual_review_reviewer`, `test_manual_review_router`, `test_manual_review_storage`, `test_comment_writer`) — `pytest -q` 총 **111 passed**
+  - **이번 세션에서 하지 않은 것** (상세는 `NEXT_STEPS.md`/`OPEN_QUESTIONS.md`): PDF 매뉴얼 diff, Release Note/설계검토보고서 파서, Cross-Manual 영향분석, 이미지 변경 Human Review Gate, Round 간 Comment 자동 반영 판정(의도적으로 미구현 — 오탐 위험), 실제 예시 파일 기반 E2E, 원격 서버 배포(아직 로컬에만 반영)
+- **2026-09-01 2차: Release Note/설계검토보고서 파서 + Reverse 검증("누락 의심"), 사용자가 제공한 실제 VXvue 1.1.0 예시 파일로 검증**:
+  - `app/modules/manual_review/release_scope.py`: Release Note의 Added/Changed/Fixed bug/Etc 카테고리 헤더 인식, 설계검토보고서 "문제 분석" 절 번호 매김(N.N.N) 항목 추출. 실제 문서(사내망 UNC 경로 제공받음)로 검증하며 버그 다수 발견·수정: 문서 앞머리 메타데이터 노이즈, TOC 점선 리더 항목이 실제 헤더와 문구가 같아 조기 종료되던 문제, 다음 대분류 절의 번호 재사용으로 인한 중복 수집
+  - Reverse 검증(스펙 §13): Release Scope 항목을 이번 리비전의 functional 매뉴얼 변경과 BM25로 대조, 매칭 안 되면 신규 `manual_release_findings` 테이블에 MISSING_SUSPECTED로 저장. reviewer 파이프라인에 "Release Scope 대조" 단계 추가(4→5단계), 결과 화면에 "누락 의심" 섹션 표시
+  - 업로드 폼에 Release Note/설계검토보고서 선택적 첨부 추가 — 미첨부 시 해당 제품에 이미 등록된 최신 문서 자동 재사용(기존 `documents` 테이블에 `release_note`/`design_review` kind로 등록, 스키마 변경 없음). ALM 크롤러 새 자동화 없이 수동 업로드+자동 재사용으로 해결(`OPEN_QUESTIONS.md` #4)
+  - **실제 파일 전체 파이프라인 E2E 검증**: 실제 Round 1 Service Manual(799건 변경, 704건 functional) + 실제 Release Note(68건) + 실제 설계검토보고서(40건) + 실제 등록 사양서로 `ManualRevisionReviewer.run()` 전체 실행(mock AI, 42초) — Release Scope 108건 중 102건 FOUND·6건 MISSING_SUSPECTED, 결과가 실제로 QA가 확인해볼 만한 합리적인 항목으로 확인됨 (검증용 스크립트는 사내 문서를 다루므로 실행 후 삭제, 리포지토리에는 합성 fixture 기반 테스트만 커밋)
+  - 모든 코드에서 제품명 하드코딩 여부 재점검(사용자 요청) — `comment_writer.py`의 Author를 `{product} QA AI`로 조립하도록 수정, 그 외 로직은 이미 `product` 파라미터화되어 있었음을 확인
+  - 테스트 19건 추가, `pytest -q` **130 passed**
 
 ## 5. 현재 남은 작업
 
@@ -81,6 +108,8 @@ SW 변경사항과 제품 사양서/Manual(PDF 또는 Word `.docx`), Test Case E
 10. 분석 화면 사용자 요청 프롬프트(문서 없이도 분석 가능) → **완료**, 문서보다 최우선 근거로 반영
 11. Knowledge 제품별 필터, 분석 화면 제품 없음 안내 → **완료**
 12. VXvue 실제 지식파일(사양서 6개+매뉴얼 5개+TC 4개, 총 6,407 TC) 로컬·서버 모두 기본 등록 완료 (제품 "VXvue", 버전 "1.0")
+13. 2026-09-01 코드 구조 리팩터링 반영 서버 재배포 — 아직 미착수 (로컬 변경만 완료, 동작 100% 동일하므로 급하지 않지만 다음 배포 시 포함 필요)
+14. "매뉴얼 개정 검증"(`app/modules/manual_review/`) — 2026-09-01 업로드/AI 2단계 판정/결과 화면/QA Override/Word Comment 삽입까지 동작하는 파이프라인 완료(위 4장 참고). 남은 작업(PDF diff, Release Note/설계검토보고서 파서, Cross-Manual, 이미지 Human Review Gate, 실제 예시 파일 E2E)은 `NEXT_STEPS.md`, 결정 필요 항목은 `OPEN_QUESTIONS.md` 참고
 
 ## 6. systemd 승인 대기안
 
