@@ -69,7 +69,10 @@ Copy-Item secrets.example.txt secrets.txt -Force   # GEMINI_API_KEY 입력
 .\scripts\run.ps1                                   # http://localhost:12000
 ```
 
-앱 실행 후 `/guide`에서 사용법을 바로 확인할 수 있습니다. 서버에 직접 배포하는 상세 절차는 [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)를 참고하세요.
+앱 실행 후 회귀 분석은 `/impact-analyzer/guide`, 매뉴얼 개정 검증은
+`/manual-review/guide`에서 각각 전용 사용법을 확인할 수 있습니다. 기존 `/guide` 주소는
+회귀 분석 사용법으로 연결됩니다. 서버에 직접 배포하는 상세 절차는
+[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)를 참고하세요.
 
 ## 테스트
 

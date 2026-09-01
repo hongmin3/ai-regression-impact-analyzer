@@ -1,0 +1,33 @@
+{% extends "module_base.html" %}
+{% block content %}
+<section>
+  <h2>매뉴얼 개정 검증 사용법</h2>
+  <p class="hint">개정본을 등록하고, AI의 1차 검토 결과를 QA가 확정한 뒤, Comment가 삽입된 Word 파일을 내려받습니다.</p>
+
+  <h3>1. 검증 등록</h3>
+  <p><a href="/manual-review">매뉴얼 검증</a> 화면에서 제품, Manual 종류, Revision 표기를 입력하고 Word Track Changes가 켜진 <code>.docx</code>를 첨부합니다.</p>
+  <ul>
+    <li>재검증이라면 이전 리비전을 선택합니다. Round 계보와 이전 QA 지적사항이 자동 연결됩니다.</li>
+    <li>Release Note와 설계검토보고서를 선택적으로 첨부할 수 있습니다. 첨부하지 않으면 해당 제품에 등록된 최신 문서를 재사용합니다.</li>
+    <li>최신 SRS는 Regression 분석 기능이 관리하는 공용 문서 저장소의 제품 사양서를 재사용하며, 별도로 다시 업로드하지 않습니다.</li>
+  </ul>
+
+  <h3>2. 결과 확인과 QA 판정</h3>
+  <p>문서의 Track Changes를 구조화해 단순 서식 변경을 제외하고, 관련 SRS 근거를 검색한 뒤 AI가 변경별로 1차 판정합니다.</p>
+  <ul>
+    <li>문제없음, 보강 필요, 수정 필요, 삭제 필요, 누락 의심, 사양 확인 필요 등의 판정과 근거를 표시합니다.</li>
+    <li>Release Scope에는 있지만 매뉴얼 변경에서 찾지 못한 내용은 “누락 의심”으로 따로 표시합니다.</li>
+    <li>AI 결과는 최종 결정이 아닙니다. QA가 판정을 변경하고 사유를 남기면 AI 원본과 QA 결정을 함께 보존합니다.</li>
+  </ul>
+
+  <h3>3. Word Comment 결과 다운로드</h3>
+  <p>결과 화면에서 <b>Word Comment 삽입 DOCX 생성</b>을 누르면 문제 항목의 원본 문단에 QA Comment 초안이 추가된 파일을 받을 수 있습니다. 원본 Track Changes와 기존 Comment는 유지됩니다.</p>
+
+  <h3>현재 지원 범위</h3>
+  <ul>
+    <li>지원: DOCX Track Changes, Round 계보, SRS 근거 검색, Release Scope 누락 의심, QA Override, Word Comment 생성</li>
+    <li>준비 중: PDF 리비전 diff, Cross-Manual 영향분석, 이미지 변경 Human Review Gate, 이전 Round Comment 자동 반영 판정</li>
+  </ul>
+  <p class="hint">AI 검토는 QA 판단을 보조하며 최종 승인이나 사양 확정을 대체하지 않습니다.</p>
+</section>
+{% endblock %}

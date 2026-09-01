@@ -36,6 +36,11 @@ def home(request: Request):
     )
 
 
+@router.get("/guide", response_class=HTMLResponse)
+def guide(request: Request):
+    return templates.TemplateResponse(request, "guide.html", {})
+
+
 def _run_job(
     job_id: str,
     path: Path,

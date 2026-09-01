@@ -25,8 +25,9 @@ SW 변경사항과 제품 사양서/Manual(PDF 또는 Word `.docx`), Test Case E
 ## 4. 현재 구현 상태
 
 - 루트(`/`)는 QA 자동화 허브이며 Regression 영향 분석(`/impact-analyzer`)과 매뉴얼 개정
-  검증(`/manual-review`)으로 진입한다. 공용 브랜드/내비게이션은 `app/web/`, 기능별 화면과
-  로직은 `app/modules/*`가 소유한다. 새 QA 모듈과 공유 DB 확장 원칙은
+  검증(`/manual-review`)으로 진입한다. 공용 HTML 골격·스타일은 `app/web/`이 소유하고,
+  기능별 브랜드·내비게이션·사용법·화면·로직은 `app/modules/*`가 소유한다. 매뉴얼 화면에는
+  `QA 홈`과 매뉴얼 전용 `사용법`만 표시한다. 새 QA 모듈과 공유 DB 확장 원칙은
   `docs/SHARED_PLATFORM_ARCHITECTURE.md` 참고.
 
 - FastAPI/Jinja2 Web UI

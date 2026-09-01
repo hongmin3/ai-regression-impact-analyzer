@@ -14,7 +14,7 @@ SQLite 파일은 당분간 하나를 공유하되 **테이블 소유권은 모�
 ## 경계
 
 - `app/core/`: 설정, 저장소, 로깅, AI 호출, 스케줄러처럼 도메인에 독립적인 인프라
-- `app/web/`: 허브, 공용 레이아웃·정적 파일, 모듈 라우터 취합
+- `app/web/`: 허브, 공용 HTML 골격·정적 파일, 모듈 라우터 취합
 - `app/modules/impact_analyzer/`: Regression 영향 분석
 - `app/modules/manual_review/`: 매뉴얼 개정 검증
 - `app/prompts/`: 버전 관리되는 기능별 AI prompt
@@ -36,7 +36,8 @@ SQLite 파일은 당분간 하나를 공유하되 **테이블 소유권은 모�
 1. `app/modules/<name>/`에 router/service/schema/template을 추가한다.
 2. `app/web/router.py`에서 충돌 없는 prefix로 등록한다.
 3. 공용 데이터와 전용 데이터를 구분해 Storage API와 migration을 추가한다.
-4. 허브 카드와 공용 내비게이션, 사용법을 갱신한다.
+4. 허브 카드를 갱신하고, 모듈 내부에 전용 내비게이션과 전용 사용법을 둔다. 기능 간 링크를
+   공용 레이아웃에 섞지 않는다.
 5. 라우트·저장소·도메인 단위 테스트와 전체 회귀 테스트를 통과시킨다.
 6. 로컬 검증 후 배포 스크립트로 동일 파일을 서버에 반영한다.
 

@@ -79,9 +79,15 @@ def knowledge(request: Request):
     )
 
 
-@router.get("/guide", response_class=HTMLResponse)
+@router.get("/impact-analyzer/guide", response_class=HTMLResponse)
 def guide(request: Request):
     return templates.TemplateResponse(request, "guide.html", {})
+
+
+@router.get("/guide")
+def legacy_guide_redirect():
+    """기존 북마크를 회귀 분석 전용 사용법으로 연결한다."""
+    return RedirectResponse("/impact-analyzer/guide", status_code=308)
 
 
 @router.get("/analyses", response_class=HTMLResponse)

@@ -45,6 +45,16 @@ def test_home_renders_empty_state(monkeypatch, tmp_path):
     assert "아직 등록된 검증 이력이 없습니다." in response.text
 
 
+def test_navigation_is_manual_review_specific():
+    response = TestClient(app).get("/manual-review")
+    assert response.status_code == 200
+    assert 'href="/"' in response.text
+    assert 'href="/manual-review/guide"' in response.text
+    assert 'href="/impact-analyzer"' not in response.text
+    assert 'href="/analyses"' not in response.text
+    assert 'href="/knowledge"' not in response.text
+
+
 def test_upload_rejects_non_docx(monkeypatch, tmp_path):
     storage = Storage(tmp_path / "app.db")
     monkeypatch.setattr(manual_review_router, "storage", storage)
