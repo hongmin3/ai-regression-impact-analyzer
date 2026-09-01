@@ -30,6 +30,8 @@ TC Excel의 헤더가 별칭 목록(`app/parsers/excel_parser.py::ALIASES`)에 �
 - 테스트 13건 추가(`test_excel_parser.py`, 신규 `test_knowledge_testcase_mapping.py`) —
   `pytest -q` **196 passed**. 실제 로컬 서버에 업로드→매핑→등록 전체 흐름 수동 검증(생성한
   테스트 제품/문서는 검증 후 정리 완료).
+- 커밋(`4459dd3`)·push·배포 완료. 원격 `195 passed, 1 skipped`, 포트 12000만 PID `1261121`
+  → `1262810`으로 재기동, 다른 포트 PID 그대로 유지, 주요 6개 페이지 200 확인.
 
 ## 2026-09-01 분석 이력 검색·필터·페이지네이션 (`/analyses`)
 
