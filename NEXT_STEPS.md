@@ -1,6 +1,6 @@
 # Next Steps — 매뉴얼 개정 검증 기능 진행 상황 (우선순위 순)
 
-## 2026-09-01 Cross-Manual/이미지 Gate 마무리 + 명칭 통일 (완료)
+## 2026-09-01 Cross-Manual/이미지 Gate 마무리 + 명칭 통일 (로컬 폴더 rename만 미완료)
 
 이전 세션이 미완료 상태로 남긴 작업을 이어받아 완료했다. 이 절 아래 두 하위 절
 ("현재 작업 인계"/"사용자 최신 명칭 요청")은 인계 당시 상태를 그대로 남겨두고, 완료 결과는
@@ -15,9 +15,19 @@
   `git diff --check` 통과(CRLF 변환 경고만 있고 실제 whitespace 오류 없음).
 - **문서 갱신 완료**: `README.md`를 AI 비용 절감 아키텍처 중심으로 재작성, `HANDOFF.md`에
   3~7차 세션 요약 추가.
-- **명칭 통일**: 표시명 **QA 검증 관리 시스템**, GitHub repo/로컬 폴더 slug
-  **qa-verification-management-system**(상세는 `HANDOFF.md` §2). 원격 Ubuntu 배포 경로는
-  운영 중인 서비스라 의도적으로 이전 이름 유지.
+- **명칭 통일**: 표시명 **QA 검증 관리 시스템**, GitHub repo slug
+  **qa-verification-management-system**으로 변경 완료(origin도 갱신). 원격 Ubuntu 배포
+  경로는 운영 중인 서비스라 의도적으로 이전 이름 유지.
+- **미완료: 로컬 폴더 rename**. 이 작업을 수행한 Claude Code 세션 자신이 폴더를 작업
+  디렉터리로 물고 있어 세션 내부에서는 구조적으로 rename이 불가능했다(다른 창을 다 닫아도
+  동일한 `used by another process` 오류 재현). 이 세션 창을 닫은 뒤 사용자가 직접 실행해야
+  하며, 함께 갱신해야 하는 Windows 작업 스케줄러(`AIRegressionAnalyzer_VXvueSpecSync`) 경로
+  포함 정확한 명령은 `HANDOFF.md` §2에 정리했다.
+- Akela run `core-development-manual-image-change-human-review-gate-d240e7`은 applied
+  source 기록 후 outcome DONE으로 닫았다.
+- 배포·검증 완료: `scripts/deploy.ps1`로 서버 반영, 원격 `pytest -q` 167 passed, 포트 12000
+  프로세스만 재시작 후 `/health` 및 주요 7개 페이지 200 확인, 다른 포트(5000/5001/5002/5003/
+  8000/10000/18800) 서비스는 그대로 유지됨을 확인.
 
 ### (인계 당시 기록) 2026-09-01 현재 작업 인계 (커밋 전)
 

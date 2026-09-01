@@ -18,6 +18,33 @@ SW 변경사항과 제품 사양서/Manual(PDF 또는 Word `.docx`), Test Case E
 - 공개 GitHub: `https://github.com/hongmin3/qa-verification-management-system`
 - 서버 접속: SSH config/key를 사용하며 비밀번호를 파일에 저장하지 않는다.
 
+**미완료: 로컬 폴더 rename** (2026-09-01). GitHub repo rename과 origin 갱신은 완료했지만, 로컬
+폴더는 Claude Code 세션 자신이 그 폴더를 작업 디렉터리로 물고 있어 세션 내부에서는 rename이
+구조적으로 불가능했다(재시도해도 항상 `The process cannot access the file because it is being
+used by another process`). 이 프로젝트를 열고 있는 Claude Code 창을 모두 닫은 뒤 아래 순서로
+직접 실행한다:
+
+```powershell
+Set-Location "C:\Users\2024980\Documents\자동화"
+Rename-Item -LiteralPath "ai-regression-impact-analyzer" -NewName "qa-verification-management-system"
+
+# Windows 작업 스케줄러 AIRegressionAnalyzer_VXvueSpecSync가 구 경로를 하드코딩하고 있어 함께 갱신
+$newRoot = "C:\Users\2024980\Documents\자동화\qa-verification-management-system"
+$action = New-ScheduledTaskAction -Execute "$newRoot\.venv\Scripts\python.exe" `
+    -Argument "`"$newRoot\scripts\sync_vxvue_spec.py`"" -WorkingDirectory $newRoot
+Set-ScheduledTask -TaskName "AIRegressionAnalyzer_VXvueSpecSync" -Action $action
+
+# 확인
+Get-ScheduledTask -TaskName "AIRegressionAnalyzer_VXvueSpecSync" | ForEach-Object { $_.Actions } |
+    Select-Object Execute, Arguments, WorkingDirectory
+Set-Location $newRoot
+.\.venv\Scripts\python.exe -m pytest -q
+```
+
+`akela.json`/Project Root 탐색은 폴더명이 아니라 `akela.json` 파일 존재 여부만으로 상위 탐색을
+하므로(이 파일과 `CLAUDE.md`/`AGENTS.md`에 경로 하드코딩 없음) rename 후에도 그대로 정상 동작해야
+한다. `scripts/find-project-root.ps1`로 재확인 권장.
+
 로컬 소스를 기준으로 개발하고 테스트를 통과한 결과만 서버에 배포한다. 서버 배포 폴더는 Git 저장소가 아닌 일반 디렉터리다.
 
 ## 3. 반드시 먼저 읽을 문서

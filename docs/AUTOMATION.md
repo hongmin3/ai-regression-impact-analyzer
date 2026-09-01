@@ -139,7 +139,7 @@ Get-ScheduledTask -TaskName "AIRegressionAnalyzer_VXvueSpecSync" | Format-List T
   | 설정 | 값 |
   |---|---|
   | 트리거 | Weekly, Monday 07:30 (KST) — 기존 `VXvue_SRS_Spec_Automation`(월 07:00)보다 정확히 30분 뒤 |
-  | 실행 파일 | `...\ai-regression-impact-analyzer\.venv\Scripts\python.exe` |
+  | 실행 파일 | `...\qa-verification-management-system\.venv\Scripts\python.exe` (2026-09-01 폴더 rename 후 `Set-ScheduledTask`로 Action 경로 갱신 필요 — `HANDOFF.md` 참고) |
   | 인자 | `scripts\sync_vxvue_spec.py` (기본 `--target-url`이 운영 서버라 생략) |
   | LogonType | `S4U` — 비밀번호를 저장하지 않고 로그인하지 않은 상태에서도 실행 (기존 ALM 크롤러 작업과 동일 패턴) |
   | StartWhenAvailable | `True` — PC가 꺼져 있거나 화면이 잠겨 있어도, 켜지는 즉시(또는 잠금 여부와 무관하게 S4U로) 가능한 가장 빠른 시점에 실행 |
