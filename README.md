@@ -302,14 +302,23 @@ akela log applied / contradicted     근거로 쓴 규칙 · 결과가 뒤집은
 | `documentation` | 7 | 3.6KB |
 | `testing` | 8 | 4.0KB |
 | `web-ui` | 9 | 4.8KB |
+| `manual-hub-ui` | 7 | 5.0KB |
 | `deployment` | 10 | 5.3KB |
+| `manual-hub-backup` | 8 | 6.0KB |
+| `manual-hub-auth` | 11 | 7.4KB |
+| `manual-hub-deploy` | 12 | 8.7KB |
 | `core-development` | 21 | 12KB |
-| `manual-hub` | 33 | 27KB |
+| `manual-hub-dev` | 15 | 14KB |
 
 - **저장소가 커져도 각 작업의 컨텍스트는 그만큼 커지지 않습니다.** QA Manual Hub를 병합하며
   지식이 25KB 늘었지만, 회귀 분석 코드 작업에는 그 25KB가 한 줄도 들어가지 않습니다.
-  병합할 때 하위 폴더에 지식을 그대로 두지 않고 루트로 옮겨 `scope=manual-hub`로 태깅한
+  병합할 때 하위 폴더에 지식을 그대로 두지 않고 루트로 옮겨 activity 단위로 태깅한
   결과입니다.
+- **범위는 한 번 정하고 끝내는 게 아니라 재조정합니다.** 처음에는 매뉴얼 서버 지식 31개
+  섹션을 `manual-hub` 하나로 묶었는데, 그러면 백업 절차 하나를 고치는 작업에도 인증 설계와
+  프론트엔드 구조가 전부 따라 들어와 slice가 27KB였습니다. 실제 작업 단위 5개(백엔드 /
+  인증 / 프론트엔드 / 배포 / 백업)로 쪼개 **5.0~14KB**로 줄였습니다. 한 섹션이 여러 작업에
+  필요하면 `scope`에 쉼표로 여러 activity를 줍니다.
 - **태깅이 잘못되면 지식이 아무 작업에도 전달되지 않는다는 것도 측정으로 확인했습니다.**
   `scope=all` + `tier=should`인 섹션 4개가 **30번의 컴파일에서 100% `general-scope`로
   버려지고 있었습니다.** 로그를 보고 나서야 알았고, activity 단위로 범위를 좁혀 되살렸습니다.

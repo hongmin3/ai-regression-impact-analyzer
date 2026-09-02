@@ -7,11 +7,22 @@ Context는 저장소 루트에서 상속한다.
 |---|---|
 | Protocol | `akela/PROTOCOL.md` |
 | Knowledge | `knowledge/manual-hub-*.md` (이 서비스), `knowledge/*.md` (플랫폼 공통) |
-| Akela 설정 | `akela.json` — 이 서비스 작업은 activity `manual-hub` 를 쓴다 |
+| Akela 설정 | `akela.json` — 이 서비스 작업은 아래 activity 중 하나를 쓴다 |
 | 저장소 전체 규칙 | 루트 `CLAUDE.md` |
 
+| activity | 언제 쓰나 |
+|---|---|
+| `manual-hub-dev` | 백엔드 코드·데이터 모델 변경 |
+| `manual-hub-auth` | 인증·권한·감사 로그 |
+| `manual-hub-ui` | React 프론트엔드 |
+| `manual-hub-deploy` | 설치·배포·nginx·설정 |
+| `manual-hub-backup` | 백업·복구·관리 CLI |
+
+작업 하나가 여러 영역에 걸치면 가장 많이 건드리는 쪽을 고른다. 필요한 섹션이 slice 에
+없으면 `akela log outcome --status NEEDS_CONTEXT` 로 남긴다 — 그 기록이 scope 를 넓히는 근거다.
+
 ```bash
-akela compile --activity manual-hub --task <task-id>
+akela compile --activity manual-hub-dev --task <task-id>
 ```
 
 여기(`backend/`, `frontend/`, `deploy/`)에 별도 `akela.json` / `knowledge/` 를 다시 만들지

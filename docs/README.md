@@ -90,4 +90,4 @@
 | `core-testing.md` | 테스트 작업 (`testing`) |
 | `core-deployment.md` | 배포·운영 (`deployment`) |
 | `core-documentation.md` | 문서 작업 (`documentation`) |
-| `manual-hub-*.md` | 하위 서비스 QA Manual Hub (`manual-hub`) |
+| `manual-hub-*.md` | 하위 서비스 QA Manual Hub (`manual-hub-dev` / `-auth` / `-ui` / `-deploy` / `-backup`) |

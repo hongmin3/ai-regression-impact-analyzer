@@ -69,8 +69,12 @@ SQLite 파일은 당분간 하나를 공유하되 **테이블 소유권은 모�
 
 1. `services/<name>/`에 코드·배포 스크립트·자체 README를 둔다.
 2. **Akela Context는 루트에서 상속한다.** 하위에 `akela.json`/`knowledge/`를 새로 만들지
-   않는다. Knowledge는 루트 `knowledge/<name>-*.md`로 두고 `scope=<name>`으로 태깅한 뒤,
-   `akela.json`의 `activities`에 `<name>`을 추가한다.
+   않는다. Knowledge는 루트 `knowledge/<name>-*.md`로 둔다.
+   activity는 서비스 이름 하나로 뭉뚱그리지 말고 **그 서비스에서 실제로 반복되는 작업
+   단위**로 나눈다 (`<name>-dev`, `-auth`, `-ui`, `-deploy`, `-backup` 식). 하나로 묶으면
+   태깅을 해도 매 작업에 전부 들어와 스코핑이 무의미해진다. 여러 작업에 필요한 섹션은
+   `scope`에 쉼표로 여러 activity를 준다. 자세한 근거는
+   [Context Engineering](CONTEXT_ENGINEERING.md).
 3. `config.yaml`의 `services.<name>`에 표시 이름·설명·URL을 등록한다. URL이 비어 있으면 허브
    카드가 만들어지지 않으므로, 그 서비스를 배포하지 않은 환경에서도 깨진 링크가 생기지 않는다.
 4. nginx에 경로를 추가한다 ([`deploy/nginx/qa-platform.conf`](../deploy/nginx/qa-platform.conf)).

@@ -45,11 +45,13 @@
 
 ```markdown
 ## Product → Document → Revision 계층 구조
-<!-- akela: id=manual-hub-hierarchy scope=manual-hub tier=must -->
+<!-- akela: id=manual-hub-hierarchy scope=manual-hub-dev,manual-hub-ui tier=must -->
 ```
 
 - `scope=all` — 모든 작업에 들어간다
-- `scope=manual-hub` — 매뉴얼 서버 작업에만 들어간다
+- `scope=manual-hub-dev` — 그 activity 작업에만 들어간다
+- **쉼표로 여러 activity를 줄 수 있다.** 위 예시는 매뉴얼 서버의 백엔드 작업과 프론트엔드
+  작업 양쪽에 필요한 섹션이다
 - `tier=must` / `should` — 컨텍스트가 빠듯할 때 무엇을 먼저 버릴지의 순서
 
 ### 작업 흐름
@@ -97,9 +99,9 @@ dropped: []
 |---|---|
 | 지식 파일 | 12개 (`knowledge/*.md`) |
 | 섹션 | 78개 · 약 49KB (핵심 앱 24KB / 매뉴얼 서버 25KB) |
-| scope 분포 | `manual-hub` 31 · `core-development` 19 · `deployment` 8 · `web-ui` 7 · `testing` 6 · `documentation` 5 · `all` 2 |
+| scope 분포 (중복 포함) | `core-development` 19 · `manual-hub-dev` 13 · `manual-hub-deploy` 10 · `manual-hub-auth` 9 · `deployment` 8 · `web-ui` 7 · `testing` 6 · `manual-hub-backup` 6 · `documentation` 5 · `manual-hub-ui` 5 · `all` 2 |
 | tier 분포 | `must` 40 · `should` 38 |
-| activity | `core-development`, `web-ui`, `testing`, `deployment`, `documentation`, `manual-hub` |
+| activity | 핵심 앱 5종(`core-development`, `web-ui`, `testing`, `deployment`, `documentation`) + 매뉴얼 서버 5종(`manual-hub-dev`, `-auth`, `-ui`, `-deploy`, `-backup`) |
 | 기록된 작업 | 31건 (`.akela/runs/`) |
 | 근거 사용 기록 | `applied` 56건 · `contradicted` 1건 (`akela/learnings-log.jsonl`) |
 
@@ -110,9 +112,13 @@ dropped: []
 | `documentation` | 7 | 3.6KB |
 | `testing` | 8 | 4.0KB |
 | `web-ui` | 9 | 4.8KB |
+| `manual-hub-ui` | 7 | 5.0KB |
 | `deployment` | 10 | 5.3KB |
+| `manual-hub-backup` | 8 | 6.0KB |
+| `manual-hub-auth` | 11 | 7.4KB |
+| `manual-hub-deploy` | 12 | 8.7KB |
 | `core-development` | 21 | 12KB |
-| `manual-hub` | 33 | 27KB |
+| `manual-hub-dev` | 15 | 14KB |
 
 ## 측정해서 알게 된 것 — 태깅해 뒀다고 전달되는 것이 아니다
 
@@ -146,14 +152,38 @@ Root가 생기면 에이전트가 어느 Context를 써야 하는지 모호해�
 대신:
 
 1. `services/qa-manual-hub/knowledge/*.md` → 루트 `knowledge/manual-hub-*.md`로 이동
-2. 31개 섹션 전부에 `scope=manual-hub`와 `tier`를 부여
-3. `akela.json`의 `activities`에 `manual-hub` 추가
+2. 31개 섹션 전부에 `scope`와 `tier`를 부여
+3. `akela.json`의 `activities`에 이 서비스의 작업 단위를 추가
 4. 하위의 `akela.json` / `akela/` 삭제, `AGENTS.md` / `CLAUDE.md`는 루트를 가리키는 안내로 대체
 
 결과적으로 지식이 25KB 늘었는데도 **회귀 분석 코드 작업의 slice에는 그 25KB가 한 줄도
 들어가지 않는다.** 저장소가 커진 만큼 매 작업의 토큰이 늘지 않는다. 새 하위 서비스를
 추가할 때도 같은 순서를 따른다
 ([공용 아키텍처](SHARED_PLATFORM_ARCHITECTURE.md)의 하위 서비스 체크리스트).
+
+## activity 입자 크기 — 굵게 잡으면 스코핑이 무의미해진다
+
+병합 직후에는 매뉴얼 서버 지식 31개 섹션을 `manual-hub` 하나로 묶었다. 태깅은 돼 있었지만
+**백업 스크립트 한 줄을 고치는 작업에도 인증 설계·프론트엔드 구조·데이터 모델이 전부 따라
+들어와 slice가 27KB**였다. 스코핑을 해놓고도 효과가 없었던 셈이다.
+
+그래서 실제 작업 단위로 쪼갰다. 기준은 "이 저장소에서 실제로 반복되는 작업 종류"다.
+
+| activity | 언제 쓰나 | slice |
+|---|---|---|
+| `manual-hub-dev` | 백엔드 코드·데이터 모델 변경 | 14KB |
+| `manual-hub-deploy` | 설치·배포·nginx·설정 | 8.7KB |
+| `manual-hub-auth` | 인증·권한·감사 로그 | 7.4KB |
+| `manual-hub-backup` | 백업·복구·관리 CLI | 6.0KB |
+| `manual-hub-ui` | React 프론트엔드 | 5.0KB |
+
+한 섹션이 여러 작업에 필요하면 `scope`에 **쉼표로 여러 activity**를 준다. 예를 들어
+`manual-hub-hierarchy`(제품→문서→버전→파일 4계층)는 백엔드와 프론트엔드 양쪽에 필요하므로
+`scope=manual-hub-dev,manual-hub-ui`다. 반대로 `manual-hub-sort-rules`(자연 정렬·빈 값 처리)는
+표를 그리는 쪽에만 필요하므로 `manual-hub-ui` 하나다.
+
+판단 기준은 하나다. **그 지식이 없으면 이 작업의 결과가 달라지는가.** 달라지지 않으면 넣지
+않는다.
 
 ## 새 지식을 추가할 때
 
@@ -172,6 +202,4 @@ Root가 생기면 에이전트가 어느 Context를 써야 하는지 모호해�
 - 지식이 늘수록 `scope=all` 섹션이 늘어나기 쉽다. 검토에서 가장 먼저 보는 항목이다.
 - `scope=all` + `tier=should`는 컴파일러가 `general-scope`로 버린다. 모든 작업에 필요한
   규칙이면 `must`로 올리고, 아니면 activity로 좁힌다. 이 조합으로 두면 아무 데도 안 간다.
-- **`manual-hub` slice가 27KB로 아직 크다.** 매뉴얼 서버 지식 31개 섹션이 한 activity에
-  전부 들어가기 때문이다. 다음 검토에서 `manual-hub-deployment` / `manual-hub-auth` 처럼
-  작업 단위를 쪼개는 것이 개선 방향이다.
+- activity를 너무 굵게 잡으면 scope를 붙여도 효과가 없다. 아래 "activity 입자 크기" 참고.

@@ -677,12 +677,20 @@ UTF-8 페이지에서 항상 UTF-8 로 보냅니다. 자동화가 필요하면 P
 
 | 대상 | 위치 (저장소 루트 기준) |
 |---|---|
-| Knowledge | `knowledge/manual-hub-*.md` (`scope=manual-hub`) |
+| Knowledge | `knowledge/manual-hub-*.md` |
 | Protocol | `akela/PROTOCOL.md` |
-| 설정 | `akela.json` — activity `manual-hub` |
+| 설정 | `akela.json` — activity 5종 (아래) |
+
+| activity | 언제 쓰나 |
+|---|---|
+| `manual-hub-dev` | 백엔드 코드·데이터 모델 변경 |
+| `manual-hub-auth` | 인증·권한·감사 로그 |
+| `manual-hub-ui` | React 프론트엔드 |
+| `manual-hub-deploy` | 설치·배포·nginx·설정 |
+| `manual-hub-backup` | 백업·복구·관리 CLI |
 
 ```bash
-akela compile --activity manual-hub --task <task-id>
+akela compile --activity manual-hub-dev --task <task-id>
 ```
 
 이 디렉터리 하위에 별도 `akela.json` / `knowledge/` 를 만들지 않습니다. 에이전트가 지켜야 할

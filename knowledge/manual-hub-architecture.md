@@ -6,7 +6,7 @@
 
 
 ## 전체 구조
-<!-- akela: id=manual-hub-overview scope=manual-hub tier=must -->
+<!-- akela: id=manual-hub-overview scope=manual-hub-dev,manual-hub-deploy tier=must -->
 
 ```
 사용자 (브라우저)
@@ -34,7 +34,7 @@ nginx :80
 - 백엔드 포트는 127.0.0.1 로만 바인딩되고, nginx 가 외부 진입점 역할을 한다.
 
 ## 계층별 역할 분담
-<!-- akela: id=manual-hub-layer-roles scope=manual-hub tier=should -->
+<!-- akela: id=manual-hub-layer-roles scope=manual-hub-dev tier=should -->
 
 | 계층 | 기술 | 역할 |
 |---|---|---|
@@ -46,7 +46,7 @@ nginx :80
 | Storage | 로컬 디스크 (`StorageBackend` 프로토콜) | 실제 문서 파일. UUID 기반 경로로 저장 |
 
 ## 서버 디렉터리 구조
-<!-- akela: id=manual-hub-server-directories scope=manual-hub tier=should -->
+<!-- akela: id=manual-hub-server-directories scope=manual-hub-deploy,manual-hub-backup tier=should -->
 
 ```
 <APP_ROOT>/               (기본 /opt/qa-manual-hub)
@@ -67,7 +67,7 @@ nginx :80
 문서 파일과 DB 데이터는 저장소(git)에 포함되지 않는다(`.gitignore`).
 
 ## 백엔드 코드 구조
-<!-- akela: id=manual-hub-backend-code-structure scope=manual-hub tier=must -->
+<!-- akela: id=manual-hub-backend-code-structure scope=manual-hub-dev tier=must -->
 
 ```
 backend/app/
@@ -92,7 +92,7 @@ backend/app/
 ```
 
 ## 프론트엔드 코드 구조
-<!-- akela: id=manual-hub-frontend-code-structure scope=manual-hub tier=should -->
+<!-- akela: id=manual-hub-frontend-code-structure scope=manual-hub-ui tier=should -->
 
 ```
 frontend/src/
@@ -107,7 +107,7 @@ frontend/src/
 ```
 
 ## 확장 지점 (구조적으로 준비된 항목)
-<!-- akela: id=manual-hub-extension-points scope=manual-hub tier=should -->
+<!-- akela: id=manual-hub-extension-points scope=manual-hub-dev tier=should -->
 
 | 항목 | 준비 상태 |
 |---|---|

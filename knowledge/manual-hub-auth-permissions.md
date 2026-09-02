@@ -6,7 +6,7 @@
 
 
 ## 비밀번호 해시 및 세션
-<!-- akela: id=manual-hub-password-hash-session scope=manual-hub tier=must -->
+<!-- akela: id=manual-hub-password-hash-session scope=manual-hub-auth tier=must -->
 
 - **Argon2id** (`argon2-cffi`) 사용. 평문 저장·로깅 없음. 파라미터 상향 시 로그인할 때
   자동 재해싱.
@@ -20,14 +20,14 @@
 - HTTPS 적용 시 `.env` 의 `SESSION_COOKIE_SECURE` 를 `true` 로 바꿔야 한다 (기본 `false`).
 
 ## 로그인 실패 메시지 통일
-<!-- akela: id=manual-hub-login-failure-message scope=manual-hub tier=must -->
+<!-- akela: id=manual-hub-login-failure-message scope=manual-hub-auth tier=must -->
 
 - 없는 ID / 틀린 비밀번호 / 비활성 계정 **모두 동일한 메시지**를 반환한다:
   "아이디 또는 비밀번호가 올바르지 않습니다." 아이디가 틀렸는지 비밀번호가 틀렸는지 알려주지
   않는 것은 보안상 의도된 동작이다. 사유는 서버 로그에만 남긴다.
 
 ## 세션 무효화 트리거
-<!-- akela: id=manual-hub-session-invalidation scope=manual-hub tier=must -->
+<!-- akela: id=manual-hub-session-invalidation scope=manual-hub-auth tier=must -->
 
 다음 이벤트 발생 시 해당 사용자의 열려 있는 모든 세션이 **즉시** revoke 된다.
 
@@ -37,7 +37,7 @@
 비활성화된 계정은 다음 요청에서 바로 튕겨나간다 (열려 있던 탭 포함).
 
 ## 역할(Role)과 권한 구조
-<!-- akela: id=manual-hub-role-permission-structure scope=manual-hub tier=should -->
+<!-- akela: id=manual-hub-role-permission-structure scope=manual-hub-auth,manual-hub-dev tier=should -->
 
 - 역할은 `ADMIN` 또는 `USER` 두 종류. `role` 컬럼은 PG enum 이 아닌 varchar 로 저장되어
   향후 `viewer` / `editor` / `manager` 추가 시 타입 재작성 마이그레이션이 불필요하다.
@@ -50,7 +50,7 @@
   숨기는 것만으로 권한 제어를 하지 않는다.
 
 ## 구조적으로 차단된 안전장치
-<!-- akela: id=manual-hub-safety-guards scope=manual-hub tier=must -->
+<!-- akela: id=manual-hub-safety-guards scope=manual-hub-auth tier=must -->
 
 | 시도 | 결과 | 이유 |
 |---|---|---|
@@ -62,7 +62,7 @@
 추가할 때도 이 제약을 깨지 않아야 한다.
 
 ## 모든 Admin 이 잠긴 경우의 복구 경로
-<!-- akela: id=manual-hub-admin-lockout-recovery scope=manual-hub tier=should -->
+<!-- akela: id=manual-hub-admin-lockout-recovery scope=manual-hub-auth,manual-hub-backup tier=should -->
 
 서버 CLI 로만 복구 가능 (웹 UI 경로 없음):
 
@@ -74,7 +74,7 @@ sudo -u <SERVICE_USER> <APP_ROOT>/scripts/qamh reset-password admin
 계정이 비활성 상태라면 DB에서 직접 되살려야 한다 (`UPDATE users SET is_active = true ...`).
 
 ## 업로더 자동 기록 (권한과 결합된 데이터 무결성 규칙)
-<!-- akela: id=manual-hub-uploader-auto-record scope=manual-hub tier=must -->
+<!-- akela: id=manual-hub-uploader-auto-record scope=manual-hub-auth,manual-hub-dev tier=must -->
 
 - 업로더 이름을 사용자가 입력하는 칸이 없다. **지금 로그인한 계정**이 업로더로 자동 기록된다
   (요청 바디로 위조 불가).
@@ -84,7 +84,7 @@ sudo -u <SERVICE_USER> <APP_ROOT>/scripts/qamh reset-password admin
   를 고정하는 이유는 과거 업로드 기록의 추적성을 지키기 위함이다.
 
 ## 감사 로그(Audit Log)와 권한
-<!-- akela: id=manual-hub-audit-log-permissions scope=manual-hub tier=must -->
+<!-- akela: id=manual-hub-audit-log-permissions scope=manual-hub-auth,manual-hub-dev tier=must -->
 
 - 25종 이벤트를 append-only 로 기록. 애플리케이션에 UPDATE / DELETE 엔드포인트가 아예 없다.
 - 사용자 생성·수정·비밀번호 초기화·활성·비활성·권한 변경 등 계정 관련 이벤트도 모두 감사
@@ -94,7 +94,7 @@ sudo -u <SERVICE_USER> <APP_ROOT>/scripts/qamh reset-password admin
   없어 무결성이 보장됨).
 
 ## 계정 운영 원칙
-<!-- akela: id=manual-hub-account-operations scope=manual-hub tier=should -->
+<!-- akela: id=manual-hub-account-operations scope=manual-hub-auth tier=should -->
 
 - 담당자별 개별 계정을 사용하고 공용 계정을 쓰지 않는다 — 업로더 추적의 근거가 사라지기
   때문이다.

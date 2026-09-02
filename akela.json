@@ -15,7 +15,11 @@
     "testing",
     "deployment",
     "documentation",
-    "manual-hub"
+    "manual-hub-dev",
+    "manual-hub-auth",
+    "manual-hub-ui",
+    "manual-hub-deploy",
+    "manual-hub-backup"
   ],
   "compiler": {}
 }

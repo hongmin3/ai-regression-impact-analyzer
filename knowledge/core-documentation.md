@@ -24,7 +24,9 @@
 
 - `knowledge/`는 에이전트가 `akela compile`로 잘라 쓰는 지식이고, `docs/`는 사람이 읽는 문서다. 목적이 다르므로 같은 내용을 양쪽에 중복해 두지 않는다.
 - `knowledge/`의 섹션은 규칙 위주로 짧게 쓴다. 모든 줄이 매 작업의 컨텍스트 비용이 된다.
-- 하위 서비스 지식도 루트 `knowledge/<name>-*.md`에 두고 `scope=<name>`으로 태깅한다. 하위 디렉터리에 `knowledge/`나 `akela.json`을 새로 만들지 않는다.
+- 하위 서비스 지식도 루트 `knowledge/<name>-*.md`에 둔다. 하위 디렉터리에 `knowledge/`나 `akela.json`을 새로 만들지 않는다.
+- activity는 서비스 이름 하나로 뭉뚱그리지 말고 실제 작업 단위로 나눈다(`<name>-dev`, `-auth`, `-ui`, `-deploy`, `-backup`). 하나로 묶으면 매 작업에 전부 들어와 스코핑이 무의미해진다.
+- 한 섹션이 여러 작업에 필요하면 `scope`에 **쉼표로 여러 activity**를 준다 (`scope=a,b`). 판단 기준은 "그 지식이 없으면 이 작업의 결과가 달라지는가"다.
 - `scope=all`은 아껴 쓴다. 모든 작업의 slice에 들어간다. 그리고 `scope=all` + `tier=should` 조합은 컴파일러가 `general-scope`로 버리므로 실질적으로 아무 작업에도 전달되지 않는다 — 특정 activity로 좁히거나 `must`로 올린다.
 
 ## 작업 기록 문서
