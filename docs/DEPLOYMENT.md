@@ -95,7 +95,17 @@ nano secrets.txt   # GEMINI_API_KEY=...
 `secrets.txt`/`secrets.json`/`.env`는 Git에도, 배포 스크립트에도 포함되지 않으므로 서버에서
 직접 만들어야 한다. 값 우선순위는 OS 환경변수 > `secrets.json` > `secrets.txt` > `.env`이다.
 
-### 4-5. 실행
+### 4-5. 실행 (systemd 권장)
+
+서비스로 등록해 두면 서버가 재부팅돼도 자동으로 다시 뜬다. 절차는 §5에 있다. 등록 후에는
+재배포마다 이 한 줄이면 된다.
+
+```bash
+sudo systemctl restart qa-verification
+curl -fsS http://127.0.0.1:12000/health
+```
+
+**systemd 없이 임시로 띄우는 경우** (개발 서버 등). 이 방식은 재부팅에서 살아남지 않는다.
 
 ```bash
 cd /path/to/qa-verification-management-system
@@ -104,8 +114,8 @@ disown
 curl -fsS http://127.0.0.1:12000/health
 ```
 
-재배포 후 코드 변경을 반영하려면 같은 포트를 쓰는 기존 프로세스를 종료하고 위 명령으로 다시
-띄운다:
+이때 재배포 후 코드 변경을 반영하려면 같은 포트를 쓰는 기존 프로세스를 종료하고 위 명령으로
+다시 띄운다:
 
 ```bash
 OLD_PID=$(ss -ltnp 'sport = :12000' | grep -oP 'pid=\K[0-9]+')
@@ -126,38 +136,43 @@ sudo ufw status | grep 12000
 
 사내망 전용으로 운영한다면 그 서버가 사내망에서만 라우팅되는지 네트워크 담당자에게 확인한다.
 
-## 5. systemd로 상시 서비스화 (선택, 더 견고한 운영)
+## 5. systemd로 상시 서비스화
 
-지금은 일반 사용자 프로세스(`nohup` + `disown`)로 운영해도 동작하지만, 서버가 재부팅되면
-자동으로 다시 뜨지 않는다. 상시 운영하려면 systemd 유닛을 등록한다 (아래는 예시이며, 실제 값은
-환경에 맞게 바꾼다):
+`nohup` 프로세스는 서버가 재부팅되면 다시 뜨지 않는다. 하위 서비스인 매뉴얼 서버는 이미
+systemd 로 관리되므로, 핵심 앱도 같은 방식으로 맞춘다.
 
-```ini
-# /etc/systemd/system/qa-verification-management-system.service
-[Unit]
-Description=QA 검증 관리 시스템
-After=network.target
-
-[Service]
-Type=simple
-User=your-user
-WorkingDirectory=/path/to/qa-verification-management-system
-ExecStart=/path/to/qa-verification-management-system/.venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 12000
-Restart=on-failure
-
-[Install]
-WantedBy=multi-user.target
-```
+유닛 템플릿은 저장소에 있다 — [`deploy/systemd/qa-verification.service`](../deploy/systemd/qa-verification.service).
+플레이스홀더 3개(`__APP_ROOT__`, `__SERVICE_USER__`, `__PORT__`)만 실제 값으로 바꿔 설치한다.
 
 ```bash
+APP_ROOT=/path/to/qa-verification-management-system
+sed -e "s|__APP_ROOT__|$APP_ROOT|g"     -e "s|__SERVICE_USER__|$(whoami)|g"     -e "s|__PORT__|12000|g"     "$APP_ROOT/deploy/systemd/qa-verification.service"   | sudo tee /etc/systemd/system/qa-verification.service > /dev/null
+
 sudo systemctl daemon-reload
-sudo systemctl enable --now qa-verification-management-system.service
-sudo systemctl status qa-verification-management-system.service
+sudo systemctl enable qa-verification
 ```
 
-**주의**: 다른 서비스와 같은 서버를 공유한다면, 기존 systemd 유닛·nginx·방화벽·DB 설정을 건드리지
-않고 이 유닛만 새로 추가해야 한다. 운영 서버에 처음 등록할 때는 반드시 서버 관리자(또는 본인이
-관리자라면 스스로)에게 영향 범위를 확인한 뒤 진행한다.
+이미 `nohup` 으로 띄워 둔 프로세스가 있으면 **먼저 종료해야** 포트가 겹치지 않는다.
+
+```bash
+OLD_PID=$(ss -ltnp 'sport = :12000' | grep -oP 'pid=\K[0-9]+' | head -1)
+[ -n "$OLD_PID" ] && kill "$OLD_PID"
+sudo systemctl start qa-verification
+systemctl is-active qa-verification && systemctl is-enabled qa-verification
+curl -fsS http://127.0.0.1:12000/health
+```
+
+유닛에서 눈여겨볼 점:
+
+- `StandardOutput=append:` 로 journald 와 별개로 기존 로그 파일(`output/logs/uvicorn.out`)에도
+  계속 남긴다. 운영 중 `tail -f` 하던 습관이 그대로 유지된다.
+- `Restart=on-failure` — 앱이 죽으면 5초 뒤 자동 재시작한다.
+- 앱은 시작할 때 재시작에 끊긴 `RUNNING` 분석을 정리하고 `QUEUED` 를 이어받으므로
+  (`app/main.py` 의 `lifespan`), 강제 종료돼도 분석 상태가 깨지지 않는다.
+
+**주의**: 다른 서비스와 같은 서버를 공유한다면, 기존 systemd 유닛·nginx·방화벽·DB 설정을
+건드리지 않고 이 유닛만 새로 추가해야 한다. 운영 서버에 처음 등록할 때는 반드시 서버
+관리자(또는 본인이 관리자라면 스스로)에게 영향 범위를 확인한 뒤 진행한다.
 
 ## 6. VXvue 사양서 자동 동기화 활성화 (선택)
 
@@ -177,7 +192,7 @@ sudo systemctl status qa-verification-management-system.service
 2. `requirements.txt`가 바뀌었으면 §4-3 다시 실행
 3. `.\scripts\deploy.ps1`
 4. 서버에서 `pytest` 재확인
-5. 기존 프로세스 종료 → 재기동 (§4-5) — **다른 서비스나 포트는 건드리지 않는다**
+5. `sudo systemctl restart qa-verification` (§5) — **다른 서비스나 포트는 건드리지 않는다**
 6. `curl http://127.0.0.1:12000/health` 및 주요 페이지(`/`, `/knowledge`, `/analyses`) 확인
 
 ## 8. 하위 서비스(QA Manual Hub)를 같은 서버 `/manual-hub`에 붙이기
