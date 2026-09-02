@@ -50,6 +50,15 @@ def test_incomplete_analyses_are_failed_after_restart(tmp_path):
     assert storage.get_analysis("done")["status"] == "DONE"
 
 
+def test_restart_failure_can_target_only_running_jobs(tmp_path):
+    storage = Storage(tmp_path / "app.db")
+    storage.create_analysis("queued")
+    storage.create_analysis("running", status="RUNNING")
+    assert storage.fail_running_analyses() == 1
+    assert storage.get_analysis("queued")["status"] == "QUEUED"
+    assert storage.get_analysis("running")["status"] == "FAILED"
+
+
 def test_job_status_reads_persisted_analysis(monkeypatch, tmp_path):
     persisted = Storage(tmp_path / "app.db")
     persisted.create_analysis("restored")
@@ -122,6 +131,15 @@ def test_active_documents_keeps_multiple_distinct_documents(tmp_path):
     docs = storage.active_documents("specification", "VXvue")
 
     assert {d["name"] for d in docs} == {"사양서1.pdf", "사양서2.pdf", "사양서3.pdf"}
+
+
+def test_active_analysis_count_tracks_queue_and_running(tmp_path):
+    storage = Storage(tmp_path / "app.db")
+    storage.create_analysis("queued")
+    storage.create_analysis("running", status="RUNNING")
+    storage.create_analysis("done")
+    storage.update_analysis("done", "DONE", result=_result("done"))
+    assert storage.active_analysis_count() == 2
 
 
 def test_record_sync_log_endpoint(monkeypatch, tmp_path):
@@ -357,3 +375,18 @@ def test_analysis_detail_renders_documents_and_exact_prompt_audit(monkeypatch, t
 def test_missing_analysis_detail_returns_404(monkeypatch, tmp_path):
     monkeypatch.setattr(routes, "storage", Storage(tmp_path / "app.db"))
     assert TestClient(app).get("/analyses/missing/view").status_code == 404
+
+
+def test_retry_analysis_creates_linked_job(monkeypatch, tmp_path):
+    persisted = Storage(tmp_path / "app.db")
+    persisted.create_analysis("failed", request={"product": "VXvue", "user_notes": "로그인 확인", "change_files": [], "change_paths": []})
+    persisted.update_analysis("failed", "FAILED", error="temporary")
+    monkeypatch.setattr(routes, "storage", persisted)
+    monkeypatch.setattr(routes, "_run_job", lambda *args, **kwargs: None)
+
+    response = TestClient(app).post("/analyses/failed/retry")
+
+    assert response.status_code == 200
+    retried = persisted.get_analysis(response.json()["job_id"])
+    assert retried["request"]["retry_of"] == "failed"
+    assert retried["status"] == "QUEUED"

@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import uuid
+from threading import Thread
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -101,6 +102,31 @@ def _run_job(job_id: str, changes: list[Path], product: str, notes: str) -> None
         storage.update_analysis(job_id, "FAILED", error=str(exc))
 
 
+def _ensure_job_capacity() -> None:
+    limit = int(get_settings().get("analysis.max_concurrent_jobs", 2) or 2)
+    if storage.active_analysis_count() >= limit:
+        raise HTTPException(429, f"동시에 실행할 수 있는 분석은 최대 {limit}건입니다. 실행 중인 작업이 끝난 뒤 다시 시도하세요.")
+
+
+def resume_queued_jobs() -> int:
+    """프로세스가 작업 시작 전에 종료된 QUEUED Regression 분석을 저장된 입력으로 복구한다."""
+    resumed = 0
+    for item in storage.queued_analyses("impact_analyzer"):
+        request = item["request"]
+        paths = [Path(value) for value in request.get("change_paths") or []]
+        if (request.get("change_files") and (not paths or any(not path.exists() for path in paths))) or (not paths and not str(request.get("user_notes") or "").strip()):
+            storage.update_analysis(item["id"], "FAILED", error="서버 재시작 후 원본 입력을 찾지 못해 자동 복구할 수 없습니다.")
+            continue
+        Thread(
+            target=_run_job,
+            args=(item["id"], paths, str(request.get("product") or ""), str(request.get("user_notes") or "")),
+            daemon=True,
+            name=f"analysis-{item['id']}",
+        ).start()
+        resumed += 1
+    return resumed
+
+
 @router.post("/analyses")
 def start_analysis(background_tasks: BackgroundTasks, product: str = Form(...), notes: str = Form(""), change_files: list[UploadFile] = File(default=[])):
     notes = notes.strip()
@@ -112,12 +138,14 @@ def start_analysis(background_tasks: BackgroundTasks, product: str = Form(...), 
         raise HTTPException(429, f"오늘 Gemini 누적 토큰 사용량({token_status['used']:,})이 설정한 한도({token_status['limit']:,})를 초과해 분석을 실행할 수 없습니다. config.yaml의 analysis.daily_token_limit을 조정하세요.")
     if not storage.active_documents("specification", product) or not storage.active_documents("testcase", product):
         raise HTTPException(404, f"'{product}' 제품에 등록된 사양서 또는 TC가 없습니다. Knowledge 메뉴에서 먼저 등록하세요.")
+    _ensure_job_capacity()
     changes = [save_upload(f, get_settings().path("storage.upload_dir"), {".pdf", ".docx"}) for f in uploads]
     job_id = uuid.uuid4().hex[:12]
     request_snapshot = {
         "product": product,
         "user_notes": notes,
         "change_files": [upload.filename for upload in uploads],
+        "change_paths": [str(path) for path in changes],
         "knowledge_documents": [
             {key: doc.get(key) for key in ("id", "kind", "product", "version", "revision", "name", "created_at")}
             for kind in ("specification", "testcase") for doc in storage.active_documents(kind, product)
@@ -126,6 +154,28 @@ def start_analysis(background_tasks: BackgroundTasks, product: str = Form(...), 
     storage.create_analysis(job_id, stage_total=len(ANALYSIS_STAGES), request=request_snapshot, module="impact_analyzer")
     background_tasks.add_task(_run_job, job_id, changes, product, notes)
     return {"job_id": job_id, "status_url": f"/analyses/{job_id}"}
+
+
+@router.post("/analyses/{job_id}/retry")
+def retry_analysis(job_id: str, background_tasks: BackgroundTasks):
+    previous = storage.get_analysis(job_id)
+    if not previous:
+        raise HTTPException(404, "분석 작업을 찾을 수 없습니다.")
+    if previous["status"] not in {"FAILED", "DONE"}:
+        raise HTTPException(409, "완료되거나 실패한 분석만 재실행할 수 있습니다.")
+    request = dict(previous.get("request") or {})
+    product = request.get("product", "")
+    paths = [Path(value) for value in request.get("change_paths") or []]
+    if request.get("change_files") and (not paths or any(not path.exists() for path in paths)):
+        raise HTTPException(409, "이 분석은 재실행용 원본 경로가 없거나 파일이 삭제됐습니다. 변경 문서를 다시 업로드하세요.")
+    if not paths and not str(request.get("user_notes") or "").strip():
+        raise HTTPException(409, "재실행 가능한 입력이 저장되지 않았습니다.")
+    _ensure_job_capacity()
+    new_id = uuid.uuid4().hex[:12]
+    request["retry_of"] = job_id
+    storage.create_analysis(new_id, stage_total=len(ANALYSIS_STAGES), request=request, module="impact_analyzer")
+    background_tasks.add_task(_run_job, new_id, paths, product, str(request.get("user_notes") or ""))
+    return {"job_id": new_id, "retry_of": job_id, "status_url": f"/analyses/{new_id}"}
 
 
 @router.get("/analyses/{job_id}")

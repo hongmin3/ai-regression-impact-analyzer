@@ -188,7 +188,7 @@ Set-Location $newRoot
 우선순위 순서:
 
 1. ~~실제 변경 전용 문서와 서로 다른 기준 사양서를 사용한 업무 정확도 E2E 검증~~ → 완료 (위 4장 참고). 단, 다른 사양서(2~5)·다른 TC Set으로도 추가 검증 권장
-2. VXvue Rev.1.7의 근거 수준(evidence_level)·원본 개정 표시 확인 여부(revision_mark) 결과 모델 구조화 → **스키마 단위 완료** (`ImpactDecision.evidence_level`/`revision_mark`, Report/CSV/XLSX 노출). PDF 실제 취소선/밑줄 서식을 시각적으로 자동 인식하는 것은 별도 기술 검토가 필요해 미착수 (`page.get_text('rawdict')` + `get_drawings()` 조합 검토 필요, PyMuPDF에 취소선 플래그가 없어 오탐 가능) — 지금은 항상 `UNVERIFIED`로 표시하고 원본 확인을 사용자에게 안내
+2. VXvue Rev.1.7의 근거 수준(evidence_level)·원본 개정 표시 확인 여부(revision_mark) 결과 모델 구조화 → **완료**. PDF `rawdict` 텍스트 span과 vector drawing을 대조해 텍스트 폭 절반 이상과 겹치는 수평선만 취소선/밑줄로 판독한다. 취소선은 Human Review를 강제하며 이미지 기반·애매한 표시는 `UNVERIFIED`로 남긴다.
 3. ~~분석 이력의 검색·필터·페이지네이션 보강~~ → **완료** (2026-09-01, `NEXT_STEPS.md` 참고)
 4. ~~자동 탐지로 해결되지 않는 TC용 수동 컬럼/시트 매핑 UI 추가~~ → **완료** (2026-09-01,
    `NEXT_STEPS.md` 참고)
@@ -293,8 +293,10 @@ SSH 접속 자체는 여전히 key 인증을 사용한다. 위 `SERVER_SUDO_PASS
 
 - 실제 Gemini smoke E2E는 성공했지만 동일 사양서를 변경/근거 문서로 사용했으므로 업무 정확도 검증은 남아 있다.
 - Akela CLI `0.1.4`가 전역 설치되어 compile/applied/outcome 기록이 정상 동작한다.
-- 완료된 분석과 상태는 SQLite에 저장되지만 BackgroundTasks 자체는 재시작 후 재개되지 않는다.
+- 완료된 분석과 요청 입력은 SQLite에 저장된다. 재시작 시 QUEUED 작업은 원본이 있으면 자동
+  재제출하고, 이미 실행 중이던 RUNNING 작업은 FAILED로 안전하게 전환한 뒤 UI에서 재실행한다.
 - 등록 사양서·TC의 파싱 결과는 `data/indexes/<document_id>.json`에 캐시하며, 사양서 전체 원문은
   `<document_id>.text`에 별도 캐시한다. BM25 객체는 버전 호환성을 위해 직렬화하지 않고 캐시된
   Pydantic 데이터로 매 분석마다 재구성한다. 캐시가 없거나 손상되면 원본을 다시 파싱해 자동 복구한다.
-- FastAPI BackgroundTasks는 대규모 동시 작업용 Queue가 아니다.
+- 현재 복구 Queue는 단일 uvicorn 인스턴스용 thread 기반이다. 다중 서버·대규모 부하가 실제로
+  필요해지면 PostgreSQL과 외부 Queue로 전환한다.

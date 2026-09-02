@@ -46,6 +46,8 @@ class RevisionMark(str, Enum):
 
     NONE_DETECTED = "NONE_DETECTED"
     UNVERIFIED = "UNVERIFIED"
+    STRIKETHROUGH_DETECTED = "STRIKETHROUGH_DETECTED"
+    UNDERLINE_DETECTED = "UNDERLINE_DETECTED"
 
 
 class ChangeItem(BaseModel):
@@ -108,6 +110,7 @@ class SpecificationChunk(BaseModel):
     page: int
     heading: str = ""
     text: str
+    revision_marks: list[RevisionMark] = Field(default_factory=list)
 
 
 class DraftTestCase(BaseModel):

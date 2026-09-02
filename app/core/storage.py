@@ -208,6 +208,32 @@ class Storage:
                 (status, json.dumps(result, ensure_ascii=False) if result is not None else None, error, datetime.now(timezone.utc).isoformat(), analysis_id),
             )
 
+    def active_analysis_count(self, module: str | None = None) -> int:
+        with self.connect() as db:
+            if module:
+                return int(db.execute(
+                    "SELECT COUNT(*) FROM analyses WHERE status IN ('QUEUED','RUNNING') AND module=?", (module,)
+                ).fetchone()[0])
+            return int(db.execute(
+                "SELECT COUNT(*) FROM analyses WHERE status IN ('QUEUED','RUNNING')"
+            ).fetchone()[0])
+
+    def operations_status(self, stale_before_iso: str) -> dict:
+        cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+        with self.connect() as db:
+            integrity = db.execute("PRAGMA quick_check").fetchone()[0]
+            active = int(db.execute("SELECT COUNT(*) FROM analyses WHERE status IN ('QUEUED','RUNNING')").fetchone()[0])
+            stale = int(db.execute(
+                "SELECT COUNT(*) FROM analyses WHERE status='RUNNING' AND COALESCE(stage_updated_at,updated_at)<?",
+                (stale_before_iso,),
+            ).fetchone()[0])
+            failed_24h = int(db.execute(
+                "SELECT COUNT(*) FROM analyses WHERE status='FAILED' AND updated_at>=?", (cutoff,)
+            ).fetchone()[0])
+            last_sync = db.execute("SELECT status,detail,synced_at FROM sync_log ORDER BY id DESC LIMIT 1").fetchone()
+        return {"database_integrity": integrity, "active_jobs": active, "stale_jobs": stale,
+                "failed_jobs_24h": failed_24h, "last_sync": dict(last_sync) if last_sync else None}
+
     def get_analysis(self, analysis_id: str) -> dict | None:
         with self.connect() as db:
             row = db.execute("SELECT * FROM analyses WHERE id=?", (analysis_id,)).fetchone()
@@ -355,6 +381,21 @@ class Storage:
                 (error, now),
             )
             return cursor.rowcount
+
+    def fail_running_analyses(self, error: str = "서버 재시작으로 실행 중 분석이 중단되었습니다. 재실행할 수 있습니다.") -> int:
+        now = datetime.now(timezone.utc).isoformat()
+        with self.connect() as db:
+            cursor = db.execute(
+                "UPDATE analyses SET status='FAILED',error=?,updated_at=? WHERE status='RUNNING'", (error, now)
+            )
+            return cursor.rowcount
+
+    def queued_analyses(self, module: str) -> list[dict]:
+        with self.connect() as db:
+            rows = db.execute(
+                "SELECT id,request_json FROM analyses WHERE status='QUEUED' AND module=? ORDER BY created_at", (module,)
+            ).fetchall()
+        return [{"id": row["id"], "request": json.loads(row["request_json"] or "{}") } for row in rows]
 
     def cache_get(self, key: str) -> dict | None:
         with self.connect() as db:

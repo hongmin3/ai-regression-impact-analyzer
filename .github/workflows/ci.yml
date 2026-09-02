@@ -1,0 +1,20 @@
+name: CI
+on:
+  push:
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: python -m pytest -q
+      - name: Reject tracked runtime and secret files
+        shell: bash
+        run: |
+          ! git ls-files | grep -E '(^|/)(secrets\.(txt|json)|\.env|\.deploy\.env|app\.db)$'
+          ! git ls-files | grep -E '^(data/(uploads|specifications|testcases|indexes|manual_revisions)|output)/'

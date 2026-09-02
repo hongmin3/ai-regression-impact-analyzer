@@ -5,6 +5,7 @@ import json
 import shutil
 import uuid
 from pathlib import Path
+from threading import Thread
 
 from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, StreamingResponse
@@ -101,6 +102,25 @@ def _run_job(
         storage.update_analysis(job_id, "FAILED", error=str(exc))
 
 
+def resume_queued_jobs() -> int:
+    resumed = 0
+    for item in storage.queued_analyses("manual_review"):
+        request = item["request"]
+        path = Path(str(request.get("source_path") or ""))
+        if not path.exists():
+            storage.update_analysis(item["id"], "FAILED", error="서버 재시작 후 Manual 원본을 찾지 못해 자동 복구할 수 없습니다.")
+            continue
+        release = Path(request["release_note_path"]) if request.get("release_note_path") else None
+        design = Path(request["design_review_path"]) if request.get("design_review_path") else None
+        Thread(target=_run_job, args=(
+            item["id"], path, str(request.get("product") or ""), str(request.get("manual_name") or ""),
+            str(request.get("revision_label") or ""), request.get("parent_revision_id"), release, design,
+            str(request.get("target_version") or ""),
+        ), daemon=True, name=f"manual-review-{item['id']}").start()
+        resumed += 1
+    return resumed
+
+
 def _register_or_reuse_reference_doc(kind: str, product: str, revision_label: str, upload: UploadFile | None) -> Path | None:
     """Release Note/설계검토보고서가 이번에 업로드됐으면 등록하고, 아니면 이 제품에 이미
     등록된 가장 최근 문서를 자동으로 사용한다 (스펙 §45 "사용자 개입 최소화")."""
@@ -138,6 +158,9 @@ def start_revision(
         raise HTTPException(400, "제품, Manual 종류, 제품 버전을 모두 입력하세요.")
     if product not in storage.list_products():
         raise HTTPException(400, "등록되지 않은 제품입니다. 공용 Knowledge에서 제품을 먼저 추가하세요.")
+    limit = int(get_settings().get("analysis.max_concurrent_jobs", 2) or 2)
+    if storage.active_analysis_count() >= limit:
+        raise HTTPException(429, f"동시에 실행할 수 있는 분석은 최대 {limit}건입니다. 실행 중인 작업이 끝난 뒤 다시 시도하세요.")
     storage.ensure_version(product, target_version)
     try:
         parent_id = int(parent_revision_id) if parent_revision_id.strip() else None
@@ -158,7 +181,12 @@ def start_revision(
     release_note_path = _register_or_reuse_reference_doc("release_note", product, revision_label, release_note_file)
     design_review_path = _register_or_reuse_reference_doc("design_review", product, revision_label, design_review_file)
     job_id = uuid.uuid4().hex[:12]
-    storage.create_analysis(job_id, stage_total=len(MANUAL_REVIEW_STAGES), module="manual_review")
+    storage.create_analysis(job_id, stage_total=len(MANUAL_REVIEW_STAGES), module="manual_review", request={
+        "product": product, "manual_name": manual_name, "target_version": target_version,
+        "revision_label": revision_label, "parent_revision_id": parent_id, "source_path": str(path),
+        "release_note_path": str(release_note_path) if release_note_path else None,
+        "design_review_path": str(design_review_path) if design_review_path else None,
+    })
     background_tasks.add_task(_run_job, job_id, path, product, manual_name, revision_label, parent_id, release_note_path, design_review_path, target_version)
     return {"job_id": job_id, "status_url": f"/manual-review/jobs/{job_id}"}
 

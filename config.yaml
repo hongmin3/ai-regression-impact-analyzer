@@ -17,6 +17,17 @@ storage:
   manual_revision_dir: "data/manual_revisions"
   manual_review_comment_dir: "output/manual_review_comments"
 
+# 이 저장소가 함께 관리하는 하위 서비스. 핵심 앱과 다른 프로세스·다른 DB를 쓰는
+# 독립 배포 단위이므로, 홈 화면에서는 링크로만 연결한다 (services/ 참고).
+services:
+  manual_hub:
+    name: "매뉴얼 서버"
+    description: "제품 매뉴얼·기술문서의 Revision 이력을 삭제 없이 보존하는 사내 문서관리 시스템입니다."
+    # 홈 화면 카드가 여는 주소. 빈 문자열이면 카드를 표시하지 않는다.
+    # 기본값은 같은 서버 nginx가 /manual-hub/ 로 프록시하는 통합 배포 기준이다
+    # (deploy/nginx/qa-platform.conf). 별도 호스트로 운영하면 절대 URL을 넣는다.
+    url: "/manual-hub/"
+
 manual_review:
   # 근거 SRS 후보 개수 상한 (토큰 절약, 스펙 §28-G)
   max_srs_candidates: 6
@@ -39,3 +50,7 @@ analysis:
   # 0 = 비활성. Gemini 무료 한도를 유지하려면 https://aistudio.google.com 할당량을 확인해
   # 하루 총 토큰 수 기준으로 값을 넣는다. 넘으면 새 분석 실행이 차단된다 (실행 중인 분석에는 영향 없음).
   daily_token_limit: 0
+  # 단일 uvicorn 프로세스에서 동시에 실행할 분석 수. 초과 요청은 429로 거절한다.
+  max_concurrent_jobs: 2
+  # 이 시간 동안 단계 갱신이 없는 RUNNING 작업은 운영 모니터에서 stale 경고한다.
+  job_timeout_minutes: 30

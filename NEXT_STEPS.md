@@ -1,5 +1,14 @@
 # Next Steps — 매뉴얼 개정 검증 기능 진행 상황 (우선순위 순)
 
+## 2026-09-02 운영 신뢰성·평가·CI·백업·PDF 개정 표시 고도화
+
+- 분석 동시 실행 제한, 요청 원본 경로 보존, 재실행 API/UI, 재시작 후 QUEUED 작업 자동 복구.
+- `/operations/status`와 CLI 모니터, SQLite Online Backup+SHA-256+임시 복원 무결성 검증.
+- QA 정답 기반 precision/recall/F1 평가 CLI와 GitHub Actions 전체 pytest/추적 파일 검사.
+- PDF vector line과 텍스트 span의 위치를 대조해 취소선·밑줄을 보수적으로 판독. 취소선 근거는
+  자동으로 Human Review가 필요하며, 애매하거나 이미지 기반인 경우 기존처럼 `UNVERIFIED` 유지.
+- Windows `AIRegressionAnalyzer_VXvueSpecSync` Action을 현재 프로젝트 경로로 수정하고 dry-run 성공 확인.
+
 > **2026-09-02 사용자 결정**
 > - 로컬 폴더 rename(대상 이름 `qa-verification-management-system`, `HANDOFF.md` §2에
 >   정확한 명령 있음, 이 세션이 폴더를 물고 있어 세션 내부에서는 구조적으로 불가능함을

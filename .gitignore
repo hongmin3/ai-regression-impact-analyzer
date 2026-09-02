@@ -29,6 +29,7 @@ output/manual_review_comments/
 *.log
 app.pid
 output-bootstrap.log
+backups/
 akela/.cache/
 
 # 사용자가 직접 편집하는 비밀정보 파일 (예제 파일만 공개)

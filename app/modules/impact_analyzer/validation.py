@@ -1,4 +1,4 @@
-from app.modules.impact_analyzer.schemas import DraftTestCase, EvidenceLevel, ImpactDecision, SpecificationChunk, TestCase
+from app.modules.impact_analyzer.schemas import DraftTestCase, EvidenceLevel, ImpactDecision, RevisionMark, SpecificationChunk, TestCase
 
 
 def classify_confidence(decision: ImpactDecision, recommended: float = 0.8, review: float = 0.6) -> ImpactDecision:
@@ -47,6 +47,11 @@ def attach_specification_references(decisions: list[ImpactDecision], chunks: lis
                 parts.append(heading[:60])
             parts.append(f"p.{chunk.page}")
             decision.specification_reference = " · ".join(parts)
+            if RevisionMark.STRIKETHROUGH_DETECTED in chunk.revision_marks:
+                decision.revision_mark = RevisionMark.STRIKETHROUGH_DETECTED
+                decision.manual_review_required = True
+            elif RevisionMark.UNDERLINE_DETECTED in chunk.revision_marks:
+                decision.revision_mark = RevisionMark.UNDERLINE_DETECTED
             break
     return decisions
 
