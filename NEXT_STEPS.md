@@ -258,6 +258,35 @@ NON_FUNCTIONAL_CHANGE 필터, SRS 근거 로컬 검색(impact_analyzer가 이미
 - ✅ (사용자 요청) 모든 코드는 특정 제품명을 하드코딩하지 않도록 점검·수정 — 추후 VXvue 외
   제품 확장을 염두에 둔 설계 유지(`comment_writer.py`의 author를 `{product} QA AI`로 조립).
 
+## 2026-09-02 운영 자동 복구 · 전체 경로 감시 · 매뉴얼 서버 데이터 연동
+
+미착수 목록의 1·2·3·7번을 처리했다.
+
+- **1. systemd 전환 완료.** 핵심 앱이 `nohup` 프로세스로만 떠 있어 재부팅에서 살아남지
+  못하던 문제. `deploy/systemd/qa-verification.service` 를 추가하고 실서버에 설치·enable
+  했다. 검증: `systemctl restart` 정상, `kill -9` 후 자동 복구(MainPID 1307421 → 1307442),
+  로그가 기존 `output/logs/uvicorn.out` 에 계속 기록. 다른 서비스 포트 PID 전부 유지.
+- **2. 모니터 확장 완료.** `--check NAME=URL` 을 추가해 nginx 와 매뉴얼 서버까지 감시한다.
+  조회 실패가 traceback 이 아니라 alert 로 나오도록 고쳤고, operations 조회가 실패하면
+  근거 없이 무결성/stale 판정을 내리지 않는다. 테스트 7건.
+- **3. cron 정리 완료.** 조사 중 **모니터가 16번 실행됐지만 매번 실패**하고 있던 것을
+  발견했다 — crontab 줄 끝에 리터럴 ``(0x5C 0x72)이 붙어 리다이렉트가 깨져 `monitor.log`
+  가 아예 생성되지 않았다. 오염을 제거하고, 서버 TZ 가 `America/New_York` 이라 02:15/02:30
+  이 실제로는 15:15/15:30 KST 였던 것도 14:15/14:30 EDT(= 03:15/03:30 KST)로 옮겼다.
+  `jjhhub` 등 다른 서비스의 cron 줄은 그대로 보존. 갱신 후 cron 이 실제로 로그를 남기는
+  것까지 확인했다(`{"status": "ok", ..., "checks": {"nginx": "ok", "manual_hub": "ok"}}`).
+- **7. 매뉴얼 서버 데이터 연동 완료(기본 비활성).** Cross-Manual 대조 대상을 (1) 로컬 최신
+  리비전 → (2) 매뉴얼 서버 Current → (3) Knowledge 문서 순으로 모은다. `app/core/
+  manual_hub_client.py` 는 HTTP API 만 사용하며 매뉴얼 서버 코드·DB 를 직접 건드리지
+  않는다. 장애 격리 테스트가 실제 결함을 잡았다 — `from_settings()` 가 try 밖에 있어 설정
+  로딩 실패가 검증 전체를 죽였다. 테스트 15건, `pytest -q` **236 passed**.
+
+**사용자 조치 필요**: 7번 연동을 켜려면 매뉴얼 서버에서 **읽기 전용 용도의 일반 User
+계정**(Admin 금지)을 하나 만들고 `secrets.txt` 의 `MANUAL_HUB_USER`/`MANUAL_HUB_PASSWORD`
+와 `config.yaml` 의 `services.manual_hub.api_url`(`http://127.0.0.1/manual-hub/api`)을
+채워야 한다. 계정 생성은 대신 수행하지 않았다. 셋이 갖춰지기 전까지 연동은 꺼진 채
+기존 동작을 그대로 유지한다. 절차는 `docs/modules/manual-review.md` 참고.
+
 ## 아직 미착수 (2026-09-02 재정리, 우선순위 순)
 
 앞선 항목들(Cross-Manual, 이미지 Gate, 비용 대시보드, 실파일 E2E)은 모두 완료됐다. 저장소
@@ -266,17 +295,17 @@ NON_FUNCTIONAL_CHANGE 필터, SRS 근거 로컬 검색(impact_analyzer가 이미
 
 ### A. 운영 리스크 — 먼저 손봐야 하는 것
 
-1. **핵심 앱이 서버 재부팅 시 자동으로 뜨지 않는다.** systemd 유닛도 `@reboot` cron도 없고
+1. ~~**핵심 앱이 서버 재부팅 시 자동으로 뜨지 않는다.**~~ → 완료 (위 참고). systemd 유닛도 `@reboot` cron도 없고
    `nohup` 프로세스(PPID 1)로만 떠 있다. 매뉴얼 서버는 `qa-manual-hub.service`가 enabled라
    자동 복구되는데 핵심 앱만 수동 재기동이 필요하다. 현재 서버 uptime이 7주라 아직 겪지
    않았을 뿐이다. `docs/DEPLOYMENT.md` §5에 유닛 예시가 이미 있다.
    - 확인: `/etc/systemd/system`에 관련 유닛 없음, `crontab -l`에 `@reboot` 없음,
      `ps -o ppid` = 1.
-2. **모니터링이 핵심 앱만 본다.** `scripts/monitor_health.py`가 10분마다 `127.0.0.1:12000`만
+2. ~~**모니터링이 핵심 앱만 본다.**~~ → 완료 (위 참고). `scripts/monitor_health.py`가 10분마다 `127.0.0.1:12000`만
    확인한다. 통합 이후 실제 사용자 진입점은 nginx(:80)이고, 매뉴얼 서버(:9180)와
    PostgreSQL은 감시 대상이 아니다. `/manual-hub/api/health`와 nginx를 감시 대상에 추가해야
    한다.
-3. **백업이 한국 업무시간에 돈다.** 서버 타임존이 `America/New_York`이라 cron의 02:15 /
+3. ~~**백업이 한국 업무시간에 돈다.**~~ → 완료 (위 참고). 서버 타임존이 `America/New_York`이라 cron의 02:15 /
    02:30이 실제로는 **15:15 / 15:30 KST**다. 지금은 DB 덤프 40K + 저장소 48M이라 영향이
    작지만, 매뉴얼이 쌓이면 업무 중 부하가 된다. cron 시간을 KST 기준 새벽으로 옮긴다
    (서버 TZ 변경은 같은 호스트의 다른 서비스에 영향을 주므로 cron 시각만 조정).
@@ -292,7 +321,7 @@ NON_FUNCTIONAL_CHANGE 필터, SRS 근거 로컬 검색(impact_analyzer가 이미
 
 ### B. 제품 기능 고도화
 
-7. **두 시스템의 데이터가 아직 연결되지 않았다.** 매뉴얼 개정 검증이 참조하는 매뉴얼과
+7. ~~**두 시스템의 데이터가 아직 연결되지 않았다.**~~ → 코드 완료, 계정 생성만 사용자 조치 대기 (위 참고). 매뉴얼 개정 검증이 참조하는 매뉴얼과
    매뉴얼 서버에 보관된 매뉴얼이 서로를 모른다. 매뉴얼 서버 API로 제품의 Current 매뉴얼을
    가져와 개정 검증의 Cross-Manual 대조 대상으로 쓰면, 지금 수동으로 올리는 과정이 사라진다.
    저장소를 합친 이유를 실제 기능으로 잇는 항목이며, **이번 통합의 가장 큰 미개척 시너지**다.
