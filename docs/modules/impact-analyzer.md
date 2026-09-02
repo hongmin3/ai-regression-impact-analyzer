@@ -62,7 +62,7 @@ HTML 보고서 + XLSX + 신규 TC 초안(md)
 | HTML 보고서 | 의미 단위 Change Summary, 단순화된 TC 표, 사람이 읽는 사양 근거 |
 | XLSX | 추천 TC 목록 (검증 계획에 그대로 붙여 쓸 수 있는 형태) |
 | 신규 TC 초안 (md) | 기존 TC로 커버되지 않는 변경에 대한 초안 |
-| 분석 상세 화면 | 요청 문서, Knowledge 근거, System Instruction, Gemini에 실제로 전달된 입력 JSON과 원본 응답, 모델·캐시·생성 설정, BM25 후보 순위와 점수 |
+| 분석 상세 화면 | 요청 문서, Knowledge 근거, System Instruction, Gemini에 실제로 전달된 입력 JSON과 원본 응답, 모델·캐시·생성 설정, BM25 후보 순위와 점수, QA 확정 정답과 정확도 |
 
 마지막 항목이 이 기능의 감사 근거다. "AI가 왜 이렇게 판단했는가"를 사후에 그대로 열어볼 수
 있어야 검증 결과를 업무에 쓸 수 있다.
@@ -82,5 +82,6 @@ HTML 보고서 + XLSX + 신규 TC 초안(md)
 
 ## 정확도 평가
 
-QA가 확정한 정답과 분석 결과를 비교해 precision·recall·F1과 누락/과추천 TC를 계산하는 절차는
+완료된 분석의 상세 화면에서 QA 확정 TC를 저장하면 분석별 및 누적 precision·recall·F1과
+누락/과추천 TC가 즉시 표시된다. 운영 방법과 파일 기반 CLI 절차는
 [정확도 평가](../EVALUATION.md)에 있다.

@@ -34,6 +34,11 @@ class Storage:
                     id TEXT PRIMARY KEY, status TEXT NOT NULL, result_json TEXT,
                     request_json TEXT, error TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS analysis_evaluations (
+                    analysis_id TEXT PRIMARY KEY REFERENCES analyses(id),
+                    expected_tc_ids_json TEXT NOT NULL, qa_note TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+                );
                 CREATE TABLE IF NOT EXISTS ai_cache (
                     cache_key TEXT PRIMARY KEY, response_json TEXT NOT NULL, created_at TEXT NOT NULL
                 );
@@ -247,6 +252,39 @@ class Storage:
         else:
             value.pop("result_json")
         return value
+
+    def save_analysis_evaluation(self, analysis_id: str, expected_tc_ids: list[str], qa_note: str = "") -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        with self.connect() as db:
+            db.execute(
+                "INSERT INTO analysis_evaluations(analysis_id,expected_tc_ids_json,qa_note,created_at,updated_at) "
+                "VALUES(?,?,?,?,?) ON CONFLICT(analysis_id) DO UPDATE SET "
+                "expected_tc_ids_json=excluded.expected_tc_ids_json,qa_note=excluded.qa_note,updated_at=excluded.updated_at",
+                (analysis_id, json.dumps(expected_tc_ids, ensure_ascii=False), qa_note, now, now),
+            )
+
+    def get_analysis_evaluation(self, analysis_id: str) -> dict | None:
+        with self.connect() as db:
+            row = db.execute("SELECT * FROM analysis_evaluations WHERE analysis_id=?", (analysis_id,)).fetchone()
+        if not row:
+            return None
+        value = dict(row)
+        value["expected_tc_ids"] = json.loads(value.pop("expected_tc_ids_json"))
+        return value
+
+    def list_evaluated_analyses(self) -> list[dict]:
+        with self.connect() as db:
+            rows = db.execute(
+                "SELECT a.id,a.result_json,e.expected_tc_ids_json,e.qa_note,e.updated_at "
+                "FROM analysis_evaluations e JOIN analyses a ON a.id=e.analysis_id "
+                "WHERE a.status='DONE' AND a.result_json IS NOT NULL ORDER BY e.updated_at DESC"
+            ).fetchall()
+        return [
+            {"analysis_id": row["id"], "result": json.loads(row["result_json"]),
+             "expected_tc_ids": json.loads(row["expected_tc_ids_json"]),
+             "qa_note": row["qa_note"], "updated_at": row["updated_at"]}
+            for row in rows
+        ]
 
     def list_analyses(
         self, limit: int = 100, offset: int = 0,

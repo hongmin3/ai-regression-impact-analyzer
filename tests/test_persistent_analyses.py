@@ -37,6 +37,42 @@ def test_completed_analysis_survives_storage_recreation(tmp_path):
     assert restored["result"]["change_file"] == "change.docx"
 
 
+def test_analysis_evaluation_survives_storage_recreation(tmp_path):
+    db_path = tmp_path / "app.db"
+    storage = Storage(db_path)
+    storage.create_analysis("evaluated")
+    storage.update_analysis("evaluated", "DONE", result=_result("evaluated"))
+    storage.save_analysis_evaluation("evaluated", ["TC-1", "TC-2"], "QA 확인")
+
+    evaluation = Storage(db_path).get_analysis_evaluation("evaluated")
+
+    assert evaluation["expected_tc_ids"] == ["TC-1", "TC-2"]
+    assert evaluation["qa_note"] == "QA 확인"
+
+
+def test_completed_analysis_accepts_qa_gold_and_renders_metrics(monkeypatch, tmp_path):
+    persisted = Storage(tmp_path / "app.db")
+    result = _result("evaluated-web")
+    result["decisions"] = [{"tc_id": "TC-1", "recommended": True}]
+    persisted.create_analysis("evaluated-web")
+    persisted.update_analysis("evaluated-web", "DONE", result=result)
+    monkeypatch.setattr(routes, "storage", persisted)
+    client = TestClient(app)
+
+    response = client.post(
+        "/analyses/evaluated-web/evaluation",
+        data={"expected_tc_ids": "TC-1\nTC-2", "qa_note": "실행 결과 확정"},
+        follow_redirects=False,
+    )
+    detail = client.get("/analyses/evaluated-web/view")
+
+    assert response.status_code == 303
+    assert persisted.get_analysis_evaluation("evaluated-web")["expected_tc_ids"] == ["TC-1", "TC-2"]
+    assert "Precision 100.0%" in detail.text
+    assert "Recall 50.0%" in detail.text
+    assert "TC-2" in detail.text
+
+
 def test_incomplete_analyses_are_failed_after_restart(tmp_path):
     storage = Storage(tmp_path / "app.db")
     storage.create_analysis("queued")

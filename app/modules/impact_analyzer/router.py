@@ -12,6 +12,7 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Stre
 from fastapi.templating import Jinja2Templates
 
 from app.core.config import get_settings, reload_settings
+from app.core.evaluation import aggregate_evaluations, evaluate_analysis, parse_tc_ids
 from app.core.storage import Storage
 from app.core.uploads import save_upload
 from app.modules.impact_analyzer.regression_analyzer import RegressionAnalyzer
@@ -86,11 +87,30 @@ def analysis_detail(request: Request, job_id: str):
     if not analysis:
         raise HTTPException(404, "분석 작업을 찾을 수 없습니다.")
     result = analysis.get("result") or {}
+    evaluation = storage.get_analysis_evaluation(job_id)
+    evaluation_report = evaluate_analysis(result, evaluation) if evaluation else None
+    reports = [
+        evaluate_analysis(item["result"], {"case_id": item["analysis_id"], "expected_tc_ids": item["expected_tc_ids"]})
+        for item in storage.list_evaluated_analyses()
+    ]
     return templates.TemplateResponse(
         request,
         "analysis_detail.html",
-        {"analysis": analysis, "result": result, "audit": result.get("ai_audit") or {}},
+        {"analysis": analysis, "result": result, "audit": result.get("ai_audit") or {},
+         "evaluation": evaluation, "evaluation_report": evaluation_report,
+         "evaluation_summary": aggregate_evaluations(reports)},
     )
+
+
+@router.post("/analyses/{job_id}/evaluation")
+def save_evaluation(job_id: str, expected_tc_ids: str = Form(""), qa_note: str = Form("")):
+    analysis = storage.get_analysis(job_id)
+    if not analysis:
+        raise HTTPException(404, "분석 작업을 찾을 수 없습니다.")
+    if analysis["status"] != "DONE" or not analysis.get("result"):
+        raise HTTPException(409, "완료된 분석만 QA 정답을 확정할 수 있습니다.")
+    storage.save_analysis_evaluation(job_id, parse_tc_ids(expected_tc_ids), qa_note.strip())
+    return RedirectResponse(f"/analyses/{job_id}/view?evaluation=saved", status_code=303)
 
 
 def _run_job(job_id: str, changes: list[Path], product: str, notes: str) -> None:
