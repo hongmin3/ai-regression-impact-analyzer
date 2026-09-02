@@ -43,6 +43,10 @@ class Settings(BaseSettings):
     session_lifetime_hours: int = 8
     session_cookie_secure: bool = False  # flip to True once HTTPS is in front
     session_cookie_samesite: str = "lax"
+    # "/" for a standalone site. When the SPA is mounted under the QA platform
+    # nginx set SESSION_COOKIE_PATH=/manual-hub/ so the session cookie is not
+    # sent to the other application sharing the host.
+    session_cookie_path: str = "/"
 
     # --- storage ---
     storage_root: Path = Path("/srv/qa-manual-hub/storage")

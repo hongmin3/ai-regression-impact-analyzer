@@ -51,7 +51,7 @@ def create_session(
         httponly=True,
         secure=settings.session_cookie_secure,
         samesite=settings.session_cookie_samesite,  # type: ignore[arg-type]
-        path="/",
+        path=settings.session_cookie_path,
     )
     return record
 
@@ -59,7 +59,7 @@ def create_session(
 def clear_session_cookie(response: Response) -> None:
     response.delete_cookie(
         key=settings.session_cookie_name,
-        path="/",
+        path=settings.session_cookie_path,
         httponly=True,
         secure=settings.session_cookie_secure,
         samesite=settings.session_cookie_samesite,  # type: ignore[arg-type]

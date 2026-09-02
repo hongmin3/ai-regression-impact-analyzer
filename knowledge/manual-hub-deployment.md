@@ -1,7 +1,12 @@
-# Deployment
+# QA Manual Hub — Deployment
+
+> 이 문서의 저장소 상대 경로(`backend/`, `frontend/`, `deploy/` 등)는 모두
+> `services/qa-manual-hub/` 기준이다. `<APP_ROOT>` / `<DATA_ROOT>` 는 서버의
+> 런타임 경로이며 저장소 경로가 아니다.
+
 
 ## systemd vs Docker Compose 선택 기준
-<!-- akela: id=systemd-vs-docker -->
+<!-- akela: id=manual-hub-systemd-vs-docker scope=manual-hub tier=should -->
 
 이 저장소는 두 배포 경로를 모두 제공한다.
 
@@ -14,7 +19,7 @@
 자세한 판단 근거는 `deploy/docker-compose.yml` 상단 주석에 있다.
 
 ## 사전 조건 (systemd 배포)
-<!-- akela: id=prerequisites -->
+<!-- akela: id=manual-hub-prerequisites scope=manual-hub tier=should -->
 
 - Ubuntu 22.04 / 24.04 (다른 systemd 리눅스도 동작)
 - PostgreSQL 14 이상이 이미 구동 중 (`psql` 로 접속 가능)
@@ -22,7 +27,7 @@
 - 개발 PC에 Node.js 20 이상 (프론트엔드 빌드용, 서버에는 불필요)
 
 ## 설치 (install.sh) — 멱등, 추가 작업만 수행
-<!-- akela: id=install-script -->
+<!-- akela: id=manual-hub-install-script scope=manual-hub tier=must -->
 
 ```bash
 sudo ./deploy/scripts/install.sh
@@ -41,7 +46,7 @@ sudo ./deploy/scripts/install.sh
 환경변수로 조정 가능: `APP_ROOT`, `DATA_ROOT`, `BACKEND_PORT`, `DB_NAME`, `DB_USER`, `SERVICE_USER`, `SKIP_NGINX`, `SKIP_UFW`.
 
 ## 코드 배포 (deploy.sh)
-<!-- akela: id=deploy-script -->
+<!-- akela: id=manual-hub-deploy-script scope=manual-hub tier=must -->
 
 개발 PC에서 실행:
 
@@ -56,7 +61,7 @@ sudo ./deploy/scripts/install.sh
 **롤백**: 이전 커밋을 체크아웃해 다시 `deploy.sh` 실행. 스키마 변경이 포함된 경우 `alembic downgrade` 를 먼저 검토.
 
 ## 최초 관리자 생성 및 시드
-<!-- akela: id=bootstrap-admin-seed -->
+<!-- akela: id=manual-hub-bootstrap-admin-seed scope=manual-hub tier=should -->
 
 ```bash
 sudo -u <SERVICE_USER> <APP_ROOT>/scripts/qamh bootstrap-admin
@@ -68,7 +73,7 @@ sudo -u <SERVICE_USER> <APP_ROOT>/scripts/qamh bootstrap-admin
 - `seed-catalog` 는 문서 분류 10종 + 지정 제품을 생성 (이미 있으면 건너뜀)
 
 ## 관리 CLI
-<!-- akela: id=admin-cli -->
+<!-- akela: id=manual-hub-admin-cli scope=manual-hub tier=should -->
 
 ```bash
 <APP_ROOT>/scripts/qamh <command>
@@ -86,7 +91,7 @@ sudo -u <SERVICE_USER> <APP_ROOT>/scripts/qamh bootstrap-admin
 래퍼가 `.env` 를 자동 로드하므로 어느 경로에서 실행해도 된다.
 
 ## 백업 절차
-<!-- akela: id=backup-procedure -->
+<!-- akela: id=manual-hub-backup-procedure scope=manual-hub tier=must -->
 
 ```bash
 <APP_ROOT>/scripts/backup.sh
@@ -109,7 +114,7 @@ manifest 가 있어 **DB 덤프와 파일 세트가 어긋난 조합으로 복�
 별도 볼륨/NAS 로 지정하거나 백업 디렉터리를 외부로 복제할 것을 권장.
 
 ## 복구 절차 (restore.sh)
-<!-- akela: id=restore-procedure -->
+<!-- akela: id=manual-hub-restore-procedure scope=manual-hub tier=must -->
 
 ```bash
 sudo <APP_ROOT>/scripts/restore.sh <DATA_ROOT>/backup/20260827-023000
@@ -130,7 +135,7 @@ sudo <APP_ROOT>/scripts/restore.sh <DATA_ROOT>/backup/20260827-023000
 `pre-restore-<timestamp>` 백업으로 다시 restore.sh 를 실행해 되돌린다.
 
 ## 설정 변경 시 함께 조정할 값
-<!-- akela: id=config-coupling -->
+<!-- akela: id=manual-hub-config-coupling scope=manual-hub tier=should -->
 
 - `MAX_UPLOAD_MB` 를 올릴 때는 nginx 의 `client_max_body_size` 도 함께 올려야 한다.
   nginx 가 앱보다 크게 잡혀 있어야 사용자가 기본 413 HTML 페이지 대신 앱의 한국어 안내
@@ -140,7 +145,7 @@ sudo <APP_ROOT>/scripts/restore.sh <DATA_ROOT>/backup/20260827-023000
   애플리케이션 코드는 수정하지 않는다.
 
 ## 장애 확인 체크리스트
-<!-- akela: id=troubleshooting-checklist -->
+<!-- akela: id=manual-hub-troubleshooting-checklist scope=manual-hub tier=should -->
 
 | 증상 | 확인 | 조치 |
 |---|---|---|

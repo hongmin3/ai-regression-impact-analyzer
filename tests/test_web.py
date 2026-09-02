@@ -1,6 +1,7 @@
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.web import router
 
 
 def test_health():
@@ -15,6 +16,46 @@ def test_hub_links_to_qa_modules():
     assert "<nav>" not in response.text
     assert 'href="/impact-analyzer"' in response.text
     assert 'href="/manual-review"' in response.text
+
+
+def test_hub_shows_configured_external_services():
+    """config.yaml `services.*`에 URL이 있는 하위 서비스는 허브 카드로 나온다."""
+    response = TestClient(app).get("/")
+    assert response.status_code == 200
+    assert 'href="/manual-hub/"' in response.text
+    assert "매뉴얼 서버" in response.text
+
+
+def test_hub_hides_external_service_without_url(monkeypatch):
+    """URL이 비어 있으면 카드를 만들지 않는다 — 하위 서비스를 배포하지 않은 환경에서
+    깨진 링크가 노출되지 않아야 한다."""
+    monkeypatch.setitem(
+        router.get_settings().raw,
+        "services",
+        {"manual_hub": {"name": "매뉴얼 서버", "url": ""}},
+    )
+    response = TestClient(app).get("/")
+    assert response.status_code == 200
+    assert 'href="/manual-hub/"' not in response.text
+    assert "매뉴얼 서버" not in response.text
+
+
+def test_external_services_skips_blank_url(monkeypatch):
+    """URL이 공백이거나 없는 항목은 카드 목록에서 제외된다."""
+    settings = router.get_settings()
+    monkeypatch.setitem(
+        settings.raw,
+        "services",
+        {
+            "with_url": {"name": "있음", "url": " https://example.internal "},
+            "blank_url": {"name": "없음", "url": "   "},
+            "no_url": {"name": "누락"},
+            "not_a_dict": "무시",
+        },
+    )
+    cards = router.external_services()
+    assert [card["key"] for card in cards] == ["with_url"]
+    assert cards[0]["url"] == "https://example.internal"
 
 
 def test_impact_analyzer_has_dedicated_entry_route():

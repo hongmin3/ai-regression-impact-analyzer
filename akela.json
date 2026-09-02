@@ -14,7 +14,8 @@
     "web-ui",
     "testing",
     "deployment",
-    "documentation"
+    "documentation",
+    "manual-hub"
   ],
   "compiler": {}
 }

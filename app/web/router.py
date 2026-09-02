@@ -9,6 +9,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
+from app.core.config import get_settings
 from app.modules.cost_dashboard.router import router as cost_dashboard_router
 from app.modules.impact_analyzer.router import router as impact_analyzer_router
 from app.modules.knowledge.router import router as knowledge_router
@@ -18,9 +19,36 @@ from app.modules.manual_review.router import router as manual_review_router
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
 
 
+def external_services() -> list[dict[str, str]]:
+    """config.yaml `services.*` 중 URL이 설정된 하위 서비스만 허브 카드로 노출한다.
+
+    핵심 앱과 같은 프로세스에서 뜨지 않는 별도 배포 단위(예: services/qa-manual-hub)를
+    링크로만 연결한다. URL이 비어 있으면 카드를 만들지 않으므로, 하위 서비스를
+    배포하지 않은 환경에서는 깨진 링크가 노출되지 않는다."""
+    configured = get_settings().get("services") or {}
+    cards: list[dict[str, str]] = []
+    for key, value in configured.items():
+        if not isinstance(value, dict):
+            continue
+        url = str(value.get("url") or "").strip()
+        if not url:
+            continue
+        cards.append(
+            {
+                "key": key,
+                "name": str(value.get("name") or key),
+                "description": str(value.get("description") or ""),
+                "url": url,
+            }
+        )
+    return cards
+
+
 def hub(request: Request):
     """QA 자동화 기능을 선택하는 공용 진입점."""
-    return templates.TemplateResponse(request, "hub.html")
+    return templates.TemplateResponse(
+        request, "hub.html", {"external_services": external_services()}
+    )
 
 
 def build_router() -> APIRouter:

@@ -1,9 +1,22 @@
-name: CI
+# 핵심 앱(루트 FastAPI 애플리케이션) CI.
+# 하위 서비스는 각자의 워크플로가 담당한다 — .github/workflows/manual-hub.yml
+name: Core App CI
+
 on:
   push:
+    paths-ignore:
+      - "services/**"
+      - "docs/**"
+      - "**/*.md"
   pull_request:
+    paths-ignore:
+      - "services/**"
+      - "docs/**"
+      - "**/*.md"
+
 jobs:
   test:
+    name: pytest
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -12,9 +25,20 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: pip install -r requirements.txt
+      # pytest.ini 의 testpaths 가 수집 범위를 루트 tests/ 로 고정하므로
+      # services/* 의 테스트는 여기서 수집되지 않는다.
       - run: python -m pytest -q
+
+  hygiene:
+    name: 저장소 위생 검사
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
       - name: Reject tracked runtime and secret files
         shell: bash
         run: |
           ! git ls-files | grep -E '(^|/)(secrets\.(txt|json)|\.env|\.deploy\.env|app\.db)$'
           ! git ls-files | grep -E '^(data/(uploads|specifications|testcases|indexes|manual_revisions)|output)/'
+          # 하위 서비스의 런타임 산출물·실문서도 커밋되면 안 된다.
+          ! git ls-files | grep -E '^services/[^/]+/(storage|backup|pgdata|node_modules)/'
+          ! git ls-files | grep -E '^services/.*/frontend/dist/'

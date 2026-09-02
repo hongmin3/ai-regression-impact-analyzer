@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+!frontend/.env.platform
 *.pem
 *.key
 *.crt

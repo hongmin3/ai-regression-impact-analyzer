@@ -16,6 +16,11 @@ const ADMIN_NAV = [
   { to: '/categories', label: 'Categories', icon: '⊞' },
 ]
 
+// Mounted under the QA platform nginx (BASE_URL '/manual-hub/') the SPA is one
+// card on the platform's home screen, so it needs a way back. Standalone
+// (BASE_URL '/') there is no platform home and the link is not rendered.
+const PLATFORM_HOME = import.meta.env.BASE_URL === '/' ? null : '/'
+
 const SYSTEM_NAV = [
   { to: '/audit', label: 'Audit Logs', icon: '☰' },
   { to: '/settings', label: 'Settings', icon: '⚙' },
@@ -46,6 +51,7 @@ export default function Layout() {
         <span className="brand-mark">QA</span>
         <span className="brand-text">Manual Hub</span>
       </div>
+
 
       <header className="topbar">
         <div className="topbar-title">제품 문서 중앙관리</div>
@@ -111,6 +117,12 @@ export default function Layout() {
       </header>
 
       <nav className="sidebar">
+        {PLATFORM_HOME && (
+          <a className="platform-home" href={PLATFORM_HOME}>
+            <span className="nav-icon">←</span>
+            QA 자동화 홈
+          </a>
+        )}
         {NAV.map((item) => (
           <NavLink key={item.to} to={item.to} end={item.end}>
             <span className="nav-icon">{item.icon}</span>

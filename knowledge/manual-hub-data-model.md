@@ -1,7 +1,12 @@
-# Data Model
+# QA Manual Hub — Data Model
+
+> 이 문서의 저장소 상대 경로(`backend/`, `frontend/`, `deploy/` 등)는 모두
+> `services/qa-manual-hub/` 기준이다. `<APP_ROOT>` / `<DATA_ROOT>` 는 서버의
+> 런타임 경로이며 저장소 경로가 아니다.
+
 
 ## Product → Document → Revision 계층 구조
-<!-- akela: id=hierarchy -->
+<!-- akela: id=manual-hub-hierarchy scope=manual-hub tier=must -->
 
 ```
 Product
@@ -24,7 +29,7 @@ Product
   Current 를 바꿔도 다른 버전은 삭제되지 않는다.
 
 ## 테이블 관계 (11개 테이블)
-<!-- akela: id=table-relations -->
+<!-- akela: id=manual-hub-table-relations scope=manual-hub tier=should -->
 
 ```
 users ─────┬──< sessions
@@ -39,7 +44,7 @@ users ─────┬──< sessions
 상세 컬럼은 `backend/app/models.py` 와 `backend/alembic/versions/0001_initial_schema.py` 에 있다.
 
 ## 핵심 설계 결정
-<!-- akela: id=design-decisions -->
+<!-- akela: id=manual-hub-design-decisions scope=manual-hub tier=must -->
 
 - **Current 는 `documents.current_version_id` 단일 컬럼.** 버전 쪽에 `is_current` 를 두면
   "동시에 두 개가 Current" 상태가 물리적으로 가능해진다. 문서 행의 컬럼 하나로 두면 그 상태를
@@ -60,7 +65,7 @@ users ─────┬──< sessions
 - **`audit_logs` 는 append-only.** 애플리케이션에 UPDATE / DELETE 경로가 아예 없다.
 
 ## Archive(Soft delete) 규칙
-<!-- akela: id=archive-rules -->
+<!-- akela: id=manual-hub-archive-rules scope=manual-hub tier=must -->
 
 - 문서 / 버전 모두 Archive(Soft delete)와 Restore 만 있고 Hard delete 는 없다.
 - **Current 버전은 보관할 수 없다.** 먼저 다른 버전을 Current 로 지정해야 한다 — 문서에
@@ -73,7 +78,7 @@ users ─────┬──< sessions
   파일은 삭제되지 않는다.
 
 ## 정렬 규칙
-<!-- akela: id=sort-rules -->
+<!-- akela: id=manual-hub-sort-rules scope=manual-hub tier=should -->
 
 - 개정 번호는 자연 정렬 (`V1.0.9` < `V1.0.10`, 문자열 그대로 비교하지 않음).
 - 사람 이름은 한글 가나다순.
@@ -82,7 +87,7 @@ users ─────┬──< sessions
 - Documents 목록의 기본 정렬은 제품 기준.
 
 ## 파일 저장 규칙
-<!-- akela: id=file-storage-rules -->
+<!-- akela: id=manual-hub-file-storage-rules scope=manual-hub tier=must -->
 
 - 중앙 저장, UUID 기반 경로: `<DATA_ROOT>/storage/<product-uuid>/<document-uuid>/<version-uuid>/<file-uuid>.<ext>`.
   원본 파일명은 파일시스템에 쓰지 않고 DB(`stored_files.original_file_name`)에만 메타데이터로

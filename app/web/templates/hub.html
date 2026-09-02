@@ -13,6 +13,15 @@
       <h3>매뉴얼 개정 검증</h3>
       <p>Word 변경 이력과 최신 SRS·Release Scope를 비교해 매뉴얼 수정 및 누락 의심 항목을 검토합니다.</p>
     </a>
+    {# config.yaml `services.*`에 URL이 설정된 하위 서비스. 핵심 앱과 다른 프로세스로
+       뜨는 별도 배포 단위라 링크로만 연결한다. #}
+    {% for service in external_services %}
+    <a class="app-card" href="{{ service.url }}">
+      <h3>{{ service.name }}</h3>
+      <p>{{ service.description }}</p>
+      <span class="app-card-badge">별도 서비스</span>
+    </a>
+    {% endfor %}
   </div>
 </section>
 {% endblock %}

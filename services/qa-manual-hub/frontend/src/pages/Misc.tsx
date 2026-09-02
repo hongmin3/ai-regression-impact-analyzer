@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { api } from '../api'
+import { api, apiBase } from '../api'
 import { useAuth } from '../auth'
 import {
   Alert,
@@ -322,7 +322,7 @@ export function Settings() {
           <div className="meta-item">
             <div className="k">API 문서</div>
             <div className="v">
-              <a href="/api/docs" target="_blank" rel="noreferrer">
+              <a href={`${apiBase}/docs`} target="_blank" rel="noreferrer">
                 /api/docs
               </a>
             </div>

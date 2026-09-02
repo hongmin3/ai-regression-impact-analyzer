@@ -1126,3 +1126,14 @@ label.check {
     padding: 14px;
   }
 }
+
+/* Sidebar back-link to the QA platform home. Rendered only for a subpath
+   deployment (see PLATFORM_HOME in components/Layout.tsx); standalone there is
+   no platform home to go back to. Borrows the sidebar link geometry and adds a
+   divider so it reads as "leaving this app", not as another section. */
+nav.sidebar a.platform-home {
+  border-bottom: 1px solid #1e3350;
+  margin-bottom: 6px;
+  padding-bottom: 10px;
+  opacity: 0.85;
+}

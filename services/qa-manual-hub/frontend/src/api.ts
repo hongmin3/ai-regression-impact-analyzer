@@ -20,6 +20,12 @@ import type {
   VersionUploadResult,
 } from './types'
 
+// Mount point of this SPA ('' standalone, '/manual-hub' under the platform
+// nginx). Every API URL and every plain browser URL below is built from it,
+// so a subpath deployment needs no other change.
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, '')
+export const apiBase = `${BASE}/api`
+
 export class ApiError extends Error {
   status: number
   constructor(status: number, message: string) {
@@ -43,7 +49,7 @@ async function request<T>(
   init: RequestInit = {},
   options: { skipAuthRedirect?: boolean } = {},
 ): Promise<T> {
-  const response = await fetch(`/api${path}`, {
+  const response = await fetch(`${apiBase}${path}`, {
     credentials: 'same-origin',
     ...init,
   })
@@ -240,9 +246,9 @@ export const api = {
   // Plain URLs: the browser handles these directly so downloads stream and PDFs
   // open in the built-in viewer.
   downloadUrl: (documentId: string, versionId: string) =>
-    `/api/documents/${documentId}/versions/${versionId}/download`,
+    `${apiBase}/documents/${documentId}/versions/${versionId}/download`,
   previewUrl: (documentId: string, versionId: string) =>
-    `/api/documents/${documentId}/versions/${versionId}/preview`,
+    `${apiBase}/documents/${documentId}/versions/${versionId}/preview`,
 
   // --- search / dashboard / audit --------------------------------------- //
   search: (params: Record<string, unknown>) =>
