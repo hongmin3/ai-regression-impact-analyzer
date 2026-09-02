@@ -15,6 +15,7 @@
 | **기능 하나를 자세히 알기** | [Regression 영향 분석](modules/impact-analyzer.md) · [매뉴얼 개정 검증](modules/manual-review.md) · [QA Manual Hub](../services/qa-manual-hub/README.md) |
 | **새 기능을 추가하기** | [공용 아키텍처](SHARED_PLATFORM_ARCHITECTURE.md) |
 | **AI 비용이 왜 이렇게 설계됐는지** | [비용 절감 설계](COST_OPTIMIZATION.md) |
+| **에이전트와 개발할 때 폴더·지식을 어떻게 관리하는지** | [Context Engineering](CONTEXT_ENGINEERING.md) |
 | **운영 중 문제 대응** | [운영·백업·모니터링](OPERATIONS.md) |
 | **추천 정확도 측정** | [정확도 평가](EVALUATION.md) |
 | **사양서 자동 동기화 설정** | [자동화 아키텍처](AUTOMATION.md) |
@@ -55,6 +56,7 @@
 |---|---|
 | [SHARED_PLATFORM_ARCHITECTURE.md](SHARED_PLATFORM_ARCHITECTURE.md) | 두 가지 확장 방식(모듈 / 하위 서비스), 경계, 추가 체크리스트 |
 | [COST_OPTIMIZATION.md](COST_OPTIMIZATION.md) | LLM 호출을 줄이는 9단계 파이프라인 |
+| [CONTEXT_ENGINEERING.md](CONTEXT_ENGINEERING.md) | 저장소 관리 기준과 Akela — 작업별 지식 주입으로 컨텍스트 토큰 절감 |
 | [DEPLOYMENT.md](DEPLOYMENT.md) | 로컬 설치부터 서버 배포, 하위 서비스 통합까지 |
 | [OPERATIONS.md](OPERATIONS.md) | 작업 복구, 백업, 상태 모니터링 |
 | [EVALUATION.md](EVALUATION.md) | precision·recall·F1 기반 추천 정확도 평가 |
@@ -77,7 +79,8 @@
 ### AI 에이전트용 Knowledge (`knowledge/`)
 
 `akela compile`이 작업 종류에 맞는 부분만 골라 컨텍스트로 주입하는 지식 베이스다. 사람이
-읽어야 하는 문서는 위 표에 있고, 이쪽은 에이전트가 쓴다.
+읽어야 하는 문서는 위 표에 있고, 이쪽은 에이전트가 쓴다. 동작 방식은
+[Context Engineering](CONTEXT_ENGINEERING.md)에 정리했다.
 
 | 파일 | 범위 |
 |---|---|

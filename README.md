@@ -248,24 +248,66 @@ Gemini가 등장하는 곳은 한 군데뿐이고, 나머지는 전부 결정적
 
 **런타임에서의 AI 활용**과 **개발 과정에서의 AI 활용**이 다릅니다.
 
-### 개발: Claude Code + Akela Context Engineering
+### 개발: 저장소에 기준을 두고, 에이전트에게는 그 일부만 준다
 
-구현 자체를 AI 에이전트와 함께 진행했습니다. 다만 매 작업마다 전체 문서를 컨텍스트에 넣는
-방식은 토큰이 빠르게 소모되고, 무관한 문서가 판단을 흐립니다. 그래서
-[Akela](https://github.com/TimothyHan/akela)로 **작업 종류(activity)별로 필요한 지식만 컴파일해
-주입**합니다.
+구현 자체를 AI 에이전트(Claude Code)와 함께 진행했습니다. 여기서 실제로 문제가 되는 것은
+모델 성능이 아니라 **컨텍스트**입니다. 매 작업마다 저장소 문서를 통째로 넣으면 토큰이
+빠르게 소모되고, 무관한 문서가 판단을 흐려 엉뚱한 파일을 고칩니다.
+
+그래서 두 가지를 같이 했습니다. 하나는 **폴더에 기준을 만드는 것**, 다른 하나는 그 기준을
+이용해 **작업에 필요한 지식만 골라 주입하는 것**입니다. 앞의 것이 없으면 뒤의 것이 불가능합니다.
+
+#### 1. 폴더를 일정한 기준으로 관리한다
+
+"어디에 무엇이 있는지"가 규칙으로 정해져 있어야 에이전트가 전부 읽지 않고도 필요한 곳을
+찾습니다. 이 저장소에서 지키는 기준은 다음과 같습니다.
+
+| 기준 | 내용 |
+|---|---|
+| 배포 단위 | `app/`(핵심 앱)과 `services/*`(하위 서비스) 둘뿐. 어느 쪽에 붙일지 먼저 정한다 |
+| 기능 경계 | 기능은 `app/modules/<name>/`이 라우터·서비스·템플릿·테스트를 전부 소유. `app/web/`은 URL prefix만 결정하고 로직을 갖지 않는다 |
+| 문서 | 목적별로 나누고 `docs/README.md`가 지도 역할. 사용법은 문서가 아니라 앱 화면 안에 둔다 |
+| 지식 | 하위 서비스도 `knowledge/`를 따로 만들지 않고 루트에 `<name>-*.md`로 모은다 |
+| 테스트 | 루트 `pytest`는 `testpaths`로 핵심 앱만 수집. 하위 서비스는 자기 CI에서 |
+| 프롬프트 | `app/prompts/*.yaml` 한 곳에서 버전과 생성 설정까지 관리 |
+
+규칙은 사람이 기억하는 대신 [`CLAUDE.md`](CLAUDE.md) / [`AGENTS.md`](AGENTS.md)와
+[공용 아키텍처](docs/SHARED_PLATFORM_ARCHITECTURE.md)에 적어 두고, 에이전트가 매 작업 전에
+읽습니다.
+
+#### 2. Akela — 작업 종류별로 지식을 잘라 주입한다
+
+[Akela](https://github.com/TimothyHan/akela)는 저장소의 지식 문서를 **섹션 단위로 쪼개고,
+각 섹션에 "어떤 작업에 필요한지(scope)"와 "얼마나 중요한지(tier)"를 태깅**해 두었다가, 작업
+종류에 맞는 부분만 뽑아 컨텍스트로 주는 도구입니다. 런타임 의존성이 아니어서 앱 실행·배포
+동작에는 전혀 영향을 주지 않습니다.
 
 ```text
-knowledge/ → akela compile --activity <activity> → 작업별 slice.md
-          → 에이전트 작업 → akela log 로 근거 기록 → akela stats / curate 로 지식 유지보수
+knowledge/*.md            에이전트용 지식. 섹션마다 scope·tier 태그
+  ↓  akela compile --activity <activity>
+작업별 slice.md           그 작업에 필요한 섹션만 (나머지는 dropped 로 기록)
+  ↓  에이전트 작업
+akela log applied / contradicted     근거로 쓴 규칙 · 결과가 뒤집은 규칙을 기록
+  ↓  akela stats / curate
+지식 유지보수             안 쓰이는 규칙은 좁히거나 버리고, 틀린 규칙은 고친다
 ```
 
-- Knowledge: `knowledge/` — 핵심 앱과 하위 서비스(`manual-hub-*.md`)를 scope로 구분
-- Protocol: `akela/PROTOCOL.md` · 설정: `akela.json`
-- 런타임 의존성이 아닙니다. 실행·배포 동작에 전혀 영향을 주지 않습니다.
+**이 프로젝트에서 실제로 어떤 이득이 있었나**
 
-에이전트가 어떤 규칙에 근거했고 어떤 규칙이 결과로 반박됐는지를 로그로 남기므로, 잘못된 지식이
-계속 재사용되지 않습니다.
+- 지식 베이스는 7개 파일 · 38개 섹션 · 약 27KB인데, 회귀 분석 쪽 작업(`core-development`)에
+  실제로 주입되는 slice는 **1.2KB 안팎**입니다. 매뉴얼 서버 지식 31개 섹션(약 25KB)은
+  `scope=manual-hub`라 애초에 들어가지 않습니다.
+- 저장소를 병합할 때도 같은 기준을 적용했습니다. QA Manual Hub의 지식을 하위 폴더에 그대로
+  두지 않고 루트로 옮겨 `scope=manual-hub`로 태깅했기 때문에, **저장소가 커져도 회귀 분석
+  작업의 컨텍스트는 그대로**입니다. 지식이 늘어난 만큼 토큰이 늘지 않습니다.
+- 지금까지 31개 작업이 기록됐고, 근거로 사용된 규칙 56건과 결과가 반박한 규칙 1건이 로그에
+  남아 있습니다(`akela/learnings-log.jsonl`). 틀린 지식이 조용히 계속 재사용되지 않습니다.
+- `tier=must`(19) / `tier=should`(19)로 나눠 두어, 컨텍스트가 빠듯할 때 무엇을 먼저 버릴지가
+  이미 정해져 있습니다.
+
+구성 파일은 `akela.json`(activity 목록), `akela/PROTOCOL.md`(작업 절차),
+`akela/CURATE.md`(지식 유지보수 절차)입니다. 자세한 동작은
+[Context Engineering](docs/CONTEXT_ENGINEERING.md)에 정리했습니다.
 
 ### 프롬프트를 코드처럼 관리한다
 
@@ -363,6 +405,7 @@ pytest tests -q
 | [docs/README.md](docs/README.md) | 문서 지도 — 목적별 안내 |
 | [docs/SHARED_PLATFORM_ARCHITECTURE.md](docs/SHARED_PLATFORM_ARCHITECTURE.md) | 두 가지 확장 방식과 경계, 새 기능 추가 체크리스트 |
 | [docs/COST_OPTIMIZATION.md](docs/COST_OPTIMIZATION.md) | 비용 절감 파이프라인 9단계 |
+| [docs/CONTEXT_ENGINEERING.md](docs/CONTEXT_ENGINEERING.md) | 저장소 관리 기준과 Akela — 에이전트 컨텍스트 토큰 절감 |
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | 로컬 설치 · 서버 배포 · 하위 서비스 통합 |
 | [docs/OPERATIONS.md](docs/OPERATIONS.md) | 작업 복구 · 백업 · 모니터링 |
 | [docs/EVALUATION.md](docs/EVALUATION.md) | 추천 정확도 평가 |
