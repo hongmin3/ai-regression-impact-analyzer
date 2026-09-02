@@ -1,125 +1,321 @@
 # QA 검증 관리 시스템
 
-SW 변경사항과 제품 사양서·Test Case·매뉴얼을 결합해 Regression 검증 대상과 매뉴얼 개정
-누락을 자동으로 찾아주는 QA 업무자동화 서비스입니다. 사용자는 브라우저에서 제품을 고르고
-관련 문서를 올리기만 하면 되고, 별도의 AI 채팅이나 Prompt 작성이 필요 없습니다.
+사내 QA 업무 중 **판단은 사람이 하되, 판단에 필요한 자료를 모으는 일은 기계가 하게 만든**
+자동화 플랫폼입니다. SW 변경사항을 제품 사양서·Test Case·매뉴얼과 대조해 Regression 검증
+대상과 매뉴얼 개정 누락을 찾아내고, 그 근거를 사후에 그대로 열어볼 수 있게 남깁니다.
 
-## 왜 비용 절감이 핵심 설계 원칙인가
+사용자는 브라우저에서 제품을 고르고 문서를 올리기만 합니다. **AI 채팅창도, Prompt 작성도
+필요 없습니다.**
 
-사양서·TC·매뉴얼 원문을 통째로 LLM에 넘기면 정확도는 높아 보여도 호출당 토큰이 급증하고,
-분석 1건마다 비용이 선형으로 늘어나 사내 서비스로 지속 운영하기 어렵습니다. 이 프로젝트는
-**"판단이 꼭 필요한 지점에서만, 최소한의 근거로 LLM을 부른다"**를 원칙으로 삼아, 파싱·검색·
-후보 압축·1차 필터링은 전부 결정적인 Python Rule Engine이 처리하고 Gemini는 의미적 판단이
-꼭 필요한 마지막 단계에서 구조화된 입력으로 단 한 번(또는 조건부로 그 이하) 호출됩니다.
+---
 
-## 비용 절감 파이프라인
+## 목차
 
-실제 호출까지 도달하는 입력을 단계마다 줄이는 구조입니다. 괄호 안은 관련 코드/설정입니다.
+- [무엇을 해결하는가](#무엇을-해결하는가)
+- [왜 외부 AI 웹서비스가 아니라 API로 직접 만들었는가](#왜-외부-ai-웹서비스가-아니라-api로-직접-만들었는가)
+- [저장소 구성](#저장소-구성)
+- [아키텍처](#아키텍처)
+- [기능](#기능)
+- [비용 절감 설계](#비용-절감-설계)
+- [AI를 어떻게 활용했는가](#ai를-어떻게-활용했는가)
+- [Tech Stack](#tech-stack)
+- [빠른 시작](#빠른-시작)
+- [문서](#문서)
 
-1. **Rule Engine 사전 필터** — 매뉴얼 검증에서 페이지 번호·저작권 표기·목차 리더 점선 같은
-   `NON_FUNCTIONAL_CHANGE`는 애초에 AI 분석 대상에서 제외합니다
-   (`app/modules/manual_review/change_filter.py::is_functional_change`).
-2. **기준 사양서 Diff** — 변경 문서 전체에서 키워드를 뽑는 대신 등록된 기준 사양서와 실제
-   diff해 "진짜 변경된 줄"만 분석 대상으로 삼습니다. 미변경 문장을 변경으로 오인해 불필요한
-   AI 판정을 만드는 문제를 근본적으로 막습니다 (`app/modules/impact_analyzer/regression_analyzer.py`).
-3. **BM25/RAG Top-K 후보 압축** — 사양서 근거는 BM25로 상위 `retrieval.specification_top_k`
-   (기본 8)건만, TC 후보는 `retrieval.candidate_limit`(기본 150)건까지만 골라 LLM 입력에
-   포함합니다. 전체 사양서·전체 TC를 매번 통째로 보내지 않습니다.
-4. **변경문서 관련 줄 축소** — 사용자 요청 사항이 있으면 변경 문서 전체 대신 요청과 관련성
-   높은 줄만 BM25로 추려 보냅니다(`retrieval.change_text_top_lines`, 기본 60줄). 문서가 이보다
-   짧으면 그대로 전체를 사용합니다(`app/modules/impact_analyzer/change_analyzer.py::trim_by_relevance`).
-5. **Structured Output 단일 호출** — Gemini는 JSON Schema로 강제된 Structured Output을
-   반환하며, Regression 분석 1건당 정확히 1회만 호출합니다. 재파싱·재질의 왕복이 없습니다.
-6. **매뉴얼 quick/detail 2단계 + PASS short-circuit** — 매뉴얼 개정 변경은 먼저 짧은 quick
-   판정만 수행하고, 결과가 PASS면 비용이 큰 detail 호출을 생략합니다. 문제가 의심될 때만 상세
-   근거·판정을 추가로 요청합니다(`app/prompts/manual_revision_{quick,detail}.yaml`).
-7. **SHA-256 응답 캐시** — 모든 Gemini 호출은 `sha256(model+prompt명+prompt버전+prompt내용)`을
-   키로 캐시됩니다. 동일 입력으로 재분석·재검증하면 API 호출 없이 캐시 응답을 그대로
-   재사용합니다(`app/core/gemini_client.py`, `analysis.cache_enabled`).
-8. **thinking_budget=0** — 이 서비스의 모든 AI 호출은 근거 기반 구조화 추출·판정이라 별도의
-   내부 추론이 필요 없습니다. `thinking_config.thinking_budget=0`으로 내부 reasoning 토큰
-   소비를 비활성화해 같은 `max_output_tokens` 예산을 응답 생성에 온전히 씁니다
-   (`app/prompts/*.yaml`).
-9. **일일 토큰 한도 + 감사 기록** — `analysis.daily_token_limit`을 넘으면 새 분석 실행 자체를
-   차단합니다(`/config/status`에서 사용량 확인). 완료된 모든 호출은 요청 문서, Knowledge 근거,
-   System Instruction, Gemini에 실제로 전달된 입력 JSON과 원본 응답, 모델/캐시/생성 설정,
-   BM25 후보 순위·점수를 분석 상세 화면에서 그대로 열람할 수 있어 비용과 판단 근거를 사후
-   검증할 수 있습니다.
+---
 
-## Architecture
+## 무엇을 해결하는가
 
-루트(`/`)는 QA 자동화 기능을 선택하는 허브입니다. Regression 영향 분석은
-`/impact-analyzer`, 매뉴얼 개정 검증은 `/manual-review`에서 시작합니다. 새 QA 기능과
-공유 DB 확장 원칙은 [공용 플랫폼 아키텍처](docs/SHARED_PLATFORM_ARCHITECTURE.md)를 따릅니다.
+SW 변경이 생겼을 때 QA가 답해야 하는 질문은 늘 같습니다.
+
+> 이번 변경으로 **어디까지** 다시 검증해야 하는가?
+> 연구소가 고친 매뉴얼이 **최신 사양을 제대로 반영했는가?**
+> 그 매뉴얼의 **최신본이 어느 것인가?**
+
+세 질문 모두 답 자체보다 **답을 찾는 준비 과정**이 오래 걸립니다. 어느 사양서가 최신인지
+찾고, 무엇이 실제로 바뀌었는지 리비전을 비교하고, 수백 건의 TC를 훑어야 비로소 판단이
+시작됩니다. 그리고 그 과정이 담당자마다 달라서, 같은 변경에 대해 검증 범위가 달라집니다.
+
+이 플랫폼은 그 준비 과정을 결정적인(deterministic) 코드로 옮기고, 의미 판단이 꼭 필요한
+마지막 지점에서만 AI를 부릅니다. 그래서 **결과가 흔들리는 범위 자체가 좁습니다.**
+
+| 질문 | 담당 기능 |
+|---|---|
+| 어디까지 다시 검증해야 하는가 | [Regression 영향 분석](docs/modules/impact-analyzer.md) |
+| 매뉴얼이 최신 사양을 반영했는가 | [매뉴얼 개정 검증](docs/modules/manual-review.md) |
+| 매뉴얼의 최신본이 어느 것인가 | [QA Manual Hub](services/qa-manual-hub/README.md) |
+
+---
+
+## 왜 외부 AI 웹서비스가 아니라 API로 직접 만들었는가
+
+이 프로젝트의 출발점이자, 설계 전반을 결정한 제약입니다.
+
+### 1. 사내 문서를 외부 AI 웹서비스에 올릴 수 없다
+
+분석 대상은 제품 사양서, Test Case, 개정 전 매뉴얼입니다. 전부 사내 문서이고, 외부 AI
+웹서비스에 업로드하는 것 자체가 허용되지 않습니다. 그래서 처음부터 **문서가 사내 서버 밖으로
+파일 형태로 나가지 않는 구조**가 전제였습니다.
+
+- 원본 문서는 사내 서버에 저장되고, 파싱·검색·후보 압축도 전부 서버 안에서 끝납니다.
+- 외부로 나가는 것은 **마지막 판단에 필요한 최소한의 구조화된 텍스트 조각**뿐입니다.
+  전체 사양서도, 전체 TC도 나가지 않습니다.
+- API Key는 `secrets.txt` / `secrets.json` / `.env` 중 한 곳에만 두고 Git·로그·보고서에 절대
+  포함하지 않습니다. `/config/status`는 Key의 **설정 여부와 길이, 출처 이름만** 반환하고
+  값 자체는 반환하지 않습니다 ([SECURITY.md](SECURITY.md)).
+- 무엇이 실제로 전송됐는지는 분석 상세 화면에서 **전송된 입력 JSON 원문 그대로** 확인할 수
+  있습니다. 추정이 아니라 실제 payload를 봅니다.
+
+### 2. 반복 업무는 재현 가능해야 한다
+
+채팅창은 매번 사람이 프롬프트를 다르게 씁니다. 같은 변경을 두 사람이 분석하면 다른 답이
+나오고, 왜 달랐는지 확인할 방법도 없습니다.
+
+- 프롬프트를 **YAML로 버전 관리**합니다 (`app/prompts/*.yaml`). 누가 돌려도 같은 프롬프트,
+  같은 생성 설정입니다.
+- 응답은 **JSON Schema로 강제된 Structured Output**입니다. 자유 서술을 사람이 다시 해석하는
+  단계가 없습니다.
+- 파싱·diff·BM25 검색·후보 압축은 전부 결정적인 Python 코드입니다. AI가 관여하는 구간이
+  좁을수록 재현성이 올라갑니다.
+- 모델이 반환한 TC ID·근거 Chunk ID가 실제 데이터에 존재하는지 **교차검증**합니다. 존재하지
+  않는 ID는 결과에서 제외됩니다.
+
+### 3. 비용은 인원수가 아니라 사용량에 비례해야 한다
+
+유료 구독을 인원수만큼 늘리는 대신, 필요한 지점에서만 API를 호출하고 사용량을 서버에서
+통제합니다.
+
+- Rule Engine이 먼저 걸러내므로 **AI 호출 대상 자체가 줄어듭니다.**
+- 동일 입력은 SHA-256 캐시로 재사용해 **API 호출이 아예 발생하지 않습니다.**
+- 일일 토큰 한도를 넘으면 새 분석 실행 자체를 차단합니다.
+- `/cost-dashboard`에서 호출 수·토큰·캐시 적중을 집계해 봅니다.
+
+자세한 내용: [비용 절감 설계](docs/COST_OPTIMIZATION.md)
+
+---
+
+## 저장소 구성
+
+이 저장소 하나에 **배포 단위 두 개**가 들어 있습니다. 어느 쪽에 기능을 붙일지 판단하는
+기준은 [공용 아키텍처](docs/SHARED_PLATFORM_ARCHITECTURE.md)에 있습니다.
 
 ```text
-Change Document → Rule 기반 Change 추출(기준 사양서 diff) → BM25 Specification 검색
-     → TC Candidate 선정 → Gemini Semantic Decision(Structured Output, 1회 호출)
-     → TC ID / Chunk ID 교차검증 → HTML Report + XLSX + 신규 TC 초안(md)
+qa-verification-management-system/
+├─ app/                     ① 핵심 앱 — 하나의 FastAPI 프로세스
+│  ├─ core/                 공용 인프라 (설정, 저장소, Gemini 클라이언트, 프롬프트 로더, 스케줄러)
+│  ├─ prompts/              AI 프롬프트 YAML (버전·생성 설정 포함)
+│  ├─ modules/
+│  │  ├─ impact_analyzer/   Regression 영향 분석          → /impact-analyzer
+│  │  ├─ manual_review/     매뉴얼 개정 검증              → /manual-review
+│  │  ├─ knowledge/         사양서·TC 관리 (두 기능 공유)  → /knowledge
+│  │  └─ cost_dashboard/    AI 사용량 집계                → /cost-dashboard
+│  └─ web/                  모듈 라우터를 한 서버에 취합하는 얇은 계층 + 공용 template/static
+│
+├─ services/                ② 하위 서비스 — 별도 프로세스·별도 DB
+│  └─ qa-manual-hub/        매뉴얼 서버                   → /manual-hub
+│     ├─ backend/           FastAPI + PostgreSQL
+│     ├─ frontend/          React 19 + Vite
+│     └─ deploy/            자체 설치·배포·백업 스크립트
+│
+├─ deploy/nginx/            두 배포 단위를 하나의 origin으로 묶는 nginx 설정
+├─ docs/                    설계·운영 문서 (docs/README.md 가 지도)
+├─ knowledge/               AI 에이전트용 Knowledge (Akela)
+├─ config/products/         제품별 설정
+└─ tests/                   핵심 앱 테스트
 ```
 
-### 코드 구조
+**①과 ②는 코드를 공유하지 않습니다.** 서로를 import하지 않고, 같은 DB를 읽지 않습니다.
+연결은 홈 화면의 링크와 nginx 라우팅뿐입니다. 스택이 근본적으로 다르기 때문에(Jinja2 + SQLite
+vs React SPA + PostgreSQL) 억지로 한 프로세스에 넣지 않고, 대신 **저장소·이력·CI·문서를
+하나로** 관리합니다.
 
-하나의 FastAPI 서버(`app/main.py`) 안에서 여러 기능을 독립적인 URL로 서비스합니다.
+### 왜 저장소를 합쳤는가
+
+두 시스템은 같은 사람이, 같은 팀을 위해, 같은 서버에 운영합니다. 저장소가 나뉘어 있으면
+"매뉴얼 개정 검증이 참조하는 매뉴얼"과 "매뉴얼을 보관하는 서버"의 변경이 서로 다른 이력에
+쌓여, 어느 시점의 조합이 실제로 돌아갔는지 알 수 없게 됩니다. 병합은 `git subtree` 방식으로
+수행해 **원래 저장소의 커밋 이력을 그대로 보존**했습니다.
+
+---
+
+## 아키텍처
+
+### 실행 구조
 
 ```text
-app/
-├─ core/       공용 인프라 (설정, 저장소, Gemini 클라이언트, 프롬프트 로더, 스케줄러)
-├─ prompts/    AI 프롬프트 YAML (버전 관리, thinking_budget 등 생성 설정 포함)
-├─ modules/
-│   ├─ impact_analyzer/   Regression 영향도 분석 기능 (URL: /impact-analyzer, /analyses ...)
-│   ├─ manual_review/     매뉴얼 개정 검증 기능 (URL: /manual-review)
-│   └─ knowledge/         두 기능이 공유하는 사양서·TC 관리 (URL: /knowledge)
-└─ web/        모듈별 라우터를 한 서버에 취합하는 얇은 공용 계층 + 공용 template/static
+                        브라우저
+                           │
+                      nginx :80
+        ┌──────────────────┴──────────────────┐
+        │ /                                   │ /manual-hub/
+        ▼                                     ▼
+  핵심 앱 (uvicorn :12000)              Manual Hub SPA (정적 파일)
+  FastAPI + Jinja2                      + 백엔드 (uvicorn :9180)
+        │                                     │
+        ▼                                     ▼
+     SQLite                              PostgreSQL 16
+  + 파일 저장소                          + 문서 저장소
+        │
+        ▼
+  Gemini API  ← 마지막 판단에만, 최소 입력으로
 ```
 
-각 모듈은 자신의 라우터·스키마·서비스 로직·템플릿을 소유하며, `app/web/router.py`가 URL prefix만 결정해 하나의 서버에 붙입니다.
+### 분석 파이프라인
 
-## 매뉴얼 개정 검증 (`/manual-review`)
+```text
+변경 문서 → Rule 기반 Change 추출(기준 사양서 diff) → BM25 Specification 검색
+   → TC Candidate 선정 → Gemini Semantic Decision(Structured Output, 1회 호출)
+   → TC ID / Chunk ID 교차검증 → HTML Report + XLSX + 신규 TC 초안(md)
+```
 
-연구소가 제출한 Word Track Changes(`.docx`) 개정 Manual이 최신 SRS(=impact_analyzer가 이미
-동기화하는 등록 사양서)를 정확히 반영했는지 AI로 1차 검토합니다.
+Gemini가 등장하는 곳은 한 군데뿐이고, 나머지는 전부 결정적인 Python 코드입니다.
 
-- Track Changes 구조화 추출 → NON_FUNCTIONAL_CHANGE 필터링 → SRS 근거 로컬 BM25 검색 →
-  Release Note/설계검토보고서 Scope 대조 → **다른 Manual 영향 추적(Cross-Manual)** →
-  quick/detail 2단계 AI 판정 → 결과 화면(QA Override 가능) → Word Comment 삽입 DOCX 다운로드.
-- **Cross-Manual 영향분석**: 같은 제품의 다른 매뉴얼 최신 리비전(없으면 등록된 Knowledge
-  문서)을 이번 Release/설계 변경과 BM25로 대조해, 관련 있어 보이는 다른 매뉴얼 항목을
-  `REVIEW_REQUIRED` 후보로 표시합니다. 자동 확정이 아니라 QA가 결과 화면에서 확인
-  필요/영향 있음/영향 없음으로 직접 확정합니다(`app/modules/manual_review/cross_manual.py`).
-- **이미지 변경 Human Review Gate**: DOCX Track Changes 내부의 삽입/삭제된 drawing·pict와
-  PDF 페이지 이미지의 SHA-256 hash 변화를 감지해 `IMAGE_CHANGE_REVIEW_REQUIRED`로 강제
-  표시합니다. 이미지 변경은 텍스트만으로 의미를 판단할 수 없으므로 AI가 임의로 PASS 처리하지
-  않고 항상 사람이 원본 이미지를 직접 확인하도록 합니다.
-- **PDF 매뉴얼 diff**: 첫 PDF를 Baseline으로 등록하고 다음 PDF부터 이전 PDF와 페이지별 텍스트
-  추가·삭제·수정을 비교합니다. 위치/레이아웃 해석 오차를 감안해 confidence를 최대 60%로
-  제한하고 `PDF_DIFF_REVIEW_REQUIRED`를 표시하며, PDF에는 Word Comment를 생성하지 않고 QA가
-  결과 화면에서 직접 최종 판정합니다.
-- Round 계보를 추적하며 이전 지적사항은 로컬 유사도 기반 참고 판정을 제공하고, QA가
-  해결/미해결/재오픈/제외를 확정하기 전에는 상태를 자동 변경하지 않습니다.
+---
 
-남은 작업은 [`NEXT_STEPS.md`](NEXT_STEPS.md), 결정이 필요한 항목은
-[`OPEN_QUESTIONS.md`](OPEN_QUESTIONS.md)를 참고하세요.
+## 기능
 
-## 주요 기능
+### Regression 영향 분석 — `/impact-analyzer`
 
-- PDF/Word(`.docx`) 사양서, 다중 시트 TC Excel 자동 파싱
-- 제품만 선택하면 등록된 사양서·TC 전체를 자동 검색하는 분석 워크플로, 변경 문서는 여러 개
-  동시 첨부 가능, 문서 없이 요청 텍스트만으로도 분석 가능
+제품만 선택하면 등록된 사양서·TC 전체를 자동 검색해 분석합니다. 변경 문서는 여러 개 동시
+첨부할 수 있고, 문서 없이 요청 텍스트만으로도 분석됩니다.
+
+- PDF / Word(`.docx`) 사양서, 다중 시트 TC Excel 자동 파싱
 - 실제 백엔드 단계 기반 실시간 진행 상태(SSE) — 가짜 퍼센트 없음
-- 사용자 관점으로 재구성한 HTML 보고서(의미 단위 Change Summary, 단순화된 TC 표, 사람이
-  읽는 사양 근거)와 분석 상세 감사 화면(요청/근거/System Instruction/Gemini 실제 입출력 JSON)
+- 사용자 관점으로 재구성한 HTML 보고서 + XLSX + 신규 TC 초안(md)
 - TC ID·Chunk ID 교차검증, Confidence 기반 Manual Review 분류
-- 기존 TC로 커버되지 않는 변경에 대한 신규 TC 초안 자동 생성
-- VXvue 최신 사양서를 별도 자동화(Polarion 연동)와 연계해 매주 월요일 Windows 작업
-  스케줄러로 자동 확보, 이전 리비전 자동 정리 (`docs/AUTOMATION.md`)
-- 제품/버전별 지식 문서 관리(등록·삭제), 분석 이력·Impact 집계 대시보드
+- 분석 상세 감사 화면 (요청 / 근거 / System Instruction / Gemini 실제 입출력 JSON)
+
+→ [상세 문서](docs/modules/impact-analyzer.md)
+
+### 매뉴얼 개정 검증 — `/manual-review`
+
+연구소가 제출한 Word Track Changes 개정 매뉴얼이 최신 SRS를 반영했는지 1차 검토하고, 판정
+결과를 Word Comment로 삽입해 회신할 수 있게 만듭니다.
+
+- Track Changes 구조화 추출 → 비기능 변경 필터 → SRS 근거 BM25 검색 → Release Note·설계검토
+  보고서 Scope 대조 → Cross-Manual 영향 추적 → quick / detail 2단계 AI 판정
+- **이미지 변경은 AI가 PASS 처리하지 못하게 막고** 사람이 원본을 확인하도록 강제
+- **PDF diff는 confidence 상한 60%** — 레이아웃 해석 오차를 인정하고 QA가 최종 판정
+- Round 계보 추적. QA가 확정하기 전에는 이전 지적사항 상태를 자동 변경하지 않음
+
+→ [상세 문서](docs/modules/manual-review.md)
+
+### 지식 관리 — `/knowledge`
+
+두 기능이 함께 쓰는 제품별·버전별 사양서와 TC를 등록·삭제·동기화합니다. VXvue 최신 사양서는
+별도 자동화(Polarion 연동)와 연계해 매주 자동 확보하고 이전 리비전을 정리합니다
+([AUTOMATION.md](docs/AUTOMATION.md)).
+
+### 매뉴얼 서버 — `/manual-hub` (하위 서비스)
+
+제품 매뉴얼과 기술문서를 한 서버에 모아 **Revision 이력을 삭제 없이 보존**하는 문서관리
+시스템입니다. Git이 소스 커밋 이력을 관리하듯 문서의 개정 이력을 관리합니다. 새 Revision을
+올려도 기존 파일을 덮어쓰거나 지우지 않습니다.
+
+- 제품 → 문서 → 버전 → 파일 4계층. Revision 형식을 강제하지 않음 (문서에 적힌 그대로)
+- 업로더는 입력받지 않고 로그인 계정에서 자동 기록. 표시 이름은 업로드 당시 값을 스냅샷 보존
+- Archive(Soft delete)만 있고 Hard delete 없음. 감사 로그는 append-only (UPDATE / DELETE 경로 없음)
+- Argon2id + 서버 세션, 업로드 매직 넘버 검사, UUID 저장 경로
+
+→ [상세 문서](services/qa-manual-hub/README.md)
+
+---
+
+## 비용 절감 설계
+
+원문을 통째로 LLM에 넘기면 정확도는 높아 보여도 분석 1건마다 비용이 선형으로 늘어나 사내
+서비스로 지속 운영할 수 없습니다. 원칙은 하나입니다.
+
+> **판단이 꼭 필요한 지점에서만, 최소한의 근거로 LLM을 부른다.**
+
+| # | 기법 | 효과 |
+|---|---|---|
+| 1 | Rule Engine 사전 필터 | 비기능 변경은 AI 대상에서 제외 |
+| 2 | 기준 사양서 Diff | 진짜 바뀐 줄만 분석 |
+| 3 | BM25 Top-K 후보 압축 | 전체 사양서·TC를 보내지 않음 |
+| 4 | 변경 문서 관련 줄 축소 | 요청과 무관한 줄 제외 |
+| 5 | Structured Output 단일 호출 | 재질의 왕복 없음 |
+| 6 | quick / detail 2단계 + PASS short-circuit | 문제없으면 비싼 호출 생략 |
+| 7 | SHA-256 응답 캐시 | 동일 입력은 API 호출 자체가 없음 |
+| 8 | `thinking_budget=0` | 내부 추론 토큰 소비 차단 |
+| 9 | 일일 토큰 한도 + 감사 기록 | 초과 시 실행 차단, 사후 검증 가능 |
+
+→ [단계별 상세와 관련 코드](docs/COST_OPTIMIZATION.md)
+
+---
+
+## AI를 어떻게 활용했는가
+
+**런타임에서의 AI 활용**과 **개발 과정에서의 AI 활용**이 다릅니다.
+
+### 개발: Claude Code + Akela Context Engineering
+
+구현 자체를 AI 에이전트와 함께 진행했습니다. 다만 매 작업마다 전체 문서를 컨텍스트에 넣는
+방식은 토큰이 빠르게 소모되고, 무관한 문서가 판단을 흐립니다. 그래서
+[Akela](https://github.com/TimothyHan/akela)로 **작업 종류(activity)별로 필요한 지식만 컴파일해
+주입**합니다.
+
+```text
+knowledge/ → akela compile --activity <activity> → 작업별 slice.md
+          → 에이전트 작업 → akela log 로 근거 기록 → akela stats / curate 로 지식 유지보수
+```
+
+- Knowledge: `knowledge/` — 핵심 앱과 하위 서비스(`manual-hub-*.md`)를 scope로 구분
+- Protocol: `akela/PROTOCOL.md` · 설정: `akela.json`
+- 런타임 의존성이 아닙니다. 실행·배포 동작에 전혀 영향을 주지 않습니다.
+
+에이전트가 어떤 규칙에 근거했고 어떤 규칙이 결과로 반박됐는지를 로그로 남기므로, 잘못된 지식이
+계속 재사용되지 않습니다.
+
+### 프롬프트를 코드처럼 관리한다
+
+프롬프트는 채팅 기록이 아니라 **저장소에 있는 버전 관리 대상**입니다.
+
+- `app/prompts/*.yaml` — 프롬프트 본문, 버전, `thinking_budget` 같은 생성 설정을 한 파일에
+- 캐시 키가 `sha256(model + prompt명 + prompt버전 + prompt내용)`이므로, 프롬프트를 고치면
+  **캐시가 자동으로 무효화**됩니다. 프롬프트 변경과 결과 변경이 어긋나지 않습니다.
+- 어떤 프롬프트로 무엇을 보내 무엇을 받았는지가 분석 상세 화면에 원문 그대로 남습니다.
+
+### AI의 판단을 무조건 믿지 않는 설계
+
+이 프로젝트에서 가장 신경 쓴 부분입니다. AI를 정답을 주는 존재가 아니라 **1차 후보를 좁혀
+주는 존재**로 두고, 틀릴 수 있는 지점마다 사람이 개입할 자리를 만들었습니다.
+
+| 위험 | 대응 |
+|---|---|
+| 존재하지 않는 TC·근거를 만들어냄 | TC ID·Chunk ID를 실제 데이터와 교차검증, 없으면 결과에서 제외 |
+| 애매한 판정을 확신처럼 제시 | Confidence 기준으로 추천 / Manual Review를 나눔 |
+| 이미지 변경을 텍스트만 보고 PASS | `IMAGE_CHANGE_REVIEW_REQUIRED` 강제 표시, 사람이 원본 확인 |
+| PDF 레이아웃 해석 오차 | confidence 상한 60%, PDF에는 Comment 생성 안 함, QA가 최종 판정 |
+| 다른 매뉴얼 영향을 임의 확정 | `REVIEW_REQUIRED` 후보로만 표시, QA가 직접 확정 |
+| 이전 지적사항 상태를 임의 변경 | QA가 확정하기 전까지 자동 변경 없음 |
+| 판단 근거를 알 수 없음 | 입력 JSON·원본 응답·BM25 후보 순위와 점수를 그대로 열람 |
+
+Unit Test는 Gemini Mock Response를 사용하므로 테스트에 API 비용이 발생하지 않습니다.
+
+---
 
 ## Tech Stack
 
-FastAPI · Jinja2 · SQLite · PyMuPDF · openpyxl · rank-bm25 · Google Gemini (Structured Output) · pytest
+| 계층 | 핵심 앱 | QA Manual Hub |
+|---|---|---|
+| Frontend | Jinja2 + 바닐라 JS | React 19, TypeScript, Vite 6 |
+| Backend | FastAPI, uvicorn | FastAPI, uvicorn |
+| DB | SQLite (WAL) | PostgreSQL 16, SQLAlchemy 2.0, Alembic |
+| 문서 처리 | PyMuPDF, openpyxl, python-docx | — |
+| 검색 | rank-bm25 | PostgreSQL ILIKE |
+| AI | Google Gemini (Structured Output) | — |
+| 인증 | 사내망 전용 | Argon2id + 서버 세션 |
+| 테스트 | pytest | pytest (실제 PostgreSQL 필요) |
+| 배포 | uvicorn / systemd | systemd + rsync 또는 Docker Compose |
 
-## 로컬 실행
+공통: Python 3.12, nginx, GitHub Actions
+
+---
+
+## 빠른 시작
+
+### 핵심 앱
 
 ```powershell
 python -m venv .venv
@@ -128,15 +324,48 @@ Copy-Item secrets.example.txt secrets.txt -Force   # GEMINI_API_KEY 입력
 .\scripts\run.ps1                                   # http://localhost:12000
 ```
 
-앱 실행 후 회귀 분석은 `/impact-analyzer/guide`, 매뉴얼 개정 검증은
-`/manual-review/guide`에서 각각 전용 사용법을 확인할 수 있습니다. 기존 `/guide` 주소는
-회귀 분석 사용법으로 연결됩니다. 서버에 직접 배포하는 상세 절차는
-[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)를 참고하세요.
+```bash
+./scripts/run.sh    # Linux / macOS
+```
 
-## 테스트
+띄운 뒤 `/impact-analyzer/guide`, `/manual-review/guide`에서 각 기능의 사용법을 볼 수 있습니다.
+
+### 테스트
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest -q
 ```
 
-Unit Test는 Gemini Mock Response를 사용하므로 API 비용이 발생하지 않습니다.
+루트 `pytest`는 핵심 앱 테스트만 수집합니다 (`pytest.ini`의 `testpaths`). 하위 서비스는 자체
+런타임이 필요하므로 자기 디렉터리에서 따로 실행합니다.
+
+```bash
+cd services/qa-manual-hub/backend
+export TEST_DATABASE_URL="postgresql+psycopg://user:pass@127.0.0.1:5432/qa_manual_hub_test"
+pytest tests -q
+```
+
+### 매뉴얼 서버까지 함께 띄우기
+
+홈 화면의 "매뉴얼 서버" 카드는 `config.yaml`의 `services.manual_hub.url`을 엽니다. 기본값은
+같은 서버 nginx가 `/manual-hub/`로 프록시하는 통합 배포 기준입니다. 절차는
+[배포 가이드](docs/DEPLOYMENT.md) §8에 있습니다. URL을 빈 문자열로 두면 카드가 표시되지
+않으므로, 매뉴얼 서버 없이도 핵심 앱만 그대로 운영할 수 있습니다.
+
+---
+
+## 문서
+
+읽을 문서를 목적별로 고르려면 **[문서 지도](docs/README.md)**에서 시작하세요.
+
+| 문서 | 내용 |
+|---|---|
+| [docs/README.md](docs/README.md) | 문서 지도 — 목적별 안내 |
+| [docs/SHARED_PLATFORM_ARCHITECTURE.md](docs/SHARED_PLATFORM_ARCHITECTURE.md) | 두 가지 확장 방식과 경계, 새 기능 추가 체크리스트 |
+| [docs/COST_OPTIMIZATION.md](docs/COST_OPTIMIZATION.md) | 비용 절감 파이프라인 9단계 |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | 로컬 설치 · 서버 배포 · 하위 서비스 통합 |
+| [docs/OPERATIONS.md](docs/OPERATIONS.md) | 작업 복구 · 백업 · 모니터링 |
+| [docs/EVALUATION.md](docs/EVALUATION.md) | 추천 정확도 평가 |
+| [docs/AUTOMATION.md](docs/AUTOMATION.md) | 진행 상태 · 사양서 자동 동기화 |
+| [SECURITY.md](SECURITY.md) | 비밀정보 취급 규칙 |
+| [NEXT_STEPS.md](NEXT_STEPS.md) · [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md) | 남은 작업 · 결정 대기 항목 |

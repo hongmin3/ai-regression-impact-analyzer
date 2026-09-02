@@ -1,5 +1,19 @@
 # QA Manual Hub
 
+> **[QA 검증 관리 시스템](../../README.md)의 하위 서비스입니다.**
+> 저장소 위치: `services/qa-manual-hub/` · 플랫폼 경로: `/manual-hub/`
+> 이 문서의 저장소 상대 경로(`backend/`, `frontend/`, `deploy/`)는 모두 이 디렉터리 기준입니다.
+>
+> 핵심 앱(Regression 영향 분석 · 매뉴얼 개정 검증)과 **프로세스도 DB도 공유하지 않는 별도
+> 배포 단위**입니다. 연결은 홈 화면의 링크와 nginx 라우팅뿐이며, 이 서비스만 따로(자체
+> 호스트·포트) 운영할 수도 있습니다.
+>
+> | 함께 볼 문서 | |
+> |---|---|
+> | [문서 지도](../../docs/README.md) | 저장소 전체 문서 안내 |
+> | [배포 가이드 §8](../../docs/DEPLOYMENT.md) | 같은 서버 `/manual-hub`에 통합 배포하는 절차 |
+> | [공용 아키텍처](../../docs/SHARED_PLATFORM_ARCHITECTURE.md) | 하위 서비스의 경계와 추가 규칙 |
+
 제품 매뉴얼과 기술문서를 한 서버에 모아 **Revision 이력을 삭제 없이 보존**하는
 사내 문서관리 시스템(Document Management System).
 
@@ -116,9 +130,27 @@ My Account       내 정보 / 비밀번호 변경
 **서버에 Node.js 가 필요하지 않습니다.** 프론트엔드는 개발 PC에서 빌드하고
 결과물만 전송합니다.
 
+### 마운트 형태 두 가지
+
+이 서비스는 **단독**으로도, 플랫폼의 **하위 경로**로도 뜹니다. 차이는 프론트엔드 빌드 시점의
+base path 하나뿐입니다 — 이 값이 asset URL, react-router basename, API prefix를 모두
+결정하므로 다른 곳을 고칠 필요가 없습니다 (`frontend/vite.config.ts`).
+
+| | 단독 | 플랫폼 하위 |
+|---|---|---|
+| 접속 경로 | `http://<host>/` | `http://<host>/manual-hub/` |
+| 빌드 명령 | `npm run build` | `npm run build:platform` |
+| base path | `/` | `/manual-hub/` (`frontend/.env.platform`) |
+| nginx 설정 | `deploy/nginx/qa-manual-hub.conf` | 저장소 루트 `deploy/nginx/qa-platform.conf` |
+| `SESSION_COOKIE_PATH` | `/` (기본) | `/manual-hub/` |
+| 사이드바 "QA 자동화 홈" 링크 | 없음 | 표시됨 |
+
+플랫폼 하위로 붙이는 전체 절차는 [배포 가이드 §8](../../docs/DEPLOYMENT.md)에 있습니다.
+아래 설치 절차는 **단독 배포 기준**으로 쓰여 있습니다.
+
 ### 배포 방식 두 가지
 
-이 저장소는 두 경로를 모두 제공합니다.
+이 서비스는 두 경로를 모두 제공합니다.
 
 - **네이티브 systemd** (`deploy/systemd`, `deploy/scripts`) — 서버에 이미
   PostgreSQL 이 있거나, 같은 호스트에서 보호해야 할 다른 서비스가 돌고 있을 때.
@@ -181,7 +213,7 @@ My Account       내 정보 / 비밀번호 변경
 └── backup/               # 750
 ```
 
-문서 파일과 DB 데이터는 저장소에 포함되지 않습니다(`.gitignore`).
+문서 파일과 DB 데이터는 저장소에 포함되지 않습니다 (`services/qa-manual-hub/.gitignore`).
 
 ---
 
@@ -472,6 +504,17 @@ npm run dev        # http://localhost:5173, /api 는 9180 으로 프록시
 `CORS_ORIGINS=http://localhost:5173` 를 `.env` 에 넣으면 Vite dev server 에서
 쿠키 인증이 동작합니다.
 
+### 프론트엔드 빌드
+
+```bash
+cd frontend
+npm run build            # 단독 배포용   (base '/')
+npm run build:platform   # 플랫폼 하위용 (base '/manual-hub/')
+```
+
+경로를 하드코딩하지 말고 `import.meta.env.BASE_URL` 을 쓰십시오. 두 빌드 모두 CI 에서
+검증합니다 (`.github/workflows/manual-hub.yml`).
+
 ### 테스트
 
 PostgreSQL 이 실제로 필요합니다(JSONB, 함수 유니크 인덱스, `FOR UPDATE` 사용).
@@ -609,6 +652,10 @@ UTF-8 페이지에서 항상 UTF-8 로 보냅니다. 자동화가 필요하면 P
 | 문서 | 내용 |
 |---|---|
 | [docs/USERGUIDE.md](docs/USERGUIDE.md) | 사용자·관리자·운영자 사용 안내 (한국어) |
+| [저장소 README](../../README.md) | 상위 플랫폼 소개 |
+| [문서 지도](../../docs/README.md) | 저장소 전체 문서 안내 |
+| [배포 가이드 §8](../../docs/DEPLOYMENT.md) | 플랫폼 하위(`/manual-hub`) 통합 배포 |
+| `../../deploy/nginx/qa-platform.conf` | 통합 배포용 nginx 설정 |
 | `deploy/.env.example` | 환경설정 템플릿 |
 | `deploy/scripts/install.sh` | 최초 설치 |
 | `deploy/scripts/deploy.sh` | 코드 배포 |
@@ -625,12 +672,17 @@ UTF-8 페이지에서 항상 UTF-8 로 보냅니다. 자동화가 필요하면 P
 
 ## AI 에이전트 Context 관리 (Akela)
 
-이 프로젝트는 [Akela](https://github.com/TimothyHan/akela)를 사용해 Codex/Claude Code 같은 AI 에이전트가 작업할 때 전체 문서를 다 읽는 대신 필요한 지식만 골라 압축된 컨텍스트로 제공받습니다. 런타임 의존성이 아니며 실행/배포 동작에는 전혀 영향을 주지 않습니다.
+이 디렉터리는 독립 Project Root가 아닙니다. Akela Context는 **저장소 루트에서 상속**합니다.
 
-- Knowledge: `knowledge/`
-- Protocol: `akela/PROTOCOL.md`
-- 설정: `akela.json`
+| 대상 | 위치 (저장소 루트 기준) |
+|---|---|
+| Knowledge | `knowledge/manual-hub-*.md` (`scope=manual-hub`) |
+| Protocol | `akela/PROTOCOL.md` |
+| 설정 | `akela.json` — activity `manual-hub` |
 
-작업 종류(activity)별로 관련 지식만 컴파일해서 사용하므로 매 작업마다 전체 문서를 컨텍스트에 넣을 때보다 토큰 사용량이 크게 줄어듭니다. 기본 흐름:
+```bash
+akela compile --activity manual-hub --task <task-id>
+```
 
-knowledge/ → `akela compile` → 작업별 slice.md → Codex/Claude 작업 → `akela log`로 Evidence 기록 → `akela stats`/curate로 지식 유지보수
+이 디렉터리 하위에 별도 `akela.json` / `knowledge/` 를 만들지 않습니다. 에이전트가 지켜야 할
+사항은 [`AGENTS.md`](AGENTS.md) / [`CLAUDE.md`](CLAUDE.md) 에 있습니다.

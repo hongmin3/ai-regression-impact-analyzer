@@ -179,3 +179,83 @@ sudo systemctl status qa-verification-management-system.service
 4. 서버에서 `pytest` 재확인
 5. 기존 프로세스 종료 → 재기동 (§4-5) — **다른 서비스나 포트는 건드리지 않는다**
 6. `curl http://127.0.0.1:12000/health` 및 주요 페이지(`/`, `/knowledge`, `/analyses`) 확인
+
+## 8. 하위 서비스(QA Manual Hub)를 같은 서버 `/manual-hub`에 붙이기
+
+핵심 앱과 [QA Manual Hub](../services/qa-manual-hub/README.md)는 **프로세스도 DB도 공유하지
+않는 별도 배포 단위**다. 홈 화면의 "매뉴얼 서버" 카드가 동작하려면 두 서비스가 같은 origin에
+있어야 하고, 그 역할을 nginx가 맡는다.
+
+```text
+브라우저 → nginx :80 ┬ /             → 핵심 앱          127.0.0.1:12000
+                     ├ /manual-hub/  → Manual Hub SPA   (정적 파일)
+                     └ /manual-hub/api → Manual Hub 백엔드 127.0.0.1:9180
+```
+
+### 8-1. Manual Hub 설치 (nginx는 건너뛴다)
+
+```bash
+sudo SKIP_NGINX=1 ./services/qa-manual-hub/deploy/scripts/install.sh
+```
+
+`install.sh`는 멱등이며 추가 작업만 한다. 이미 있는 DB·role은 초기화하지 않는다. 상세 옵션은
+[Manual Hub README](../services/qa-manual-hub/README.md)를 참고한다.
+
+`SKIP_NGINX=1`을 주는 이유는, 이 스크립트가 설치하는 사이트 설정
+(`deploy/nginx/qa-manual-hub.conf`)이 **단독 배포용**(포트 80 전체를 Manual Hub가 차지)이기
+때문이다. 통합 배포에서는 아래 §8-3의 설정을 대신 쓴다.
+
+### 8-2. 프론트엔드를 서브패스로 빌드
+
+```bash
+cd services/qa-manual-hub/frontend
+npm ci
+npm run build:platform      # VITE_BASE_PATH=/manual-hub/
+```
+
+`npm run build`(단독)와 `npm run build:platform`(서브패스)의 차이는 base path 하나뿐이다. 이
+값이 asset URL·react-router basename·API prefix를 모두 결정하므로 다른 곳을 고칠 필요가 없다.
+빌드 산출물을 서버의 `<APP_ROOT>/app/frontend`로 보낸다 (`deploy/scripts/deploy.sh`가 수행).
+
+Manual Hub의 `.env`에 다음을 추가한다 — 세션 쿠키가 핵심 앱 요청까지 따라가지 않도록 범위를
+좁힌다.
+
+```text
+SESSION_COOKIE_PATH=/manual-hub/
+```
+
+### 8-3. nginx 설정
+
+```bash
+sudo cp deploy/nginx/qa-platform.conf /etc/nginx/sites-available/qa-platform
+sudo ln -sf /etc/nginx/sites-available/qa-platform /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+**서버에 이미 다른 서비스의 nginx 사이트가 있다면 그 파일을 수정하지 말고**, `qa-platform.conf`
+의 `location` 블록만 해당 server 블록에 옮겨 붙인다. 기존 systemd 유닛·방화벽·DB 설정은
+건드리지 않는다.
+
+### 8-4. 확인
+
+```bash
+curl -fsS http://127.0.0.1/health                    # 핵심 앱
+curl -fsS http://127.0.0.1/manual-hub/api/health     # Manual Hub 백엔드
+curl -fsS http://127.0.0.1/manual-hub/ | head -5     # SPA 셸
+```
+
+브라우저에서 홈(`/`)에 "매뉴얼 서버" 카드가 보이고, 클릭하면 Manual Hub가 뜨고, 사이드바의
+"← QA 자동화 홈"으로 돌아오면 정상이다.
+
+### 8-5. 통합하지 않는 선택지
+
+nginx를 두고 싶지 않다면 Manual Hub를 단독으로(자기 호스트·포트) 배포하고, `config.yaml`의
+`services.manual_hub.url`에 절대 URL을 넣으면 된다. 홈 카드는 그 주소를 그대로 연다.
+
+```yaml
+services:
+  manual_hub:
+    url: "http://manual.example.internal"
+```
+
+값을 빈 문자열로 두면 카드 자체가 표시되지 않는다.
