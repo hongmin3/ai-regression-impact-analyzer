@@ -1,0 +1,23 @@
+# Normalise line endings so a Windows checkout does not produce shell scripts
+# the server refuses to run ("bad interpreter: /usr/bin/env bash^M").
+* text=auto eol=lf
+
+# Anything executed on the server must stay LF.
+*.sh          text eol=lf
+deploy/scripts/qamh text eol=lf
+*.service     text eol=lf
+*.conf        text eol=lf
+*.py          text eol=lf
+
+# Windows-only helpers may keep CRLF.
+*.bat         text eol=crlf
+*.cmd         text eol=crlf
+
+# Never touch binaries.
+*.pdf   binary
+*.docx  binary
+*.xlsx  binary
+*.pptx  binary
+*.png   binary
+*.jpg   binary
+*.jpeg  binary

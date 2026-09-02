@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2023"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "noEmit": true,
+    // vite/client brings the ImportMeta / process typings this config needs
+    // without pulling in the whole @types/node package.
+    "types": ["vite/client"]
+  },
+  "include": ["vite.config.ts"]
+}

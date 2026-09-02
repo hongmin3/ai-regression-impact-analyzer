@@ -1,0 +1,59 @@
+# --- secrets / env ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+secrets/
+config/local*
+
+# --- runtime document storage (NEVER commit real manuals) ---
+storage/
+backup/
+backups/
+uploads/
+srv/
+
+# --- database runtime data ---
+pgdata/
+*.sql.gz
+*.dump
+*.sqlite
+*.sqlite3
+*.db
+
+# --- logs ---
+*.log
+logs/
+
+# --- python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+# --- node / frontend ---
+node_modules/
+frontend/dist/
+.vite/
+
+# --- editors / os ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# --- private, site-specific documentation (internal network details) ---
+docs/local/
+
+# --- typescript incremental build info ---
+*.tsbuildinfo
+.akela/
+akela/.cache/

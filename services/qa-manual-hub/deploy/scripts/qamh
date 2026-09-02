@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# QA Manual Hub -- admin CLI wrapper.
+#
+# Loads the deployment's environment and runs the application CLI, so every
+# documented command is a single line no matter where you are:
+#
+#   /opt/qa-manual-hub/scripts/qamh list-users
+#   /opt/qa-manual-hub/scripts/qamh bootstrap-admin
+#   /opt/qa-manual-hub/scripts/qamh reset-password hong
+#   /opt/qa-manual-hub/scripts/qamh check-storage
+#   /opt/qa-manual-hub/scripts/qamh purge-sessions
+#
+# Run it as the service user (default: ubuntu).  Passwords are typed at an
+# interactive prompt; nothing is written to the shell history by this script.
+
+set -Eeuo pipefail
+
+APP_ROOT="${APP_ROOT:-/opt/qa-manual-hub}"
+ENV_FILE="${ENV_FILE:-$APP_ROOT/.env}"
+BACKEND_DIR="$APP_ROOT/app/backend"
+PYTHON="$APP_ROOT/venv/bin/python"
+
+[[ -r "$ENV_FILE" ]] || { echo "환경설정 파일을 읽을 수 없습니다: $ENV_FILE" >&2; exit 1; }
+[[ -x "$PYTHON" ]]   || { echo "virtualenv 가 없습니다: $PYTHON" >&2; exit 1; }
+[[ -d "$BACKEND_DIR" ]] || { echo "백엔드가 배포되지 않았습니다: $BACKEND_DIR" >&2; exit 1; }
+
+set -a
+# shellcheck disable=SC1090
+. "$ENV_FILE"
+set +a
+
+cd "$BACKEND_DIR"
+exec "$PYTHON" -m app.cli "$@"

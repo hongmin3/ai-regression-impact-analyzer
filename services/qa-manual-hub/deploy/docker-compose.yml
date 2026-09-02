@@ -1,0 +1,80 @@
+# QA Manual Hub -- Docker Compose stack.
+#
+# This is the PORTABLE path: use it for local development, or when moving the
+# system to a host that has no PostgreSQL and no other services to protect.
+#
+# It is NOT what the current production host runs.  That host already had
+# PostgreSQL 16 and a firewall carefully scoped around a dozen other services,
+# and Docker's iptables handling would have undercut those rules -- so production
+# runs the same code natively under systemd (see deploy/systemd + deploy/scripts).
+# See docs/DEPLOYMENT.md for the reasoning.
+#
+#   cp ../.env.example .env   # then edit
+#   docker compose up -d --build
+
+name: qa-manual-hub
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-qa_manual_hub}
+      POSTGRES_USER: ${POSTGRES_USER:-qamanual}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      # Deterministic collation regardless of host locale.
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-qamanual} -d ${POSTGRES_DB:-qa_manual_hub}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    # Not published to the host: only the app container needs it.
+    expose:
+      - "5432"
+
+  backend:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: >-
+        postgresql+psycopg://${POSTGRES_USER:-qamanual}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-qa_manual_hub}
+      STORAGE_ROOT: /srv/qa-manual-hub/storage
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-500}
+      SESSION_LIFETIME_HOURS: ${SESSION_LIFETIME_HOURS:-8}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
+      PASSWORD_MIN_LENGTH: ${PASSWORD_MIN_LENGTH:-8}
+    volumes:
+      - storage:/srv/qa-manual-hub/storage
+    expose:
+      - "9180"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:9180/api/health').status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  web:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "${HTTP_PORT:-8080}:80"
+    volumes:
+      - ./nginx/docker.conf:/etc/nginx/conf.d/default.conf:ro
+      - frontend:/usr/share/nginx/html:ro
+
+volumes:
+  pgdata:
+  storage:
+  frontend:
