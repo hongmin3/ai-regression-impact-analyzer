@@ -140,6 +140,7 @@ base path 하나뿐입니다 — 이 값이 asset URL, react-router basename, AP
 |---|---|---|
 | 접속 경로 | `http://<host>/` | `http://<host>/manual-hub/` |
 | 빌드 명령 | `npm run build` | `npm run build:platform` |
+| 배포 명령 | `./deploy/scripts/deploy.sh user@host` | `BUILD_MODE=platform ./deploy/scripts/deploy.sh user@host` |
 | base path | `/` | `/manual-hub/` (`frontend/.env.platform`) |
 | nginx 설정 | `deploy/nginx/qa-manual-hub.conf` | 저장소 루트 `deploy/nginx/qa-platform.conf` |
 | `SESSION_COOKIE_PATH` | `/` (기본) | `/manual-hub/` |

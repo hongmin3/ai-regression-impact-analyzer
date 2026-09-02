@@ -208,9 +208,20 @@ sudo SKIP_NGINX=1 ./services/qa-manual-hub/deploy/scripts/install.sh
 ### 8-2. 프론트엔드를 서브패스로 빌드
 
 ```bash
+# 이후 재배포는 이 한 줄로 끝난다 — 빌드 모드까지 함께 지정한다
+BUILD_MODE=platform ./services/qa-manual-hub/deploy/scripts/deploy.sh user@server
+```
+
+`BUILD_MODE=platform`을 빠뜨리면 단독용(base `/`)으로 빌드된 SPA가 올라가 화면이 빈 채로
+뜬다. `deploy.sh`는 전송 전에 산출물의 asset 경로가 base와 맞는지 확인하고, 다르면 중단한다.
+서버가 어느 쪽인지 모르면 `ls /etc/nginx/sites-enabled/`에 `qa-platform.conf`가 있는지 본다.
+
+수동으로 빌드만 하려면:
+
+```bash
 cd services/qa-manual-hub/frontend
 npm ci
-npm run build:platform      # VITE_BASE_PATH=/manual-hub/
+npm run build:platform      # frontend/.env.platform 의 VITE_BASE_PATH=/manual-hub/
 ```
 
 `npm run build`(단독)와 `npm run build:platform`(서브패스)의 차이는 base path 하나뿐이다. 이
