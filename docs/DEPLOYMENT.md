@@ -71,19 +71,29 @@ DEPLOY_TARGET_DIRECTORY=/path/to/qa-verification-management-system
 ```
 
 이 스크립트는 로컬 `pytest`를 먼저 통과시키고, `app/`, `scripts/`, `tests/`, `config/`, `docs/`,
-`requirements.txt`, `config.yaml`, 예제 파일들만 서버로 복사한다. `secrets.txt`/`.env`/`data/`
-같은 개인 설정과 운영 데이터는 복사하지 않는다 (의도적 — 서버의 실제 데이터를 덮어쓰지 않기 위함).
+`deploy/`, `requirements.txt`, `config.yaml`, 예제 파일들만 서버로 복사한 뒤 서버에서
+`.venv/bin/pip install -r requirements.txt`까지 자동으로 실행한다(2026-09-02부터). `secrets.txt`/
+`.env`/`data/` 같은 개인 설정과 운영 데이터는 복사하지 않는다 (의도적 — 서버의 실제 데이터를
+덮어쓰지 않기 위함).
 
-### 4-3. 서버에서 의존성 설치 (새 패키지 추가 시 매번 필요)
+### 4-3. 서비스 재기동
+
+파일 전송과 의존성 설치까지는 `deploy.ps1`이 항상 수행한다. **재기동은 기본적으로 하지
+않는다** — 코드만 반영해 두고 재기동 시점을 사람이 고르고 싶을 때가 있기 때문이다.
+
+```powershell
+.\scripts\deploy.ps1            # 파일 전송 + 의존성 설치만. 재기동 안 함
+.\scripts\deploy.ps1 -Restart   # 위 작업 + sudo systemctl restart qa-verification + 헬스체크
+```
+
+`-Restart`는 로컬 `secrets.txt`의 `SERVER_SUDO_PASSWORD`를 읽어 SSH로 `sudo -S`에 전달한다(화면·로그에
+값을 출력하지 않음). 이 키가 없으면 아래처럼 서버에서 직접 재기동한다:
 
 ```bash
 ssh your-user@your-server
-cd /path/to/qa-verification-management-system
-.venv/bin/pip install -r requirements.txt
+sudo systemctl restart qa-verification
+curl -fsS http://127.0.0.1:12000/health
 ```
-
-`deploy.ps1`은 파일만 복사하고 `pip install`은 실행하지 않는다 — `requirements.txt`가 바뀌었으면
-반드시 이 단계를 거쳐야 새 패키지(예: APScheduler) 없이 앱이 죽는 것을 막을 수 있다.
 
 ### 4-4. 비밀정보 입력 (서버에서 1회)
 
@@ -189,11 +199,10 @@ curl -fsS http://127.0.0.1:12000/health
 ## 7. 업데이트 배포 체크리스트
 
 1. 로컬에서 코드 수정 후 `pytest` 통과 확인
-2. `requirements.txt`가 바뀌었으면 §4-3 다시 실행
-3. `.\scripts\deploy.ps1`
-4. 서버에서 `pytest` 재확인
-5. `sudo systemctl restart qa-verification` (§5) — **다른 서비스나 포트는 건드리지 않는다**
-6. `curl http://127.0.0.1:12000/health` 및 주요 페이지(`/`, `/knowledge`, `/analyses`) 확인
+2. `.\scripts\deploy.ps1 -Restart` — 파일 전송, `pip install`, 재기동, 헬스체크를 한 번에 수행한다
+   (재기동을 미루고 싶으면 `-Restart` 없이 실행 후 §4-3 마지막 명령으로 나중에 재기동)
+3. 서버에서 `pytest` 재확인
+4. 주요 페이지(`/`, `/knowledge`, `/analyses`) 확인, **다른 서비스나 포트는 건드리지 않는다**
 
 ## 8. 하위 서비스(QA Manual Hub)를 같은 서버 `/manual-hub`에 붙이기
 
