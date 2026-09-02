@@ -34,182 +34,67 @@ WorkingDirectory도 새 경로로 갱신되어 있음을 실제로 확인했다(
 5. `SECURITY.md`
 6. 이 문서
 
-## 4. 현재 구현 상태
+## 4. 현재 구현 상태 (2026-09-02 기준 요약, 상세 변경 서사는 `git log`)
 
 - 루트(`/`)는 QA 자동화 허브이며 Regression 영향 분석(`/impact-analyzer`)과 매뉴얼 개정
   검증(`/manual-review`)으로 진입한다. 공용 HTML 골격·스타일은 `app/web/`이 소유하고,
-  기능별 브랜드·내비게이션·사용법·화면·로직은 `app/modules/*`가 소유한다. 매뉴얼 화면에는
-  `QA 홈`, 공용 `Knowledge`, 매뉴얼 전용 `사용법`을 표시한다. `app/modules/knowledge/`가
-  사양서·TC 등록/삭제/동기화를 전담하며 두 검증 기능이 같은 문서를 사용한다. 새 QA 모듈과 공유 DB 확장 원칙은
-  `docs/SHARED_PLATFORM_ARCHITECTURE.md` 참고.
-
-- FastAPI/Jinja2 Web UI
-- 매뉴얼 PDF 지원: 첫 PDF Baseline 등록 → 다음 PDF에서 이전 Round 선택 → 페이지 텍스트
-  추가/삭제/수정 비교. 모든 PDF 변경은 confidence 최대 60%와
-  `PDF_DIFF_REVIEW_REQUIRED`로 표시하며 Word Comment 생성은 DOCX에만 제공한다.
-- Release Note Before/Now 상세 설명과 설계검토보고서 Pass/Fail 결과를 기존 Release Scope
-  항목에 연결한다. 상세 내용은 AI 보조 근거로 전달하되 SRS를 최우선으로 하며, 설계 결과
-  Fail은 `DESIGN_REVIEW_FAILED`와 Human Review 필요 상태를 서버에서 강제한다.
-- Knowledge 사양서 PDF/Word `.docx` 등록, TC Excel 등록
-- 제품/Version을 토글(datalist) 선택 또는 신규 입력으로 관리 (`products`/`product_versions` 테이블, 초기값 VXvue·Bellalun Viewer, 이후 자유롭게 추가)
-- 같은 제품·버전에 문서를 여러 개 등록해도 이전 문서가 대체되지 않고 모두 유지되며 다운로드 가능 (`/knowledge/download/{id}`). 잘못 등록한 문서는 삭제 가능 (`/knowledge/delete/{id}`, DB row + 실제 파일 함께 제거). 2026-08-31 사용자 요청으로 자동 Revision 번호 매기기(Rev.N) 기능은 제거함 — 혼란만 주고 검색 로직에 아무 영향이 없었기 때문
-- Knowledge 파일 업로드는 클릭 선택과 드래그 앤 드롭 모두 지원 (`app/web/static/app.js`)
-- 분석 화면은 사양서/TC를 개별로 고르지 않고 **제품만 선택** → 그 제품에 등록된 사양서·TC를 전부(사양서1~5처럼 서로 다른 문서가 여러 개 등록돼도 이전 문서를 대체하지 않고 전부 유지) 검색 대상으로 사용 (`RegressionAnalyzer.run_for_product`, `Storage.active_documents`)
-- PDF/Word `.docx` 텍스트 추출 및 Chunk, BM25 Specification 검색
-- Rule 기반 Change 분석이 **등록된 기준 사양서 전체 텍스트와 diff**해 실제 신규/변경 줄만 키워드 매칭 대상으로 사용 (기존에는 변경문서 전체에서 키워드만 추출해 미변경 문장까지 오인하는 문제가 있었음, 2026-08-31 수정)
-- Gemini JSON Schema Structured Output에 `draft_test_cases` 포함 — 기존 TC로 커버되지 않는 변경사항은 VXvue TC 가이드 Rev.1.7 §13.1 양식의 신규 TC 초안(md)을 자동 생성 (`output/generated_tc/`), 근거 없는 필드는 반드시 "확인 필요"로 표기 (추가 Gemini 호출 없이 기존 1회 호출에 포함)
-- 실제 TC ID 및 Specification Chunk ID 교차검증(신규 TC 초안의 근거 Chunk ID도 동일하게 검증), Confidence Threshold 분류
-- SQLite Metadata/Cache, 분석 1건당 Gemini 호출 정확히 1회 + 동일 입력 재분석 시 캐시로 비용 없음
-- Responsive HTML Report와 CSV/XLSX Export
-- SQLite `analyses` 기반 Persistent Job 상태와 분석 이력/Impact 집계 화면
-- 서버 재기동 시 완료 결과는 유지하고 QUEUED/RUNNING 작업은 중단 실패로 명시
-- Gemini token usage 파싱·Logging 및 Mock 검증
-- VXvue 실제 다중 시트 TC 4개 파싱 확인: 669 / 3,894 / 1,785 / 59건
-- 실제 Gemini E2E smoke 성공(파이프라인 검증): 분석 `a4903700e24a`, TC 59, 추천 23, total tokens 54,856
-- **실제 서로 다른 문서로 업무 정확도 E2E 검증 완료** (2026-08-31): 기준 사양서 260824(txt→docx 변환, 실사용자 이력) vs 변경문서 260831 PDF(실제 개정판). diff 수정 전 changed_features 20건 중 19건이 실제로는 미변경 문장이었던 것을 확인 → diff 수정 후 3건(모두 진짜 변경)으로 정상화, 추천 29→18건, 토큰 69,737→55,284
-- Gemini Key를 `secrets.txt` / `secrets.json` / `.env` / OS 환경변수 어디에 넣어도 인식 (우선순위 순)
-- `/config/status`, `/config/reload`로 Key 설정 여부 확인 및 재시작 없는 재적용
-- 로컬 자동 테스트 `59 passed` (2026-08-31 고도화분 포함, 실제 Gemini API로 SSE 진행상태/change_items/신규 스키마 모두 검증 완료)
-- 2026-08-31 서버 배포 완료(구버전 기준), 기존 PID `1208181`은 재시작하지 않았으므로 이번 세션에서 추가된 기능은 아직 서버에 반영되지 않음 — 재배포 필요
-- GitHub Public repository push 완료
-- Ubuntu 포트 `12000`: `ufw allow 12000/tcp` 적용 후 개발 PC 접속 정상화 (`SECURITY.md` 참고)
-- **2026-08-31 고도화 (진행 상태/보고서/사양서 동기화, 상세는 `docs/AUTOMATION.md`)**:
-  - 분석 진행 상태를 SSE(`GET /analyses/{id}/stream`)로 실시간 전달. `RegressionAnalyzer._execute`의 실제 8단계(입력 문서 분석→변경사항 추출→최신 사양서 조회→TC 후보 검색→AI 영향도 분석→Regression TC 선정→신규 TC 초안 검증→HTML 결과 생성)만 기준으로 진행률을 계산하며, AI 응답을 기다리는 동안 임의로 퍼센트를 올리지 않음. 실패 시 실패 단계와 실제 오류 메시지 표시 (실제 Gemini 503 장애로 검증됨)
-  - HTML 결과 보고서를 `app/reports/html_report.py`의 f-string에서 `app/web/templates/report.html` Jinja2 템플릿으로 전환하고, Analysis Overview/Change Summary(의미 단위 그룹핑)/Impact Analysis/Recommended Regression TC(5열 단순화)/Additional Verification Recommendations/AI 판단 주의사항 6단계로 재구성. Evidence Level·Revision Mark·원문 그대로의 chunk_id는 사용자 화면에서 제거하고 XLSX에만 유지, `relevant_specifications` 대신 사람이 읽는 `specification_reference`(예: "VXvue 사양서3 · DAP Communication · p.348")를 코드에서 조립(환각 없음). "Manual Review Required" 섹션과 "(VXvue TC 설계 가이드 Rev.1.7 §1.2.1)" 인용 문구 삭제
-  - CSV Export 제거, XLSX만 유지(요청 사항 확인 후 결정)
-  - VXvue 사양서 자동 동기화: 별도 프로젝트("ALM 사양서 최신화 크롤링", Polarion REST API로 이미 인증됨)의 `output/<날짜>/pdf/`만 읽어(그 프로젝트 코드/설정 미변경) `data/specifications/vxvue/{original,normalized}/<날짜>/`에 원본 보존 + 텍스트 정규화 후 기존 Knowledge API로 등록 (`app/sync/vxvue_spec.py`, `scripts/sync_vxvue_spec.py`, `config/products/vxvue.yaml`). 파일명·크기·수정시각 비교로 변경분만 갱신, 실패해도 기존 등록 데이터는 보존. 앱 내부 `BackgroundScheduler`(신규 systemd 없음, `app/core/scheduler.py`)로 매일 예약 실행 시도 + `/knowledge`의 "지금 동기화" 버튼으로 수동 실행. 실제 업로드/재실행 idempotency 검증 완료
-- 2026-08-31 사용자 승인 후 서버 프로세스 재시작 완료: 구 PID `1208181`(예전 코드, `GET /analyses` 405) → 신 PID `1214754`(이번 세션 변경분 전체 반영). 동일한 방식(일반 사용자 nohup 프로세스, 포트 `12000`)으로 재시작했고 다른 서비스(5000/5001/5002/5003/8000/10000/18800)는 그대로 유지 확인. stdout/stderr는 `output/logs/uvicorn.out`에 기록
-- **2026-08-31 추가 고도화 2차분**:
-  - 분석 화면에서 변경사항 문서를 여러 개 동시 첨부 가능 (`change_files`, `RegressionAnalyzer.run`/`run_for_product`가 `list[Path]`를 받음). 여러 문서의 텍스트를 합쳐 하나의 change_text로 diff·분석
-  - 사용자 요청 사항(notes)이 있으면 변경 문서 전체를 Gemini에 보내지 않고, BM25로 요청과 관련성 높은 줄만 추려 보내는 RAG 토큰 절약 적용 (`app/analyzers/change_analyzer.py::trim_by_relevance`, `retrieval.change_text_top_lines` 설정으로 상한 조절, 문서가 짧으면 그대로 전체 사용)
-  - VXvue 사양서 동기화 시 같은 문서의 이전 리비전(파일명에서 `(YYMMDD)` 날짜만 다른 동일 문서)을 자동 감지해 신규 등록 후 삭제 — Knowledge에 과거 리비전이 계속 쌓이지 않음 (`app/sync/vxvue_spec.py::_replace_stale_revisions`)
-  - `/knowledge` 화면의 "사양서 지금 동기화" 버튼과 알림음 제거 — 실제 자동 실행은 Windows 작업 스케줄러가 전담하고, 화면에는 마지막 동기화 결과만 표시(수동 트리거 엔드포인트 자체는 CLI/스크립트 용도로 유지)
-  - VXvue 사양서 동기화 스케줄을 매일 07:00에서 **매주 월요일 07:30(KST)**로 변경 — 같은 PC에 이미 등록된 ALM 크롤러 작업(`VXvue_SRS_Spec_Automation`, 매주 월 07:00)이 끝날 시간을 확보하기 위해 정확히 30분 뒤로 맞춤 (`config/products/vxvue.yaml`의 `sync.day_of_week`/`sync.schedule_time`, `app/core/scheduler.py`)
-  - **Windows 작업 스케줄러에 실제 등록 완료**: 작업명 `AIRegressionAnalyzer_VXvueSpecSync`, 매주 월요일 07:30 KST, `LogonType=S4U`(비밀번호 저장 없이 비로그인 상태에서도 실행), `StartWhenAvailable=True`(PC가 꺼져 있거나 잠겨 있어도 켜지는 즉시 실행) — 기존 ALM 크롤러 작업과 동일한 패턴을 그대로 따름. `Get-ScheduledTask -TaskName AIRegressionAnalyzer_VXvueSpecSync`로 확인 가능
-  - Gemini 2.5 계열의 내부 thinking 토큰이 `max_output_tokens` 예산을 함께 소비해 대규모 후보(예: `candidate_limit=150`) 분석 시 구조화 JSON 응답이 중간에 잘리는 문제를 실제 대용량 다중 PDF E2E 테스트로 재현·확인. `max_output_tokens=65536` + `thinking_config=ThinkingConfig(thinking_budget=0)`로 수정해 해결 확인(`app/core/gemini_client.py`) — 이 작업은 별도 추론 과정 없이 근거 기반 구조화 추출만 하므로 thinking 비활성화가 안전함
-- **2026-09-01 코드 구조 리팩터링 (동작 변화 없음, 신규 "매뉴얼 개정 검증" 기능 통합을 위한 모듈형 구조 전환)**:
-  - 최상위 패키지 `app`은 그대로 유지(`uvicorn app.main:app` 불변). 그 안에 `app/core/`(공용 인프라) · `app/prompts/`(AI 프롬프트 YAML) · `app/modules/`(기능별 독립 모듈) · `app/web/`(공용 라우터 aggregator + 공용 template/static)로 재구성
-  - 기존 `app/analyzers/`·`app/reports/`·`app/sync/`·`app/web/routes.py`·`app/core/schemas.py`를 전부 `app/modules/impact_analyzer/`로 이동(`git mv`, 히스토리 보존). URL 경로는 변경 없음(prefix 없이 root 그대로) — ALM 크롤러 sync 스크립트의 하드코딩된 호출 경로와 실사용자 북마크를 보호하기 위함
-  - 신규 `app/modules/manual_review/`(스켈레톤): `/manual-review` 페이지(자리표시) + `docx_track_changes.py`(Word `<w:ins>/<w:del>/<w:moveFrom>/<w:moveTo>` 구조화 추출, 순수함수, `python-docx` 미사용) + draft 스키마. 아직 업로드/AI 분석/Word Comment 생성 기능 없음 — 상세 로드맵은 `NEXT_STEPS.md`, 결정 필요 항목은 `OPEN_QUESTIONS.md` 참고
-  - `core/storage.py`가 `core/scheduler.py`가 특정 모듈(`schemas.py`/`sync/vxvue_spec.py`)을 직접 import하던 역방향 의존성을 제거 — `Storage.create_analysis/update_stage`는 `stage_total`을 파라미터로 받고, VXvue 동기화 cron job 등록은 `app/modules/impact_analyzer/scheduled_jobs.py::register_scheduled_jobs`로 이동, `core/scheduler.py`는 범용 `job_registrars` 콜백만 실행
-  - AI 프롬프트 외부화: `app/prompts/impact_analysis.yaml`(기존 SYSTEM_INSTRUCTION 원문 그대로, byte-for-byte 검증 완료) + `app/core/prompt_manager.py` 로더. `app/core/gemini_client.py`는 도메인 무관 `generate_structured()`만 제공하고, 도메인 파싱(ImpactDecision 등)은 신규 `app/modules/impact_analyzer/ai_client.py::ImpactAnalysisAIClient`가 담당. `AnalysisResult.prompt_version` 필드 추가로 분석 결과에 사용된 prompt 버전 기록
-  - `app/core/storage.py`에 `manual_revisions`/`manual_changes`/`manual_comments` 테이블 추가(`CREATE TABLE IF NOT EXISTS`, 아직 아무 코드도 쓰지 않는 준비 단계)
-  - `scripts/deploy.ps1`은 이미 `app/` 폴더 전체를 복사하므로 수정 불필요 확인. **이번 리팩터링은 로컬에서만 진행했고 원격 서버 배포/재시작은 수행하지 않음** — 재배포 필요
-  - `pytest -q` 69 passed(리팩터링 전 65 + 신규 `test_docx_track_changes.py` 4건)로 동작 무변화 확인
-- **2026-09-01 "매뉴얼 개정 검증"(`app/modules/manual_review/`) 실제 파이프라인 구현 (스켈레톤 → 동작하는 기능)**:
-  - DB 스키마 확정: `manual_revisions`(round_number/parent_revision_id/baseline_revision_id로 Round 계보 추적), `manual_changes`(functional/decision/confidence/qa_decision/qa_note), `manual_comments`(status enum + resolved_in_revision_id). `Storage`에 CRUD 메서드 전체 추가
-  - **SRS 근거는 신규 크롤러 연동 없이 impact_analyzer가 이미 관리하는 등록 사양서(`documents(kind='specification')`, `vxvue_spec_sync.py`가 매주 최신화)를 그대로 재사용** (`app/modules/manual_review/srs_evidence.py`) — 기존 `app/parsers/document_parser.py`/`app/retrieval/bm25_retriever.py` 그대로 재사용
-  - NON_FUNCTIONAL_CHANGE 필터(`change_filter.py`): 페이지 번호/저작권/Revision 표기/목차 리더 점선 등 단순 변경은 기본 AI 분석 대상에서 제외
-  - 2단계 AI 판정(`app/prompts/manual_revision_{quick,detail}.yaml` + `ai_client.py`): 1차 짧은 판정에서 PASS면 2차 상세 호출을 생략해 비용 절감. 두 단계 모두 `core/gemini_client.py`의 기존 sha256 캐시를 그대로 활용해 동일 변경 재검증 시 중복 호출 없음
-  - `ManualRevisionReviewer`(`reviewer.py`): 문서 파싱→SRS 후보 검색→AI 판정→DB 저장의 4단계 파이프라인, `analyses` 테이블을 재사용해 impact_analyzer와 동일한 SSE 진행상태 패턴 제공
-  - 라우트: `GET /manual-review`(업로드+이력), `POST /manual-review/revisions`(업로드, BackgroundTasks), `GET /manual-review/jobs/{id}`/`/stream`(SSE), `GET /manual-review/revisions/{id}/view`(결과 화면), `POST .../changes/{id}/qa-decision`(QA Override — AI 원본 판정은 삭제하지 않고 별도 컬럼에 기록)
-  - Word Comment 자동 삽입(`comment_writer.py`, **신규 의존성 `python-docx==1.2.0` 추가**): 문제로 판정된 변경마다 원본 위치(문단 단위)에 Comment 삽입. python-docx의 `Paragraph.runs`가 `<w:ins>/<w:del>` 내부 run을 찾지 못하는 한계를 확인하고 lxml로 직접 문단 내 모든 `<w:r>`을 찾아 `Run` 객체로 감싸 앵커링하는 방식으로 우회(실제 python-docx 1.2.0 API로 삽입→저장→재오픈까지 검증 완료). 원본 Track Changes와 기존 연구소 Comment는 건드리지 않음
-  - 신규 config: `config.yaml`의 `manual_review.max_srs_candidates`(기본 6), `storage.manual_revision_dir`/`storage.manual_review_comment_dir`
-  - 테스트 42건 추가(`test_change_filter`, `test_srs_evidence`, `test_manual_review_ai_client`, `test_manual_review_reviewer`, `test_manual_review_router`, `test_manual_review_storage`, `test_comment_writer`) — `pytest -q` 총 **111 passed**
-  - **이번 세션에서 하지 않은 것** (상세는 `NEXT_STEPS.md`/`OPEN_QUESTIONS.md`): PDF 매뉴얼 diff, Release Note/설계검토보고서 파서, Cross-Manual 영향분석, 이미지 변경 Human Review Gate, Round 간 Comment 자동 반영 판정(의도적으로 미구현 — 오탐 위험), 실제 예시 파일 기반 E2E, 원격 서버 배포(아직 로컬에만 반영)
-- **2026-09-01 2차: Release Note/설계검토보고서 파서 + Reverse 검증("누락 의심"), 사용자가 제공한 실제 VXvue 1.1.0 예시 파일로 검증**:
-  - `app/modules/manual_review/release_scope.py`: Release Note의 Added/Changed/Fixed bug/Etc 카테고리 헤더 인식, 설계검토보고서 "문제 분석" 절 번호 매김(N.N.N) 항목 추출. 실제 문서(사내망 UNC 경로 제공받음)로 검증하며 버그 다수 발견·수정: 문서 앞머리 메타데이터 노이즈, TOC 점선 리더 항목이 실제 헤더와 문구가 같아 조기 종료되던 문제, 다음 대분류 절의 번호 재사용으로 인한 중복 수집
-  - Reverse 검증(스펙 §13): Release Scope 항목을 이번 리비전의 functional 매뉴얼 변경과 BM25로 대조, 매칭 안 되면 신규 `manual_release_findings` 테이블에 MISSING_SUSPECTED로 저장. reviewer 파이프라인에 "Release Scope 대조" 단계 추가(4→5단계), 결과 화면에 "누락 의심" 섹션 표시
-  - 업로드 폼에 Release Note/설계검토보고서 선택적 첨부 추가 — 미첨부 시 해당 제품에 이미 등록된 최신 문서 자동 재사용(기존 `documents` 테이블에 `release_note`/`design_review` kind로 등록, 스키마 변경 없음). ALM 크롤러 새 자동화 없이 수동 업로드+자동 재사용으로 해결(`OPEN_QUESTIONS.md` #4)
-  - **실제 파일 전체 파이프라인 E2E 검증**: 실제 Round 1 Service Manual(799건 변경, 704건 functional) + 실제 Release Note(68건) + 실제 설계검토보고서(40건) + 실제 등록 사양서로 `ManualRevisionReviewer.run()` 전체 실행(mock AI, 42초) — Release Scope 108건 중 102건 FOUND·6건 MISSING_SUSPECTED, 결과가 실제로 QA가 확인해볼 만한 합리적인 항목으로 확인됨 (검증용 스크립트는 사내 문서를 다루므로 실행 후 삭제, 리포지토리에는 합성 fixture 기반 테스트만 커밋)
-  - 모든 코드에서 제품명 하드코딩 여부 재점검(사용자 요청) — `comment_writer.py`의 Author를 `{product} QA AI`로 조립하도록 수정, 그 외 로직은 이미 `product` 파라미터화되어 있었음을 확인
-  - 테스트 19건 추가, `pytest -q` **130 passed**
-- **2026-09-01 3차 (QA 플랫폼 허브)**: 루트(`/`)를 공용 QA 자동화 허브로 전환하고 기존 Regression
-  분석 시작 화면을 `/impact-analyzer`로 분리. `/manual-review`와 함께 두 기능을 카드로 선택할 수
-  있으며 기존 `/analyses`·`/knowledge`·동기화 API 경로는 호환성 유지. 공유 DB와 새 QA 모듈의
-  확장 원칙은 `docs/SHARED_PLATFORM_ARCHITECTURE.md`에 정리. `pytest -q` 132 passed 후 실서버
-  재배포·재기동, 주요 6개 페이지 200 응답까지 검증
-- **2026-09-01 4차 (공용 Knowledge + 이전 Comment 참고 판정)**: 사양서·TC 관리를
-  `app/modules/knowledge/` 독립 모듈로 분리해 회귀 분석과 매뉴얼 검증이 함께 사용. 매뉴얼
-  화면에서 제품별 SRS 파일명·등록 시각·최근 동기화 상태 확인 및 공용 Knowledge에서 추가·삭제
-  가능. 이전 Round의 미해결 Comment는 전체 조상 계보에서 이어받아 현재 Track Changes와 로컬
-  유사도를 비교해 `반영 의심/미반영 의심/판단 불가`를 참고 표시(QA가 확정 전까지 상태 자동
-  변경 없음)
-- **2026-09-01 5차 (PDF 매뉴얼 리비전 diff)**: 첫 PDF를 Baseline으로 등록하고 다음 PDF부터
-  이전 PDF를 선택해 페이지별 텍스트 추가·삭제·수정을 추출. 위치/레이아웃 해석 오차를 감안해
-  AI confidence를 최대 60%로 제한하고 모든 항목에 `PDF_DIFF_REVIEW_REQUIRED` 표시. PDF에는
-  Word Comment를 생성하지 않고 QA가 결과 화면에서 직접 최종 판정
-- **2026-09-01 6차 (Release/설계검토 상세 근거)**: Release Note의 `Description for Each
-  Version`에서 기존 항목의 Before/Now 상세 설명을 추출해 검색·AI 보조 근거에 추가(중복 없음).
-  설계검토보고서의 변경 결과 절에서 Pass/Fail을 문제 분석 제목과 연결하며 Fail 항목은 서버가
-  `DESIGN_REVIEW_FAILED`와 Human Review 필요 상태를 강제. 최종 기능 사실 판단은 계속 SRS를
-  최우선으로 함
-- **2026-09-01 9차 (실제 파일 기반 E2E pytest 편입)**: `tests/test_manual_review_real_files_e2e.py`.
-  OPEN_QUESTIONS.md #5를 "고정 경로 참조 + skip" 방식으로 결정. 사내망 서버 IP·부서 폴더
-  체계를 공개 repo에 노출하지 않도록 `.deploy.env`와 동일하게 `real_fixtures.local.env`(Git
-  제외, `.example`만 공개)로 경로를 분리. 이 PC에서는 실제 Round 1 매뉴얼·Release Note·
-  설계검토보고서·SRS 6개로 전체 파이프라인이 mock AI로 통과(`pytest -q` 175 passed, 약
-  80초 — 대용량 실제 문서 파싱 때문에 이 PC에서만 느려짐, 경로 없는 환경은 즉시 skip).
-- **2026-09-01 8차 (비용/캐시 대시보드 UI)**: `/cost-dashboard` 신규 페이지. `analyses`
-  테이블에 `module` 컬럼을 추가해 Regression 영향 분석/매뉴얼 개정 검증 토큰 사용량을 구분
-  집계하고(`Storage.cost_dashboard_stats`), 일별 토큰 사용량·기능별 사용량·캐시 Hit율·최근
-  분석 50건을 화면에 표시. 캐시 Hit 기록은 아직 Regression 영향 분석에만 있어 매뉴얼 개정
-  검증은 통계에서 제외됨을 화면에 명시(알려진 v1 범위). 테스트 7건 추가, `pytest -q`
-  **174 passed**. 상세는 `NEXT_STEPS.md` 참고. 아직 서버 미배포.
-- **2026-09-01 7차 (Cross-Manual 영향분석 + 이미지 변경 Human Review Gate, 프로젝트 명칭
-  변경)**:
-  - Cross-Manual 영향분석(스펙 §11): 같은 제품의 다른 매뉴얼 최신 리비전(없으면 Knowledge
-    문서)을 이번 Release/설계 변경과 BM25로 대조해 `manual_cross_impacts` 테이블에 저장하고
-    결과 화면에서 QA가 확인 필요/영향 있음/영향 없음으로 확정 (`app/modules/manual_review/cross_manual.py`)
-  - 이미지 변경 Human Review Gate(스펙 §8-1): DOCX Track Changes 내부 drawing/pict 삽입·삭제와
-    PDF 페이지 이미지 SHA-256 hash 변화를 감지해 `IMAGE_CHANGE_REVIEW_REQUIRED`를 강제
-    (`docx_track_changes.py::_has_image`, `pdf_revision_diff.py::_page_image_hashes`)
-  - reviewer 파이프라인에 "다른 Manual 영향 추적" 단계 추가(5→6단계)
-  - 테스트 37건 추가, 합성 PNG fixture의 zlib 오류(PyMuPDF `incorrect data check`)를 유효한
-    최소 PNG bytes로 교체해 해결 — `pytest -q` **167 passed**
-  - 프로젝트 표시명을 **QA 검증 관리 시스템**으로, GitHub repo/로컬 폴더 slug를
-    **qa-verification-management-system**으로 통일(위 2장 참고). 원격 서버 배포 경로는
-    의도적으로 변경하지 않음
+  기능별 브랜드·내비게이션·사용법·화면·로직은 `app/modules/*`가 소유한다.
+  `app/modules/knowledge/`가 사양서·TC 등록/삭제/동기화를 전담하며 두 검증 기능이 같은
+  문서를 사용한다. 공유 DB와 새 QA 모듈 확장 원칙은 `docs/SHARED_PLATFORM_ARCHITECTURE.md`.
+- **Regression 영향 분석**: 제품 선택 → 등록된 사양서·TC 전체를 검색 대상으로 사용 →
+  기준 사양서 전체 텍스트와 diff한 실제 변경 줄만 Rule 매칭 → BM25 후보 압축 → Gemini
+  Structured Output 1회 호출로 영향도 판정 + 커버되지 않는 변경의 신규 TC 초안까지 함께
+  생성 → TC ID/Chunk ID 교차검증 → HTML 리포트 + XLSX. SQLite 캐시로 동일 입력 재분석은
+  무료. 완료된 분석 상세 화면에서 QA가 확정 TC ID/메모를 남기면 precision/recall/F1이
+  누적 집계된다.
+- **매뉴얼 개정 검증**: DOCX Track Changes/PDF Baseline-Round diff 추출 → NON_FUNCTIONAL
+  필터 → 2단계(quick/detail) AI 판정(PASS면 상세 호출 생략) → SRS 근거는 impact_analyzer가
+  관리하는 등록 사양서를 그대로 재사용 → QA Override → Word Comment 자동 삽입(변경 요소
+  단위로 정밀 앵커링). Release Note/설계검토보고서 파서로 Release Scope Before/Now 근거와
+  Pass/Fail(Fail은 Human Review 강제)을 연결하고, Reverse 검증으로 "누락 의심" 후보를
+  BM25(+토큰 겹침 fallback)로 찾는다. 같은 제품의 다른 매뉴얼과 Cross-Manual 대조, DOCX/PDF
+  이미지 변경은 Human Review Gate로 강제. PDF diff는 confidence 60% 상한 + Word Comment
+  미생성.
+- **QA Manual Hub 통합**(`services/qa-manual-hub/`): 제품 문서를 Git처럼 Revision 이력으로
+  보관하는 별도 FastAPI+PostgreSQL 서비스. 코드/DB는 공유하지 않고 HTTP API로만 연동해
+  Cross-Manual 대조 소스로 활용한다. 같은 호스트 nginx가 `/`(핵심 앱 :12000)와
+  `/manual-hub/*`(SPA+백엔드 :9180)를 하나의 진입점으로 라우팅하며, 80은 443(self-signed
+  인증서)으로 강제 리다이렉트한다(모니터링 헬스체크 경로만 예외).
+- 운영: `qa-verification.service`/`qa-manual-hub.service`/`nginx` 모두 systemd로 자동
+  복구. `scripts/monitor_health.py`가 10분 간격으로 핵심 앱·nginx·manual_hub를 감시하고,
+  `scripts/backup_data.py`가 매일 SQLite Online Backup+SHA-256 검증을 수행한다.
+  `/operations/status`에서 동시 실행 제한·stale job·백업 상태를 확인할 수 있다.
+- Gemini Key는 `secrets.txt`/`secrets.json`/`.env`/OS 환경변수 어디에 넣어도 인식되고
+  `/config/status`로 확인·재적용한다. VXvue 사양서는 Windows 작업 스케줄러가 매주 월요일
+  자동 동기화한다(크롤러 프로젝트 output만 읽음).
+- `pytest -q` 248 passed(로컬, 실제 파일 E2E 포함 시 약간 더 오래 걸림 — 경로 미설정
+  환경은 자동 skip).
 
 ## 5. 현재 남은 작업
 
-우선순위 순서:
+`NEXT_STEPS.md`를 우선순위 순으로 참고한다. 이 파일에는 중복해서 유지하지 않는다.
 
-1. ~~실제 변경 전용 문서와 서로 다른 기준 사양서를 사용한 업무 정확도 E2E 검증~~ → 완료 (위 4장 참고). 단, 다른 사양서(2~5)·다른 TC Set으로도 추가 검증 권장
-2. VXvue Rev.1.7의 근거 수준(evidence_level)·원본 개정 표시 확인 여부(revision_mark) 결과 모델 구조화 → **완료**. PDF `rawdict` 텍스트 span과 vector drawing을 대조해 텍스트 폭 절반 이상과 겹치는 수평선만 취소선/밑줄로 판독한다. 취소선은 Human Review를 강제하며 이미지 기반·애매한 표시는 `UNVERIFIED`로 남긴다.
-3. ~~분석 이력의 검색·필터·페이지네이션 보강~~ → **완료** (2026-09-01, `NEXT_STEPS.md` 참고)
-4. ~~자동 탐지로 해결되지 않는 TC용 수동 컬럼/시트 매핑 UI 추가~~ → **완료** (2026-09-01,
-   `NEXT_STEPS.md` 참고)
-5. BM25 입력 데이터 재사용 — **완료**: 등록 사양서·TC의 파싱 결과를 `data/indexes/`에
-   캐시하고 분석 시 재사용한다. BM25 객체 자체는 버전 호환성을 위해 매번 가볍게 재구성한다.
-6. 사용자 승인 후 최신 서버 코드 활성화 또는 systemd 등록 → **완료**: 세션 중 여러 차례 배포+재시작 승인받아 진행함(현재 PID는 최신). systemd 전환 자체는 별도 승인 대기
-6-b. VXvue 사양서 동기화 Windows 작업 스케줄러 등록 → **완료** (`AIRegressionAnalyzer_VXvueSpecSync`, 매주 월 07:30 KST)
-7. ~~네트워크 접근 정책 담당자 확인 후 팀원 접속 검증~~ → 2026-08-31 `ufw allow 12000/tcp`로 개발 PC 접속은 해결. 다른 팀원 PC 접속 검증은 2026-09-01 사용자 결정으로 **제외**(Claude Code 세션이 대신 검증할 수 없는 항목 — 필요해지면 팀원이 직접 `http://10.13.0.222:12000` 접속을 시도하면 됨)
-8. Gemini 일일 토큰 사용량 상한 안전장치 → **완료** (`config.yaml` `analysis.daily_token_limit`, `/config/status`에 사용량 노출)
-9. Knowledge 문서 삭제 기능 → **완료** (`/knowledge/delete/{id}`)
-10. 분석 화면 사용자 요청 프롬프트(문서 없이도 분석 가능) → **완료**, 문서보다 최우선 근거로 반영
-11. Knowledge 제품별 필터, 분석 화면 제품 없음 안내 → **완료**
-12. VXvue 실제 지식파일(사양서 6개+매뉴얼 5개+TC 4개, 총 6,407 TC) 로컬·서버 모두 기본 등록 완료 (제품 "VXvue", 버전 "1.0")
-13. 2026-09-01 코드 구조 리팩터링 반영 서버 재배포 — 아직 미착수 (로컬 변경만 완료, 동작 100% 동일하므로 급하지 않지만 다음 배포 시 포함 필요)
-14. "매뉴얼 개정 검증"(`app/modules/manual_review/`) — 업로드/AI 2단계 판정/결과 화면/QA
-    Override/Word Comment 삽입/PDF diff/Release Note·설계검토보고서 파서/Cross-Manual
-    영향분석/이미지 변경 Human Review Gate까지 전부 구현·테스트 완료(위 4장 참고).
-15. **비용/캐시 대시보드 UI** (`/cost-dashboard`) → **완료** (위 8차 참고). 남은 것은 실제
-    예시 파일 기반 E2E 승격 — `NEXT_STEPS.md`, 결정 필요 항목은 `OPEN_QUESTIONS.md` 참고
+## 6. systemd
 
-## 6. systemd 승인 대기안
-
-사용자 승인 전 등록하거나 기존 서비스를 변경하면 안 된다.
-
-- Service Name: `ai-regression-impact.service`
-- WorkingDirectory: `/home/ubuntu/ai-regression-impact-analyzer`
-- ExecStart: `/home/ubuntu/ai-regression-impact-analyzer/.venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 12000`
-- User: `ubuntu`
-- Port: `12000`
-
-현재는 systemd가 아닌 일반 사용자 프로세스다. 2026-08-31 `sudo ufw allow 12000/tcp` 적용 후 개발 PC에서 `10.13.0.222:12000` 접속이 정상화됐다 (아래 7장 참고). nginx는 변경하지 않았다.
+핵심 앱·매뉴얼 허브·nginx 모두 systemd 유닛으로 등록·enable돼 있다(2026-09-02 전환
+완료). 유닛 파일은 `deploy/systemd/qa-verification.service`(핵심 앱)와
+`services/qa-manual-hub/deploy/`(매뉴얼 허브) 참고. 재기동은
+`sudo systemctl restart qa-verification`(또는 `scripts/deploy.ps1 -Restart`).
 
 ## 7. 운영 서버 절대 보호 규칙
 
-- 기존 서비스 restart/stop 금지
 - 서버 reboot 금지
-- PostgreSQL, nginx, 기존 virtualenv/requirements 변경 금지
-- 방화벽(`ufw`)은 이 프로젝트가 쓰는 포트(예: `12000`)를 여는 등 이 프로젝트 범위 내 변경만 허용 (2026-08-31 사용자 승인, `SECURITY.md` 반영). 그 외 규칙 변경 금지
+- **이 프로젝트가 설치하지 않은** systemd 유닛·nginx 사이트·PostgreSQL 설정·
+  virtualenv/requirements는 변경 금지. 이 프로젝트가 소유한 것(`qa-verification.service`,
+  `qa-manual-hub.service`, `deploy/nginx/qa-platform.conf`)은 사용자 승인 후 변경 가능—
+  실제로 여러 세션에서 HTTPS 적용·구주소 블록 제거 등을 이렇게 진행했다.
+- 방화벽(`ufw`)은 이 프로젝트가 쓰는 포트를 여는 등 이 프로젝트 범위 내 변경만 허용
+  (2026-08-31 사용자 승인, `SECURITY.md` 반영). 그 외 규칙 변경 금지
 - `/home/ubuntu/jjhhub/` 내부 열람·수정 금지
 - `/mnt/vhdmaster`, `/mnt/vhdmaste` 접근·권한·마운트 변경 금지
-- 기존 systemd 유닛 변경 금지
 - 신규 포트를 사용할 때 `ss -ltnp`로 먼저 재확인
-- 서버 변경은 `/home/ubuntu/ai-regression-impact-analyzer` 내부로 제한
+- 서버 변경은 `/home/ubuntu/ai-regression-impact-analyzer` 내부(또는 이 프로젝트가 소유한
+  nginx/systemd 설정 파일)로 제한
 - Gemini API Key를 코드, Git, README, 로그, Report에 기록하지 않는다. 서버 `sudo` 비밀번호는 `secrets.txt`의 `SERVER_SUDO_PASSWORD`로만 관리하고, 명령 인자·화면·로그·Report·Git에 값 자체를 출력하지 않는다 (자세한 내용은 `SECURITY.md` 참고).
 
 ## 8. 개발 및 검증 명령
@@ -220,10 +105,11 @@ cd "C:\Users\2024980\Documents\자동화\qa-verification-management-system"
 .\scripts\run.ps1
 ```
 
-안전 배포:
+배포(파일 전송 + 의존성 설치, 필요하면 재기동까지):
 
 ```powershell
-.\scripts\deploy.ps1
+.\scripts\deploy.ps1            # 재기동 안 함
+.\scripts\deploy.ps1 -Restart   # + sudo systemctl restart qa-verification + 헬스체크
 ```
 
 배포 스크립트는 Git에서 제외된 `.deploy.env`의 Host/User/Target을 사용한다. Password 항목은 만들지 않는다.
@@ -269,7 +155,6 @@ SSH 접속 자체는 여전히 key 인증을 사용한다. 위 `SERVER_SUDO_PASS
 
 ## 11. 알려진 한계
 
-- 실제 Gemini smoke E2E는 성공했지만 동일 사양서를 변경/근거 문서로 사용했으므로 업무 정확도 검증은 남아 있다.
 - Akela CLI `0.1.4`가 전역 설치되어 compile/applied/outcome 기록이 정상 동작한다.
 - 완료된 분석과 요청 입력은 SQLite에 저장된다. 재시작 시 QUEUED 작업은 원본이 있으면 자동
   재제출하고, 이미 실행 중이던 RUNNING 작업은 FAILED로 안전하게 전환한 뒤 UI에서 재실행한다.
