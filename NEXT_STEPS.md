@@ -8,6 +8,11 @@
 - PDF vector line과 텍스트 span의 위치를 대조해 취소선·밑줄을 보수적으로 판독. 취소선 근거는
   자동으로 Human Review가 필요하며, 애매하거나 이미지 기반인 경우 기존처럼 `UNVERIFIED` 유지.
 - Windows `AIRegressionAnalyzer_VXvueSpecSync` Action을 현재 프로젝트 경로로 수정하고 dry-run 성공 확인.
+- 기능 커밋 `7d8f854`, pytest 격리 커밋 `611e4a9` push 및 GitHub Actions 성공. 로컬
+  `209 passed`, 원격 `211 passed, 1 skipped`. 운영 포트 12000 PID `1294165` → `1297440`,
+  주요 6개 페이지 200과 보호 대상 서비스 PID 불변 확인.
+- 운영 smoke 백업 17개 파일의 SHA-256·SQLite 임시 복원 검증 통과. 사용자 crontab에 매일
+  02:15 백업과 10분 간격 모니터를 추가했으며 기존 다른 서비스 cron은 그대로 보존했다.
 
 > **2026-09-02 사용자 결정**
 > - 로컬 폴더 rename(대상 이름 `qa-verification-management-system`, `HANDOFF.md` §2에
