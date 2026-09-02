@@ -1,16 +1,15 @@
 """product의 기존 등록 사양서(SRS) 문서를 로컬에서 청크·BM25 검색해 매뉴얼 변경사항별
 근거 후보를 찾는다.
 
-새 ALM 크롤러 연동을 별도로 만들지 않고, impact_analyzer가 이미 관리하는 'specification'
-문서(`app/modules/impact_analyzer/vxvue_spec_sync.py`로 최신화됨)를 그대로 재사용한다 —
-이 문서들 자체가 스펙 §4가 요구하는 "최신 SRS"다 (OPEN_QUESTIONS.md #4 참고: 별도 자동
-확보 자동화는 아직 만들지 않았다).
+impact_analyzer가 이미 관리하는 'specification' 문서
+(`app/modules/impact_analyzer/vxvue_spec_sync.py`로 최신화됨)를 그대로 재사용한다.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
+from app.core import document_cache
 from app.core.storage import Storage
 from app.modules.impact_analyzer.schemas import SpecificationChunk
 from app.parsers.document_parser import parse_document
@@ -26,7 +25,11 @@ def load_srs_chunks(storage: Storage, product: str) -> tuple[list[SpecificationC
         path = Path(doc["path"])
         if not path.exists():
             continue
-        chunks.extend(parse_document(path, path.stem))
+        cached_chunks = document_cache.load(doc["id"], SpecificationChunk)
+        if cached_chunks is None:
+            cached_chunks = parse_document(path, path.stem)
+            document_cache.save(doc["id"], cached_chunks)
+        chunks.extend(cached_chunks)
         doc_labels[path.stem] = doc["name"]
     return chunks, doc_labels
 

@@ -19,7 +19,7 @@ specification:
     - "(사양서) Licence Manager SRS 사양서*.pdf"
 
 testcase:
-  # 현재는 자동 동기화 없이 Knowledge 화면에서 수동 등록한다 (SharePoint 연동은 보류).
+  # TC는 Knowledge 화면에서 수동 등록한다.
   source: manual
 
 sync:

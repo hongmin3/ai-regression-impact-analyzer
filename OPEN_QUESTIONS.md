@@ -3,7 +3,7 @@
 2026-09-01 세션에서 "매뉴얼 개정 검증"(`app/modules/manual_review/`) 기능을 실제로
 동작하는 파이프라인까지 구현했습니다. 아래 1~3번은 "쭉 진행해달라"는 요청에 따라 이번
 세션에서 직접 결정하고 구현까지 마쳤습니다 — 결과가 마음에 안 들면 언제든 바꿀 수 있으니
-확인해주세요. 4~5번은 여전히 사용자만 답할 수 있는 외부 정보/자격증명 관련 항목입니다.
+확인해주세요. 실제 예시 파일의 E2E 편입 결정도 완료됐습니다.
 
 ## 완료된 결정 (변경 원하시면 말씀해주세요)
 
@@ -18,21 +18,7 @@
    - Cross-Manual 영향분석 저장 위치는 아직 미착수(SRS/Release Note/Design Review 파서가 없어 스코프 자체가 없음).
 3. **`python-docx` 의존성**: 추가했습니다(`requirements.txt`, 실제 설치된 버전 `1.2.0`). Word Comment 삽입(`app/modules/manual_review/comment_writer.py`)에 사용 중이며, `Document.add_comment()` + 직접 lxml로 `<w:ins>/<w:del>` 내부 run을 찾아 앵커링하는 방식으로 구현했습니다(python-docx의 `Paragraph.runs`는 이런 wrapper 내부 run을 못 찾아서 우회 필요).
 
-## 아직 열려 있는 질문
-
-### 4. ALM 크롤러 서브프로세스를 이 기능에도 재사용할지 — 부분 해결
-
-**SRS**: 공용 `knowledge` 모듈이 관리하는 `documents(kind='specification')` 테이블(=
-`vxvue_spec_sync.py`가 매주 자동 최신화하는 바로 그 SRS)을 두 검증 기능이 재사용하도록 구현했습니다
-(`app/modules/manual_review/srs_evidence.py`). 별도 크롤러 연동이 필요 없습니다.
-
-**Release Note/설계검토보고서**: 자격증명이 걸린 새 자동화는 만들지 않고, 대신 **수동 업로드 +
-자동 재사용** 방식으로 구현했습니다 — 검증 등록 화면에서 파일을 첨부하면 `documents` 테이블에
-`release_note`/`design_review` kind로 등록되고, 다음 검증부터는 파일을 다시 첨부하지 않아도
-해당 제품에 등록된 가장 최근 문서를 자동으로 사용합니다(`router.py::_register_or_reuse_reference_doc`).
-매주 자동 확보(Windows 작업 스케줄러 연동)까지는 아직 하지 않았습니다 — 필요하시면 말씀해주세요.
-
-### 5. E2E 테스트용 실제 예시 파일 — 완료 (2026-09-01, 고정 경로 참조 + skip 방식으로 편입)
+## E2E 테스트용 실제 예시 파일 — 완료 (2026-09-01, 고정 경로 참조 + skip 방식으로 편입)
 
 **결정**: 실제 파일을 리포지토리 밖 고정 경로에 두고 테스트에서 그 경로를 참조하되(옵션 1),
 경로 자체(사내망 서버 IP·부서 폴더 체계)도 `.deploy.env`와 동일하게 Git 제외 대상인

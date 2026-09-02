@@ -167,6 +167,7 @@ def test_delete_document_removes_row_and_file(tmp_path, monkeypatch):
     file_path.write_bytes(b"%PDF-")
     doc_id = storage.add_document("specification", "VXvue", "1.0", "Rev.1", "spec.pdf", file_path)
     monkeypatch.setattr(knowledge_routes, "storage", storage)
+    monkeypatch.setattr(knowledge_routes.document_cache, "delete", lambda document_id: None)
 
     response = TestClient(app).post(f"/knowledge/delete/{doc_id}", follow_redirects=False)
 

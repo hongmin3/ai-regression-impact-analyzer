@@ -100,7 +100,6 @@ Set-Location $newRoot
   - HTML 결과 보고서를 `app/reports/html_report.py`의 f-string에서 `app/web/templates/report.html` Jinja2 템플릿으로 전환하고, Analysis Overview/Change Summary(의미 단위 그룹핑)/Impact Analysis/Recommended Regression TC(5열 단순화)/Additional Verification Recommendations/AI 판단 주의사항 6단계로 재구성. Evidence Level·Revision Mark·원문 그대로의 chunk_id는 사용자 화면에서 제거하고 XLSX에만 유지, `relevant_specifications` 대신 사람이 읽는 `specification_reference`(예: "VXvue 사양서3 · DAP Communication · p.348")를 코드에서 조립(환각 없음). "Manual Review Required" 섹션과 "(VXvue TC 설계 가이드 Rev.1.7 §1.2.1)" 인용 문구 삭제
   - CSV Export 제거, XLSX만 유지(요청 사항 확인 후 결정)
   - VXvue 사양서 자동 동기화: 별도 프로젝트("ALM 사양서 최신화 크롤링", Polarion REST API로 이미 인증됨)의 `output/<날짜>/pdf/`만 읽어(그 프로젝트 코드/설정 미변경) `data/specifications/vxvue/{original,normalized}/<날짜>/`에 원본 보존 + 텍스트 정규화 후 기존 Knowledge API로 등록 (`app/sync/vxvue_spec.py`, `scripts/sync_vxvue_spec.py`, `config/products/vxvue.yaml`). 파일명·크기·수정시각 비교로 변경분만 갱신, 실패해도 기존 등록 데이터는 보존. 앱 내부 `BackgroundScheduler`(신규 systemd 없음, `app/core/scheduler.py`)로 매일 예약 실행 시도 + `/knowledge`의 "지금 동기화" 버튼으로 수동 실행. 실제 업로드/재실행 idempotency 검증 완료
-  - TC는 SharePoint 자동 연동 대신 기존 수동 업로드를 유지하기로 사용자가 결정(개인 SSO 비밀번호 저장 방식은 보안·회사 정책상 채택하지 않음) — Azure AD App Registration 기반 재검토 방법은 `docs/AUTOMATION.md` §4에 문서화만 해둠
 - 2026-08-31 사용자 승인 후 서버 프로세스 재시작 완료: 구 PID `1208181`(예전 코드, `GET /analyses` 405) → 신 PID `1214754`(이번 세션 변경분 전체 반영). 동일한 방식(일반 사용자 nohup 프로세스, 포트 `12000`)으로 재시작했고 다른 서비스(5000/5001/5002/5003/8000/10000/18800)는 그대로 유지 확인. stdout/stderr는 `output/logs/uvicorn.out`에 기록
 - **2026-08-31 추가 고도화 2차분**:
   - 분석 화면에서 변경사항 문서를 여러 개 동시 첨부 가능 (`change_files`, `RegressionAnalyzer.run`/`run_for_product`가 `list[Path]`를 받음). 여러 문서의 텍스트를 합쳐 하나의 change_text로 diff·분석
@@ -193,10 +192,11 @@ Set-Location $newRoot
 3. ~~분석 이력의 검색·필터·페이지네이션 보강~~ → **완료** (2026-09-01, `NEXT_STEPS.md` 참고)
 4. ~~자동 탐지로 해결되지 않는 TC용 수동 컬럼/시트 매핑 UI 추가~~ → **완료** (2026-09-01,
    `NEXT_STEPS.md` 참고)
-5. BM25 인덱스 직렬화 및 재사용 — 아직 미착수
+5. BM25 입력 데이터 재사용 — **완료**: 등록 사양서·TC의 파싱 결과를 `data/indexes/`에
+   캐시하고 분석 시 재사용한다. BM25 객체 자체는 버전 호환성을 위해 매번 가볍게 재구성한다.
 6. 사용자 승인 후 최신 서버 코드 활성화 또는 systemd 등록 → **완료**: 세션 중 여러 차례 배포+재시작 승인받아 진행함(현재 PID는 최신). systemd 전환 자체는 별도 승인 대기
 6-b. VXvue 사양서 동기화 Windows 작업 스케줄러 등록 → **완료** (`AIRegressionAnalyzer_VXvueSpecSync`, 매주 월 07:30 KST)
-7. ~~네트워크 접근 정책 담당자 확인 후 팀원 접속 검증~~ → 2026-08-31 `ufw allow 12000/tcp`로 개발 PC 접속은 해결. 다른 팀원 PC 접속 검증만 남음
+7. ~~네트워크 접근 정책 담당자 확인 후 팀원 접속 검증~~ → 2026-08-31 `ufw allow 12000/tcp`로 개발 PC 접속은 해결. 다른 팀원 PC 접속 검증은 2026-09-01 사용자 결정으로 **제외**(Claude Code 세션이 대신 검증할 수 없는 항목 — 필요해지면 팀원이 직접 `http://10.13.0.222:12000` 접속을 시도하면 됨)
 8. Gemini 일일 토큰 사용량 상한 안전장치 → **완료** (`config.yaml` `analysis.daily_token_limit`, `/config/status`에 사용량 노출)
 9. Knowledge 문서 삭제 기능 → **완료** (`/knowledge/delete/{id}`)
 10. 분석 화면 사용자 요청 프롬프트(문서 없이도 분석 가능) → **완료**, 문서보다 최우선 근거로 반영
@@ -294,5 +294,7 @@ SSH 접속 자체는 여전히 key 인증을 사용한다. 위 `SERVER_SUDO_PASS
 - 실제 Gemini smoke E2E는 성공했지만 동일 사양서를 변경/근거 문서로 사용했으므로 업무 정확도 검증은 남아 있다.
 - Akela CLI `0.1.4`가 전역 설치되어 compile/applied/outcome 기록이 정상 동작한다.
 - 완료된 분석과 상태는 SQLite에 저장되지만 BackgroundTasks 자체는 재시작 후 재개되지 않는다.
-- Specification Index는 등록 시 Chunk 수를 기록하지만 직렬화된 BM25 인덱스 재사용은 추가 개선이 필요하다.
+- 등록 사양서·TC의 파싱 결과는 `data/indexes/<document_id>.json`에 캐시하며, 사양서 전체 원문은
+  `<document_id>.text`에 별도 캐시한다. BM25 객체는 버전 호환성을 위해 직렬화하지 않고 캐시된
+  Pydantic 데이터로 매 분석마다 재구성한다. 캐시가 없거나 손상되면 원본을 다시 파싱해 자동 복구한다.
 - FastAPI BackgroundTasks는 대규모 동시 작업용 Queue가 아니다.

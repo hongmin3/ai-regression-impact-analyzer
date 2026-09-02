@@ -1,7 +1,17 @@
 import zipfile
+from types import SimpleNamespace
 
+import pytest
+
+from app.core import document_cache
 from app.core.storage import Storage
 from app.modules.manual_review.srs_evidence import load_srs_chunks, search_candidates
+
+
+@pytest.fixture(autouse=True)
+def isolated_document_cache(monkeypatch, tmp_path):
+    cache_dir = tmp_path / "indexes"
+    monkeypatch.setattr(document_cache, "get_settings", lambda: SimpleNamespace(path=lambda dotted: cache_dir))
 
 
 def _write_docx(path, paragraphs: list[str]) -> None:
@@ -39,6 +49,21 @@ def test_load_srs_chunks_skips_missing_files(tmp_path):
 
     assert chunks == []
     assert doc_labels == {}
+
+
+def test_load_srs_chunks_reuses_cached_parse(monkeypatch, tmp_path):
+    storage = Storage(tmp_path / "app.db")
+    spec_path = tmp_path / "srs.docx"
+    _write_docx(spec_path, ["캐시되는 SRS"])
+    document_id = storage.add_document("specification", "VXvue", "1.0", "", "SRS.docx", spec_path)
+
+    first_chunks, _ = load_srs_chunks(storage, "VXvue")
+    assert document_cache.load(document_id, type(first_chunks[0])) == first_chunks
+    monkeypatch.setattr("app.modules.manual_review.srs_evidence.parse_document", lambda *args: (_ for _ in ()).throw(AssertionError("reparsed")))
+
+    second_chunks, _ = load_srs_chunks(storage, "VXvue")
+
+    assert second_chunks == first_chunks
 
 
 def test_search_candidates_ranks_relevant_chunk_first(tmp_path):

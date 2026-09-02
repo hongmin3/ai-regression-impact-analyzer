@@ -6,6 +6,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
+from app.core import document_cache
 from app.core.config import get_settings
 from app.core.logger import configure_logging
 from app.core.storage import Storage
@@ -50,18 +51,30 @@ class RegressionAnalyzer:
         doc_labels: dict[str, str] = {}
         for doc in spec_docs:
             path = Path(doc["path"])
-            chunks.extend(parse_document(path, path.stem))
-            baseline_texts.append(extract_document_text(path))
+            cached_chunks = document_cache.load(doc["id"], SpecificationChunk)
+            if cached_chunks is None:
+                cached_chunks = parse_document(path, path.stem)
+                document_cache.save(doc["id"], cached_chunks)
+            chunks.extend(cached_chunks)
+            cached_text = document_cache.load_text(doc["id"])
+            if cached_text is None:
+                cached_text = extract_document_text(path)
+                document_cache.save_text(doc["id"], cached_text)
+            baseline_texts.append(cached_text)
             doc_labels[path.stem] = doc["name"]
         cases: list[TestCase] = []
         for doc in tc_docs:
             # register_testcase가 자동 탐지에 실패하면 QA가 /knowledge/testcase/map에서
             # 수동으로 지정한 컬럼/시트/헤더 행을 metadata_json에 저장해둔다(없으면 자동 탐지).
             metadata = json.loads(doc.get("metadata_json") or "{}")
-            cases.extend(parse_testcases(
-                Path(doc["path"]), mapping=metadata.get("column_mapping"),
-                sheet_name=metadata.get("sheet_name"), header_row=metadata.get("header_row"),
-            ))
+            cached_cases = document_cache.load(doc["id"], TestCase)
+            if cached_cases is None:
+                cached_cases = parse_testcases(
+                    Path(doc["path"]), mapping=metadata.get("column_mapping"),
+                    sheet_name=metadata.get("sheet_name"), header_row=metadata.get("header_row"),
+                )
+                document_cache.save(doc["id"], cached_cases)
+            cases.extend(cached_cases)
         spec_label = ", ".join(doc["name"] for doc in spec_docs)
         tc_label = ", ".join(doc["name"] for doc in tc_docs)
         knowledge_documents = [

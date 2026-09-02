@@ -43,7 +43,7 @@ scripts/sync_vxvue_spec.py (Windows 작업 스케줄러)   ├─ BackgroundSche
 
 ## 3. VXvue 사양서 자동 동기화 구조
 
-**중요**: 요청 초안에서는 "SharePoint"로 언급됐지만, 실제로 VXvue 최신 사양서는 별도 프로젝트
+VXvue 최신 사양서는 별도 프로젝트
 (`C:\Users\2024980\Documents\자동화\ALM 사양서 최신화 크롤링`)가 **Polarion ALM REST API**로
 이미 매주 자동 수집하고 있었다. 이 프로젝트를 재구현하지 않고 그 결과물(`output/<날짜>/pdf/`)만
 읽는다.
@@ -67,32 +67,12 @@ app/modules/impact_analyzer/vxvue_spec_sync.py   ← 실제 로직 (run, is_avai
 6. 성공/실패와 무관하게 서버의 `sync_log` 테이블에 결과를 기록한다 (`POST /knowledge/sync-log`).
    실패해도 이미 등록된 사양서는 삭제하지 않는다 — 다음 분석은 마지막 정상 데이터로 계속 동작한다.
 
-## 4. SharePoint 인증 — 결론: 이번 범위에서 보류
-
-**사용자 결정(2026-08-31)**: TC는 SharePoint 자동 연동 대신 Knowledge 화면 수동 업로드를 계속
-사용하기로 했다. 아래는 향후 재검토 시 참고용 기록이다.
-
-- 워크스페이스 전체에 Microsoft Graph/OAuth 연동 사례가 없어(최초 사례가 됨), 개인 SSO
-  아이디/비밀번호를 저장해 로그인 자동화하는 방식은 **채택하지 않았다** — 회사 계정 전체가
-  위험해지고, MFA/조건부 액세스로 인해 기술적으로도 대부분 동작하지 않는다.
-- 향후 필요해지면 정석 경로는 **Azure AD App Registration**(서비스 자격 증명)이다: Azure
-  Portal → Entra ID → App registrations → New registration → API permissions에서
-  `Sites.Read.All`(또는 특정 사이트만 필요하면 `Sites.Selected`) Application 권한 추가 →
-  관리자 동의(Admin consent) → Certificates & secrets에서 Client Secret 발급 → Tenant ID/
-  Client ID/Client Secret/대상 Site ID를 `.env` 또는 `secrets.txt`에 저장(코드 하드코딩 금지).
-- 이 절차는 회사 M365 관리자의 승인이 필요하므로 사용자가 IT 부서에 요청해야 한다.
-
-## 5. TC 파일 필터 조건 (SharePoint 재도입 시 참고)
-
-파일명에 다음 문자열 중 하나가 포함된 경우만 대상으로 한다 (대소문자 무시):
-`Test Case`, `TestCase`, `CheckList`, `Checklist`, `Check List`.
-
-## 6. TC 저장 위치
+## 4. TC 저장 위치
 
 TC는 계속 Knowledge 화면에서 수동 업로드하며 `data/testcases/`에 저장된다(기존과 동일,
 변경 없음).
 
-## 7. ALM 사양서 최신화 프로젝트 연계 방법
+## 5. ALM 사양서 최신화 프로젝트 연계 방법
 
 - 이 프로젝트의 코드/설정을 전혀 수정하지 않는다. 그 프로젝트 `AGENTS.md`가 `config/config.yaml`
   (실제 knowledge_folder 경로 포함)과 `.env`, `IMPLEMENTATION_LOG.md` 열람을 금지하므로 그 값도
@@ -104,7 +84,7 @@ TC는 계속 Knowledge 화면에서 수동 업로드하며 `data/testcases/`에 
   직접 실행할 수 없다. 따라서 `scripts/sync_vxvue_spec.py`는 **크롤러와 같은 Windows PC**에서
   실행하고, `--target-url`로 지정한 서버(기본값: 운영 서버)에 HTTP로 업로드한다.
 
-## 8. 사양서 저장 위치
+## 6. 사양서 저장 위치
 
 ```text
 data/specifications/vxvue/original/<YYYY-MM-DD>/     원본 PDF 그대로 보존
@@ -116,7 +96,7 @@ data/specifications/<uuid>.pdf                       Knowledge 등록용 실제 
 구현한 "다중 문서 관리"에 따라 새 리비전이 이전 문서를 대체하지 않고 모두 유지된다(잘못
 등록한 경우에만 Knowledge 화면에서 수동 삭제 가능).
 
-## 9. Scheduler 설정
+## 7. Scheduler 설정
 
 - 신규 systemd 유닛을 만들지 않았다 — `app/core/scheduler.py`의 `BackgroundScheduler`가 기존
   uvicorn 프로세스 안에서 함께 뜬다(`app/main.py` lifespan). 다만 서버(Ubuntu)에서는 크롤러
@@ -148,7 +128,7 @@ Get-ScheduledTask -TaskName "AIRegressionAnalyzer_VXvueSpecSync" | Format-List T
   재등록이 필요하면 동일한 원리로 새 스크립트를 실행하거나 `Set-ScheduledTask`로 트리거만
   바꾼다. 삭제는 `Unregister-ScheduledTask -TaskName AIRegressionAnalyzer_VXvueSpecSync`.
 
-## 10. 수동 동기화 방법
+## 8. 수동 동기화 방법
 
 - 웹 UI의 "사양서 지금 동기화" 버튼은 제거했다 — 실제 자동 실행이 Windows 작업 스케줄러로
   이관되어 서버 화면에서 누르면 항상 "이 서버에서는 접근할 수 없다"는 안내만 나오는 상태가
@@ -165,7 +145,7 @@ Get-ScheduledTask -TaskName "AIRegressionAnalyzer_VXvueSpecSync" | Format-List T
   파일 업로드 성공 직후 자동으로 삭제된다(`app/modules/impact_analyzer/vxvue_spec_sync.py::_replace_stale_revisions`).
   삭제는 신규 등록이 성공한 뒤에만 실행되므로 업로드가 실패하면 기존 리비전은 그대로 남는다.
 
-## 11. 로그 위치
+## 9. 로그 위치
 
 - 분석 파이프라인 전체(입력 분석/변경 추출/사양 조회/TC 검색/AI 호출/검증/보고서 생성/오류):
   `output/logs/app.log` (`app/core/logger.py`, 기존과 동일).
@@ -173,7 +153,7 @@ Get-ScheduledTask -TaskName "AIRegressionAnalyzer_VXvueSpecSync" | Format-List T
 - 각 분석은 `analysis_id`(예: `regression-5f3c52aa6984`)로 시작부터 완료/실패까지 로그에서
   추적 가능하다 (`analysis_started`/`analysis_stage`/`analysis_finished`/`analysis_failed`).
 
-## 12. 장애 발생 시 확인 방법
+## 10. 장애 발생 시 확인 방법
 
 1. `/analyses/{id}/stream` 또는 `/analyses/{id}`에서 `status`/`stage`/`error` 확인.
 2. `output/logs/app.log`에서 같은 `analysis_id`로 검색.
@@ -184,7 +164,7 @@ Get-ScheduledTask -TaskName "AIRegressionAnalyzer_VXvueSpecSync" | Format-List T
    `TimeoutError`/`ConnectionError`만 재시도한다 — 일시적 과부하는 사용자가 재실행하면 된다
    (이번 문서화 작업 중 실제로 한 번 재현되어 확인함).
 
-## 13. 환경변수 / 설정값 목록 (이번 변경분)
+## 11. 환경변수 / 설정값 목록 (이번 변경분)
 
 | 위치 | 키 | 설명 |
 |---|---|---|
@@ -194,10 +174,7 @@ Get-ScheduledTask -TaskName "AIRegressionAnalyzer_VXvueSpecSync" | Format-List T
 | `config/products/vxvue.yaml` | `sync.schedule_time` | 예약 동기화 시각 (HH:MM, Asia/Seoul) |
 | CLI 인자 | `--target-url` | `scripts/sync_vxvue_spec.py`가 업로드할 서버 주소 |
 
-SharePoint 재도입 시 필요한 환경변수(`SHAREPOINT_TENANT_ID`/`SHAREPOINT_CLIENT_ID`/
-`SHAREPOINT_CLIENT_SECRET`/`SHAREPOINT_SITE_ID`)는 §4 참고 — 이번 범위에서는 사용하지 않는다.
-
-## 14. 향후 다른 제품으로 확장하는 방법
+## 12. 향후 다른 제품으로 확장하는 방법
 
 1. `config/products/<product>.yaml`을 새로 만든다(`vxvue.yaml` 구조 그대로 복사).
 2. 그 제품의 사양서 출처가 다르면 `specification.source`를 바꾸고(예: 다른 크롤러, 다른
@@ -207,5 +184,3 @@ SharePoint 재도입 시 필요한 환경변수(`SHAREPOINT_TENANT_ID`/`SHAREPOI
 4. `app/modules/impact_analyzer/router.py`의 `/knowledge/sync/{kind}` 계열 엔드포인트와 `/knowledge` 페이지의
    동기화 상태 카드는 제품명을 매개변수화하면 재사용 가능하다(현재는 VXvue 하드코딩 — 확장
    시 가장 먼저 손볼 지점).
-5. TC를 SharePoint 등 외부에서 자동 수집하고 싶다면 §4의 App Registration 절차를 먼저
-   진행한 뒤 `app/modules/impact_analyzer/sharepoint_client.py`(신규)를 같은 인터페이스로 추가한다.

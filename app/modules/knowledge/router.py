@@ -7,10 +7,11 @@ from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
+from app.core import document_cache
 from app.core.config import get_settings
 from app.core.storage import Storage
 from app.core.uploads import save_upload
-from app.parsers.document_parser import parse_document
+from app.parsers.document_parser import extract_document_text, parse_document
 from app.parsers.excel_parser import parse_testcases, preview_workbook, suggest_columns
 
 router = APIRouter()
@@ -65,7 +66,11 @@ def register_specification(file: UploadFile = File(...), product: str = Form(...
     storage.ensure_version(product, version)
     path = save_upload(file, settings.path("storage.specification_dir"), {".pdf", ".docx"})
     chunks = parse_document(path, path.stem)
-    storage.add_document("specification", product, version, "", file.filename or path.name, path, {"chunk_count": len(chunks)})
+    document_id = storage.add_document("specification", product, version, "", file.filename or path.name, path, {"chunk_count": len(chunks)})
+    # 분석/매뉴얼 검증이 매번 원본을 다시 파싱하지 않도록 지금 파싱한 결과를 바로 캐시해둔다
+    # (Rule 기반 diff가 쓰는 전체 원문도 함께 — 둘 다 원본 파일을 다시 여는 비용이 크다).
+    document_cache.save(document_id, chunks)
+    document_cache.save_text(document_id, extract_document_text(path))
     return RedirectResponse("/knowledge", status_code=303)
 
 
@@ -76,13 +81,14 @@ def register_testcase(file: UploadFile = File(...), product: str = Form(...), ve
     path = save_upload(file, get_settings().path("storage.testcase_dir"), {".xlsx"})
     original_name = file.filename or path.name
     try:
-        parse_testcases(path)
+        cases = parse_testcases(path)
     except ValueError:
         # 자동 탐지 실패 — 파일은 이미 storage.testcase_dir에 저장돼 있으니 삭제하지 않고
         # 수동 매핑 화면으로 보낸다. 사용자가 매핑을 확정해야 documents 테이블에 등록된다.
         params = urlencode({"filename": path.name, "product": product, "version": version, "original_name": original_name})
         return RedirectResponse(f"/knowledge/testcase/map?{params}", status_code=303)
-    storage.add_document("testcase", product, version, "", original_name, path)
+    document_id = storage.add_document("testcase", product, version, "", original_name, path)
+    document_cache.save(document_id, cases)
     return RedirectResponse("/knowledge", status_code=303)
 
 
@@ -138,7 +144,7 @@ def register_testcase_with_mapping(
         }.items() if value
     }
     try:
-        parse_testcases(path, mapping=mapping, sheet_name=sheet, header_row=header_row)
+        cases = parse_testcases(path, mapping=mapping, sheet_name=sheet, header_row=header_row)
     except ValueError as exc:
         params = urlencode({
             "filename": filename, "product": product, "version": version, "original_name": original_name,
@@ -149,6 +155,7 @@ def register_testcase_with_mapping(
     storage.ensure_version(product, version)
     document_id = storage.add_document("testcase", product, version, "", original_name or filename, path)
     storage.update_document_metadata(document_id, {"column_mapping": mapping, "sheet_name": sheet, "header_row": header_row})
+    document_cache.save(document_id, cases)
     return RedirectResponse("/knowledge", status_code=303)
 
 
@@ -158,6 +165,7 @@ def delete_document(document_id: int):
     if not document:
         raise HTTPException(404, "문서를 찾을 수 없습니다.")
     storage.delete_document(document_id)
+    document_cache.delete(document_id)
     path = Path(document["path"])
     if path.exists():
         path.unlink()
