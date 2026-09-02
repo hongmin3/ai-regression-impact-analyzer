@@ -25,7 +25,7 @@ import re
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 
-from app.retrieval.bm25_retriever import BM25Retriever
+from app.retrieval.bm25_retriever import BM25Retriever, tokenize
 
 _CATEGORY_HEADER_PATTERNS: dict[str, re.Pattern] = {
     "Added": re.compile(r"^(added|추가(\s*기능)?)\s*(\(.*\))?\s*[:：]?\s*$", re.IGNORECASE),
@@ -219,14 +219,51 @@ def _enrich_design_results(text: str, changes: list[ReleaseChange]) -> None:
         recent_lines.clear()
 
 
+_OVERLAP_MIN_SHARED_TOKENS = 2
+_OVERLAP_MIN_COEFFICIENT = 0.5
+
+
+def _lexical_overlap_fallback(query: str, functional_changes: list[tuple[int, str]]) -> int | None:
+    """BM25가 0 이하 점수만 내놓았을 때 쓰는 보조 신호.
+
+    rank-bm25의 IDF는 어떤 단어가 corpus의 절반 이상 문서에 등장하면 음수가 되고
+    (`BM25Okapi._calc_idf`), 그 음수는 corpus 전체의 평균 idf에 비례한 epsilon으로 바닥을
+    깐다. functional_changes가 아주 적으면(2~3건) 대부분의 단어가 이 조건에 걸려, 실제로
+    제목이 거의 같은 문장끼리도 총점이 0 이하로 나온다 — BM25의 확률 모델 자체가 작은
+    corpus를 잘 다루지 못하는 것이라 파라미터를 조정해서 고칠 수 있는 문제가 아니다.
+
+    그래서 BM25가 "매칭 없음"을 내놓은 경우에만, 단순 토큰 겹침 비율(포함 계수)로 한 번 더
+    확인한다. BM25가 이미 매칭을 찾은 경우에는 이 fallback을 타지 않으므로 오탐(과매칭)
+    위험은 없다 — 있던 것을 놓치는 실패만 줄인다.
+    """
+    query_tokens = set(tokenize(query))
+    if not query_tokens:
+        return None
+    best_change_id: int | None = None
+    best_coefficient = 0.0
+    for change_id, text in functional_changes:
+        doc_tokens = set(tokenize(text))
+        if not doc_tokens:
+            continue
+        shared = query_tokens & doc_tokens
+        if len(shared) < _OVERLAP_MIN_SHARED_TOKENS:
+            continue
+        coefficient = len(shared) / min(len(query_tokens), len(doc_tokens))
+        if coefficient >= _OVERLAP_MIN_COEFFICIENT and coefficient > best_coefficient:
+            best_coefficient = coefficient
+            best_change_id = change_id
+    return best_change_id
+
+
 def match_release_changes(release_changes: list[ReleaseChange], functional_changes: list[tuple[int, str]]) -> list[tuple[ReleaseChange, int | None]]:
     """release_change마다 이번 리비전의 functional manual change(change_id, text) 중 BM25로
     가장 관련 있는 것을 찾는다. 매칭되면 (release_change, change_id)를, 매칭되는 게 없으면
     (release_change, None)을 반환한다 — None은 "누락 의심"(MISSING_SUSPECTED) 후보다.
 
-    주의: rank-bm25의 IDF 계산 특성상 functional_changes가 아주 적으면(예: 2건 이하) 실제로
-    관련 있는 항목도 점수가 0으로 나와 "누락 의심"으로 오판될 수 있다. 이 함수의 결과는 항상
-    "의심" 신호일 뿐 확정 판정이 아니므로, 화면에서도 QA 확인이 필요한 참고 정보로만 표시한다."""
+    BM25가 매칭을 못 찾으면(특히 functional_changes가 적을 때 — `_lexical_overlap_fallback`
+    참고) 단순 토큰 겹침으로 한 번 더 확인해 오탐을 줄인다. 그래도 이 함수의 결과는 항상
+    "의심" 신호일 뿐 확정 판정이 아니므로, 화면에서도 QA 확인이 필요한 참고 정보로만
+    표시한다."""
     if not functional_changes or not release_changes:
         return [(rc, None) for rc in release_changes]
     retriever = BM25Retriever(functional_changes, lambda item: item[1])
@@ -237,5 +274,5 @@ def match_release_changes(release_changes: list[ReleaseChange], functional_chang
         if matches and matches[0][1] > 0:
             results.append((release_change, matches[0][0][0]))
         else:
-            results.append((release_change, None))
+            results.append((release_change, _lexical_overlap_fallback(query, functional_changes)))
     return results

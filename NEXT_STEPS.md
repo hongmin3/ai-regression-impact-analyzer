@@ -367,8 +367,14 @@ version id 를 넣어 같은 Current 는 로컬 사본을 재사용하고, 바�
 9. **`retrieval.candidate_limit=150`이 검증되지 않았다.** 실서버 표본 1건(전체 TC 6,407 →
    후보 150 → 최종 추천 3)만으로 정한 값이다. 8번이 선행되어야 조정 근거가 생긴다.
 10. **Word Comment 앵커링이 문단 단위다.** 정확한 run 범위를 추적하지 않는다(의도적 v1).
-11. **Release Scope BM25 매칭 오판.** functional change가 2건 이하면 관련 항목도 "누락 의심"
-    으로 나올 수 있다. 현재는 참고 신호로만 취급하도록 문서화돼 있다.
+11. ~~**Release Scope BM25 매칭 오판.**~~ → **완화 (2026-09-02)**. 근본 원인은 rank-bm25가
+    corpus 절반 이상 문서에 나오는 단어의 idf를 음수로 만들고(corpus 평균 idf에 비례한
+    epsilon으로 바닥을 깜), functional_changes가 2~3건뿐이면 거의 모든 단어가 이 조건에
+    걸려 완전히 같은 문장도 점수 0을 내는 것으로 실제 확인했다(파라미터로 고칠 수 있는
+    문제가 아님). `match_release_changes`에 토큰 겹침 fallback(`_lexical_overlap_fallback`)을
+    추가해, BM25가 매칭을 못 찾은 경우에만 보조로 확인하도록 함 — BM25가 이미 찾은 경우엔
+    타지 않으므로 과매칭(오탐) 위험은 늘지 않는다. 회귀 테스트 2건 추가
+    (`test_match_release_changes_tiny_corpus_*`). 여전히 참고 신호일 뿐 확정 판정은 아니다.
 12. **매뉴얼 서버 확장 항목.** 본문 full-text 검색(현재 PostgreSQL ILIKE → `tsvector`),
     변경 알림(Email/Teams), Revision 자동 추출, 권한 고도화. 구조는 준비돼 있고 미구현이다
     (`services/qa-manual-hub/README.md` "향후 확장").
@@ -391,8 +397,10 @@ version id 를 넣어 같은 Current 는 로컬 사본을 재사용하고, 바�
     다음 배포 때 확인.
 16. ~~**로컬 폴더 rename 미완료.**~~ → 완료 (2026-09-02 확인, `HANDOFF.md` §2 참고). 사용자가
     세션 밖에서 직접 rename하고 작업 스케줄러 경로도 갱신했다.
-17. **구 GitHub 저장소 정리.** `hongmin3/qa-manual-hub`는 병합 후에도 그대로 남아 있다.
-    새 저장소에서 정상 동작이 확인됐으므로 Archive 처리 시점이다.
+17. ~~**구 GitHub 저장소 정리.**~~ → **완료 (2026-09-02)**. `hongmin3/qa-manual-hub`를
+    `gh api -X PATCH repos/hongmin3/qa-manual-hub -f archived=true`로 archive 처리했다
+    (`"archived":true` 응답으로 확인). 저장소 자체와 URL은 그대로 남아 읽기는 가능하고,
+    새 push/이슈만 막힌다.
 
 ### D. Akela 지식 운영
 
@@ -417,7 +425,6 @@ version id 를 넣어 같은 Current 는 로컬 사본을 재사용하고, 바�
 ## 알려진 설계상 단순화 (버그 아님, 의도적 v1 범위)
 
 - Word Comment는 항상 "변경이 속한 문단 전체"에 앵커링된다 — 정확한 run 범위는 추적 안 함.
-- `match_release_changes`의 BM25 매칭은 functional_changes가 아주 적으면(2건 이하) 관련
-  있는 항목도 "누락 의심"으로 오판할 수 있다 — 항상 "QA 확인 필요"라는 참고 신호로만 취급할 것.
-- `app/parsers/{document_parser,excel_parser,pdf_parser}.py`가 `app.modules.impact_analyzer.schemas`를
-  import하는 결합은 여전히 남아 있다(2026-09-01 리팩터링 세션 노트 참고).
+- `match_release_changes`의 BM25 매칭은 토큰 겹침 fallback(2026-09-02)으로 소표본 오판을
+  줄였지만, 여전히 로컬 규칙 기반 참고 신호일 뿐 확정 판정이 아니다 — 항상 "QA 확인 필요"로
+  취급할 것.

@@ -191,8 +191,10 @@ def test_design_review_enriches_problem_item_with_result_status():
 
 
 def _sample_functional_changes() -> list[tuple[int, str]]:
-    """BM25 IDF는 아주 작은 말뭉치(2건 이하)에서 흔한 용어의 점수를 0으로 수렴시킬 수 있어
-    (rank-bm25 특성), 실제 리비전과 비슷하게 여러 건을 섞어 매칭 신호가 의미 있게 나오도록 한다."""
+    """실제 리비전과 비슷하게 여러 건을 섞어 매칭 신호가 의미 있게 나오도록 한다. (작은
+    말뭉치에서 BM25 IDF가 0/음수로 무너지는 경우는 이제 토큰 겹침 fallback으로 구제되므로
+    — `test_match_release_changes_tiny_corpus_*` 참고 — 이 fixture를 5건으로 유지하는 게
+    필수는 아니지만, 여러 건을 대조하는 일반적인 시나리오를 그대로 검증하고자 유지한다.)"""
     return [
         (1, "IC 카드를 이용한 VXvue 로그인 기능을 추가한다."),
         (2, "Display 밝기 설정 자동 저장 방식을 변경한다."),
@@ -226,3 +228,30 @@ def test_match_release_changes_all_missing_when_no_functional_changes():
     results = match_release_changes(release_changes, [])
 
     assert results == [(release_changes[0], None)]
+
+
+def test_match_release_changes_tiny_corpus_still_finds_near_identical_change():
+    """functional_changes가 2건뿐이면 BM25 idf가 무너져 완전히 같은 문장도 점수 0을
+    내놓는다(rank-bm25의 알려진 특성) — 토큰 겹침 fallback이 이 경우를 구제해야 한다."""
+    tiny_functional_changes = [
+        (1, "IC 카드를 이용한 VXvue 로그인 기능을 추가한다."),
+        (2, "Display 밝기 설정 자동 저장 방식을 변경한다."),
+    ]
+    release_changes = extract_release_note_changes("Added\nIC 카드를 이용한 VXvue 로그인 기능을 추가한다", "release_note.docx")
+
+    results = match_release_changes(release_changes, tiny_functional_changes)
+
+    assert results[0][1] == 1
+
+
+def test_match_release_changes_tiny_corpus_unrelated_change_stays_missing():
+    """fallback이 과매칭을 일으키지 않는지 확인 — 공유 토큰이 거의 없으면 여전히 None."""
+    tiny_functional_changes = [
+        (1, "IC 카드를 이용한 VXvue 로그인 기능을 추가한다."),
+        (2, "Display 밝기 설정 자동 저장 방식을 변경한다."),
+    ]
+    release_changes = extract_release_note_changes("Added\n전혀 관련 없는 새로운 스캐너 하드웨어 연동 기능", "release_note.docx")
+
+    results = match_release_changes(release_changes, tiny_functional_changes)
+
+    assert results[0][1] is None
