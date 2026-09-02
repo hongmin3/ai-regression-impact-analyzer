@@ -258,19 +258,85 @@ NON_FUNCTIONAL_CHANGE 필터, SRS 근거 로컬 검색(impact_analyzer가 이미
 - ✅ (사용자 요청) 모든 코드는 특정 제품명을 하드코딩하지 않도록 점검·수정 — 추후 VXvue 외
   제품 확장을 염두에 둔 설계 유지(`comment_writer.py`의 author를 `{product} QA AI`로 조립).
 
-## 아직 미착수 (우선순위 순)
+## 아직 미착수 (2026-09-02 재정리, 우선순위 순)
 
-1. ~~**Cross-Manual 영향분석**~~ (스펙 §11) → 완료(위 7차 세션 참고).
-2. ~~**이미지 변경 Human Review Gate**~~ (스펙 §8-1) → 완료(위 7차 세션 참고).
-3. ~~**비용/캐시 대시보드 UI**~~ → 완료(위 참고). 매뉴얼 개정 검증의 캐시 Hit 기록은 아직
-   없음(위 "알려진 v1 범위" 참고) — 필요 시 `manual_review/ai_client.py`에도
-   `ai_audit`/`cache_hit` 기록 추가 검토.
-4. ~~**실제 예시 파일 기반 E2E pytest 테스트 추가**~~ → 완료. `tests/test_manual_review_real_files_e2e.py`,
-   경로는 Git 제외 대상 `real_fixtures.local.env`(`.example` 참고)에서 읽는다. 상세는
-   `OPEN_QUESTIONS.md` #5 참고. **주의**: 이 PC(`real_fixtures.local.env` 설정됨)에서는
-   `pytest -q` 전체 실행 시간이 약 10초 → 약 80초로 늘어난다(대용량 실제 PDF/DOCX 파싱 +
-   BM25 후보 검색을 779건 functional change에 대해 반복 수행하기 때문). 경로가 없는 다른
-   환경(원격 서버, CI)에서는 즉시 skip되어 영향 없음.
+앞선 항목들(Cross-Manual, 이미지 Gate, 비용 대시보드, 실파일 E2E)은 모두 완료됐다. 저장소
+병합과 `/manual-hub` 통합 이후 기준으로 다시 정리한다. 각 항목의 "확인" 줄은 2026-09-02에
+실서버에서 직접 확인한 근거다.
+
+### A. 운영 리스크 — 먼저 손봐야 하는 것
+
+1. **핵심 앱이 서버 재부팅 시 자동으로 뜨지 않는다.** systemd 유닛도 `@reboot` cron도 없고
+   `nohup` 프로세스(PPID 1)로만 떠 있다. 매뉴얼 서버는 `qa-manual-hub.service`가 enabled라
+   자동 복구되는데 핵심 앱만 수동 재기동이 필요하다. 현재 서버 uptime이 7주라 아직 겪지
+   않았을 뿐이다. `docs/DEPLOYMENT.md` §5에 유닛 예시가 이미 있다.
+   - 확인: `/etc/systemd/system`에 관련 유닛 없음, `crontab -l`에 `@reboot` 없음,
+     `ps -o ppid` = 1.
+2. **모니터링이 핵심 앱만 본다.** `scripts/monitor_health.py`가 10분마다 `127.0.0.1:12000`만
+   확인한다. 통합 이후 실제 사용자 진입점은 nginx(:80)이고, 매뉴얼 서버(:9180)와
+   PostgreSQL은 감시 대상이 아니다. `/manual-hub/api/health`와 nginx를 감시 대상에 추가해야
+   한다.
+3. **백업이 한국 업무시간에 돈다.** 서버 타임존이 `America/New_York`이라 cron의 02:15 /
+   02:30이 실제로는 **15:15 / 15:30 KST**다. 지금은 DB 덤프 40K + 저장소 48M이라 영향이
+   작지만, 매뉴얼이 쌓이면 업무 중 부하가 된다. cron 시간을 KST 기준 새벽으로 옮긴다
+   (서버 TZ 변경은 같은 호스트의 다른 서비스에 영향을 주므로 cron 시각만 조정).
+4. **매뉴얼 서버 백업이 원본과 같은 디스크에 있다.** `/srv/qa-manual-hub/backup`이
+   `/srv/qa-manual-hub/storage`와 같은 볼륨이라 디스크 장애 시 동시에 소실된다. 서비스
+   README도 같은 경고를 한다. 별도 볼륨이나 NAS로 복제가 필요하다.
+5. **HTTPS 미적용.** 매뉴얼 서버는 로그인·세션 기반인데 평문 HTTP다. `SESSION_COOKIE_SECURE`
+   가 `false`인 상태. 사내망 전용이라 즉시 위험은 아니지만, nginx에 `listen 443 ssl` 추가와
+   그 플래그 전환만으로 끝나는 작업이다.
+6. **nginx의 구 주소 호환 블록은 임시 조치다.** 통합 전 주소(`/documents`, `/api/` 등)를
+   `/manual-hub/*`로 넘겨주는 블록이 `deploy/nginx/qa-platform.conf`에 있다. 핵심 앱에 같은
+   이름의 경로를 만들면 충돌한다. 전환이 끝났다고 판단되는 시점에 제거할 계획이 필요하다.
+
+### B. 제품 기능 고도화
+
+7. **두 시스템의 데이터가 아직 연결되지 않았다.** 매뉴얼 개정 검증이 참조하는 매뉴얼과
+   매뉴얼 서버에 보관된 매뉴얼이 서로를 모른다. 매뉴얼 서버 API로 제품의 Current 매뉴얼을
+   가져와 개정 검증의 Cross-Manual 대조 대상으로 쓰면, 지금 수동으로 올리는 과정이 사라진다.
+   저장소를 합친 이유를 실제 기능으로 잇는 항목이며, **이번 통합의 가장 큰 미개척 시너지**다.
+   단, 하위 서비스는 코드·DB를 공유하지 않는다는 경계를 지켜 HTTP API로만 연동한다.
+8. **추천 정확도 측정 루프가 실제로 돌지 않는다.** `scripts/evaluate_analysis.py`와
+   `docs/EVALUATION.md`는 있지만 QA 확정 정답 데이터가 쌓이지 않아 precision/recall이
+   측정된 적이 없다. 결과 화면에서 QA 확정 결과를 정답으로 적립하는 흐름이 필요하다.
+9. **`retrieval.candidate_limit=150`이 검증되지 않았다.** 실서버 표본 1건(전체 TC 6,407 →
+   후보 150 → 최종 추천 3)만으로 정한 값이다. 8번이 선행되어야 조정 근거가 생긴다.
+10. **Word Comment 앵커링이 문단 단위다.** 정확한 run 범위를 추적하지 않는다(의도적 v1).
+11. **Release Scope BM25 매칭 오판.** functional change가 2건 이하면 관련 항목도 "누락 의심"
+    으로 나올 수 있다. 현재는 참고 신호로만 취급하도록 문서화돼 있다.
+12. **매뉴얼 서버 확장 항목.** 본문 full-text 검색(현재 PostgreSQL ILIKE → `tsvector`),
+    변경 알림(Email/Teams), Revision 자동 추출, 권한 고도화. 구조는 준비돼 있고 미구현이다
+    (`services/qa-manual-hub/README.md` "향후 확장").
+
+### C. 구조 · 기술 부채
+
+13. **`app/parsers/*`의 계층 역전.** `document_parser`·`excel_parser`·`pdf_parser`가
+    `app.modules.impact_analyzer.schemas`를 import한다. 공용 파서가 특정 모듈에 의존하는
+    구조라, 스키마를 `app/core/`로 올려야 한다.
+14. **핵심 앱 스키마 마이그레이션 방식.** 현재 `CREATE TABLE IF NOT EXISTS` + 컬럼 보강이다.
+    `docs/SHARED_PLATFORM_ARCHITECTURE.md`가 정한 전환 시점(운영 인스턴스나 개발자 증가)에
+    도달하면 Alembic으로 옮긴다. 매뉴얼 서버는 이미 Alembic을 쓴다.
+15. **핵심 앱 배포가 수동이다.** `scripts/deploy.ps1`이 파일만 복사하고 `pip install`과
+    재기동은 사람이 한다. 매뉴얼 서버의 `deploy.sh`(의존성 동기화 + 마이그레이션 + 재시작 +
+    헬스체크)와 비대칭이다. 1번의 systemd 유닛이 생기면 같은 수준으로 맞출 수 있다.
+16. **로컬 폴더 rename 미완료.** `HANDOFF.md` §2에 명령이 있다. Claude Code 세션이 폴더를
+    물고 있어 세션 내부에서는 불가능하다.
+17. **구 GitHub 저장소 정리.** `hongmin3/qa-manual-hub`는 병합 후에도 그대로 남아 있다.
+    새 저장소에서 정상 동작이 확인됐으므로 Archive 처리 시점이다.
+
+### D. Akela 지식 운영
+
+18. **learnings 파이프라인이 한 번도 쓰이지 않았다.** `akela stats`의 citation compliance가
+    31개 run 전부 `0/N learnings`다. 섹션 인용(28/31)은 잘 되는데, 작업 중 새로 알게 된 것을
+    `akela vet` → LEARNINGS.md로 올리는 경로가 비어 있다.
+19. **매뉴얼 서버 지식 31개 섹션이 아직 한 번도 applied되지 않았다.** 병합하며 편입만 했고
+    그 activity로 실제 작업을 한 적이 없다. 다음 매뉴얼 서버 작업 때 실제로 쓸모가 있는지
+    검증해야 한다.
+20. **CURATE 정기 검토가 설정되지 않았다.** `akela/CURATE.md`는 주기적 검토를 전제하는데
+    아직 한 번도 돌리지 않았다. `scope=all` + `tier=should` 섹션이 30번 컴파일 내내 버려지던
+    문제를 뒤늦게 발견한 것도 이 검토가 없었기 때문이다.
+
 ## 알려진 설계상 단순화 (버그 아님, 의도적 v1 범위)
 
 - Word Comment는 항상 "변경이 속한 문단 전체"에 앵커링된다 — 정확한 run 범위는 추적 안 함.
