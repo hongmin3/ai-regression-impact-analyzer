@@ -29,6 +29,16 @@ nginx :80
        database.dump + storage.tar.gz + manifest.txt
 ```
 
+위 다이어그램은 이 서비스를 **단독으로** 배포할 때(`nginx :80`을 이 서비스가 전부 차지)
+기준이다. `qa-verification-management-system` 운영 서버는 통합 배포를 쓴다 — nginx
+하나(`deploy/nginx/qa-platform.conf`, 핵심 앱 저장소 소유)가 `/`는 핵심 앱(:12000)으로,
+`/manual-hub/`는 이 서비스의 SPA/API로 나눠 보낸다. 이 경우 프론트엔드는
+`npm run build:platform`(base `/manual-hub/`)으로 빌드해야 하고, 백엔드 `.env`에
+`SESSION_COOKIE_PATH=/manual-hub/`를 넣어 세션 쿠키가 핵심 앱 요청까지 따라가지 않게
+좁힌다. 2026-09-02부터 nginx가 80→443(self-signed 인증서)으로 강제 리다이렉트한다 —
+자세한 통합 배포 구조와 HTTPS 설정은 핵심 앱 지식의
+`core-deployment.md#platform-nginx`를 참고한다(이 파일 밖, 핵심 앱이 소유).
+
 - 20명 내외 팀을 위한 단일 서버 애플리케이션. 마이크로서비스나 검색 클러스터를 쓰지 않는다.
 - 서버에 Node.js 가 필요하지 않다. 프론트엔드는 개발 PC에서 빌드하고 결과물(정적 파일)만 서버로 전송한다.
 - 백엔드 포트는 127.0.0.1 로만 바인딩되고, nginx 가 외부 진입점 역할을 한다.

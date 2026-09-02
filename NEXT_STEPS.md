@@ -60,9 +60,16 @@
 
 ### D. Akela 지식 운영
 
-19. **매뉴얼 서버 지식 31개 섹션이 아직 한 번도 applied되지 않았다.** 병합하며 편입만 했고
-    그 activity로 실제 작업을 한 적이 없다. 다음 매뉴얼 서버 작업 때 실제로 쓸모가 있는지
-    검증해야 한다.
+19. ~~**매뉴얼 서버 지식 31개 섹션이 아직 한 번도 applied되지 않았다.**~~ → **1차 스팟체크
+    완료 (2026-09-02)**. `manual-hub-deploy` activity로 오늘 실제 서버에서 확인한 사실(systemd
+    ExecStart, `.env`/`scripts/` 경로, backup.sh, deploy.sh 순서, HTTPS 설정 절차)과
+    4개 지식 섹션을 대조해 전부 정확함을 확인(`server-directories`/`deploy-script`/
+    `config-coupling`/`troubleshooting-checklist`, applied 기록). 그 과정에서 진짜 공백
+    하나를 발견 — `manual-hub-overview`의 아키텍처 다이어그램이 **단독 배포**만 그리고
+    있고, 지금 운영 서버가 실제로 쓰는 **플랫폼 통합 배포**(nginx 하나가 핵심 앱과 함께
+    라우팅, `/manual-hub/` 하위 경로, HTTPS)는 문서에 전혀 없었다. 소유자 승인 후
+    `manual-hub-overview`에 보완 문단 추가, `akela check` ok. 나머지 27개 섹션은 아직
+    미검증 — 다음 매뉴얼 허브 작업 때 이어서 확인.
 20. **CURATE 정기 검토** 1차는 2026-09-02에 완료(`deployment`/`core-development` 스코프,
     커밋 `a4fca4c`)했지만 다음 정기 실행은 아직 예약되지 않았다. 주기적 실행(주 1회 또는
     스프린트당 1회)을 원하면 `/loop` 또는 스케줄 작업으로 등록. `scope=all`+`tier=should`
