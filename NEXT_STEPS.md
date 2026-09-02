@@ -270,7 +270,8 @@ NON_FUNCTIONAL_CHANGE 필터, SRS 근거 로컬 검색(impact_analyzer가 이미
   조회 실패가 traceback 이 아니라 alert 로 나오도록 고쳤고, operations 조회가 실패하면
   근거 없이 무결성/stale 판정을 내리지 않는다. 테스트 7건.
 - **3. cron 정리 완료.** 조사 중 **모니터가 16번 실행됐지만 매번 실패**하고 있던 것을
-  발견했다 — crontab 줄 끝에 리터럴 ``(0x5C 0x72)이 붙어 리다이렉트가 깨져 `monitor.log`
+  발견했다 — crontab 줄 끝에 리터럴 `
+`(0x5C 0x72)이 붙어 리다이렉트가 깨져 `monitor.log`
   가 아예 생성되지 않았다. 오염을 제거하고, 서버 TZ 가 `America/New_York` 이라 02:15/02:30
   이 실제로는 15:15/15:30 KST 였던 것도 14:15/14:30 EDT(= 03:15/03:30 KST)로 옮겼다.
   `jjhhub` 등 다른 서비스의 cron 줄은 그대로 보존. 갱신 후 cron 이 실제로 로그를 남기는
@@ -281,11 +282,28 @@ NON_FUNCTIONAL_CHANGE 필터, SRS 근거 로컬 검색(impact_analyzer가 이미
   않는다. 장애 격리 테스트가 실제 결함을 잡았다 — `from_settings()` 가 try 밖에 있어 설정
   로딩 실패가 검증 전체를 죽였다. 테스트 15건, `pytest -q` **236 passed**.
 
-**사용자 조치 필요**: 7번 연동을 켜려면 매뉴얼 서버에서 **읽기 전용 용도의 일반 User
-계정**(Admin 금지)을 하나 만들고 `secrets.txt` 의 `MANUAL_HUB_USER`/`MANUAL_HUB_PASSWORD`
-와 `config.yaml` 의 `services.manual_hub.api_url`(`http://127.0.0.1/manual-hub/api`)을
-채워야 한다. 계정 생성은 대신 수행하지 않았다. 셋이 갖춰지기 전까지 연동은 꺼진 채
-기존 동작을 그대로 유지한다. 절차는 `docs/modules/manual-review.md` 참고.
+**7번 연동 실서버 활성화 완료 (2026-09-02).** 사용자가 매뉴얼 서버에 전용 계정을 만들고
+서버 `secrets.txt` 에 자격증명을 넣었으며, `config.yaml` 의 `api_url` 은
+`http://127.0.0.1/manual-hub/api`(같은 호스트 nginx 경유)로 설정했다.
+
+실서버 검증 결과:
+
+- 연동 활성화 `예`, 매뉴얼 서버 로그인 성공, 제품 2개(`Bellalun Viewer`, `VDMS-1100TM`) 조회.
+- `Bellalun Viewer` 대조 소스 2건 확보 — Operation Manual(V1.0.12W1, 18.8MB),
+  DICOM Conformance Statement(V1.3W1, 343KB). 검증 대상 매뉴얼 자신은 제외됨.
+- 주요 9개 경로 200, 다른 서비스 포트·유닛 전부 유지, 앱 로그 오류 0건,
+  모니터 `{"checks": {"nginx": "ok", "manual_hub": "ok"}}`.
+
+실제 데이터로만 드러난 문제 두 가지를 함께 고쳤다. (1) 매뉴얼 서버는 Revision/Version
+형식을 강제하지 않아 실제 문서의 `current_revision` 이 비어 있었다 — Revision → Version →
+출처 순으로 라벨을 채운다. (2) 매 검증마다 18.8MB 를 다시 내려받고 있었다 — 파일명에
+version id 를 넣어 같은 Current 는 로컬 사본을 재사용하고, 바뀌면 새로 받으며 지난 사본을
+지운다.
+
+**남은 제약**: 연동은 제품 **이름**으로 매칭한다. 현재 겹치는 제품은 `Bellalun Viewer`
+하나뿐이고, 핵심 앱의 `VXvue` 는 매뉴얼 서버에 같은 이름의 제품이 없어 조용히 건너뛴다
+(오류 아님). VXvue 매뉴얼도 대조에 쓰려면 매뉴얼 서버에 `VXvue` 제품을 만들고 매뉴얼을
+등록해야 한다.
 
 ## 아직 미착수 (2026-09-02 재정리, 우선순위 순)
 
@@ -321,7 +339,7 @@ NON_FUNCTIONAL_CHANGE 필터, SRS 근거 로컬 검색(impact_analyzer가 이미
 
 ### B. 제품 기능 고도화
 
-7. ~~**두 시스템의 데이터가 아직 연결되지 않았다.**~~ → 코드 완료, 계정 생성만 사용자 조치 대기 (위 참고). 매뉴얼 개정 검증이 참조하는 매뉴얼과
+7. ~~**두 시스템의 데이터가 아직 연결되지 않았다.**~~ → 완료. 실서버 활성화·검증까지 끝났다 (위 참고). 매뉴얼 개정 검증이 참조하는 매뉴얼과
    매뉴얼 서버에 보관된 매뉴얼이 서로를 모른다. 매뉴얼 서버 API로 제품의 Current 매뉴얼을
    가져와 개정 검증의 Cross-Manual 대조 대상으로 쓰면, 지금 수동으로 올리는 과정이 사라진다.
    저장소를 합친 이유를 실제 기능으로 잇는 항목이며, **이번 통합의 가장 큰 미개척 시너지**다.
