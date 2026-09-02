@@ -2,6 +2,12 @@ import { useState } from 'react'
 import { useAuth } from '../auth'
 import { Alert, Field, useAsyncAction } from '../components/ui'
 
+// Mounted under the QA platform nginx (BASE_URL '/manual-hub/') this page is
+// reachable before login too, so it needs its own way back — Layout's
+// platform-home link only renders once a user is authenticated. Standalone
+// (BASE_URL '/') there is no platform home and the link is not rendered.
+const PLATFORM_HOME = import.meta.env.BASE_URL === '/' ? null : '/'
+
 export default function Login() {
   const { login } = useAuth()
   const [loginId, setLoginId] = useState('')
@@ -10,6 +16,11 @@ export default function Login() {
 
   return (
     <div className="login-page">
+      {PLATFORM_HOME && (
+        <a className="login-home-link" href={PLATFORM_HOME}>
+          ← QA 자동화 홈
+        </a>
+      )}
       <form
         className="login-card"
         onSubmit={onSubmit(async () => {
