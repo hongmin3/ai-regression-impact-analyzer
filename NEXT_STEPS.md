@@ -14,10 +14,10 @@
 - 운영 smoke 백업 17개 파일의 SHA-256·SQLite 임시 복원 검증 통과. 사용자 crontab에 매일
   02:15 백업과 10분 간격 모니터를 추가했으며 기존 다른 서비스 cron은 그대로 보존했다.
 
-> **2026-09-02 사용자 결정**
-> - 로컬 폴더 rename(대상 이름 `qa-verification-management-system`, `HANDOFF.md` §2에
->   정확한 명령 있음, 이 세션이 폴더를 물고 있어 세션 내부에서는 구조적으로 불가능함을
->   2026-09-01 재확인). 필요해지면 `HANDOFF.md` §2 명령으로 재개.
+> **2026-09-02 완료 확인**
+> - 로컬 폴더 rename(`qa-verification-management-system`)과 Windows 작업 스케줄러
+>   `AIRegressionAnalyzer_VXvueSpecSync`의 경로 갱신을 사용자가 세션 밖에서 직접 완료했음을
+>   `pwd`·`Get-ScheduledTask`로 확인했다 (`HANDOFF.md` §2 참고).
 
 ## 2026-09-02 등록 문서 파싱 결과 캐시
 
@@ -327,15 +327,30 @@ version id 를 넣어 같은 Current 는 로컬 사본을 재사용하고, 바�
    02:30이 실제로는 **15:15 / 15:30 KST**다. 지금은 DB 덤프 40K + 저장소 48M이라 영향이
    작지만, 매뉴얼이 쌓이면 업무 중 부하가 된다. cron 시간을 KST 기준 새벽으로 옮긴다
    (서버 TZ 변경은 같은 호스트의 다른 서비스에 영향을 주므로 cron 시각만 조정).
-4. **매뉴얼 서버 백업이 원본과 같은 디스크에 있다.** `/srv/qa-manual-hub/backup`이
-   `/srv/qa-manual-hub/storage`와 같은 볼륨이라 디스크 장애 시 동시에 소실된다. 서비스
-   README도 같은 경고를 한다. 별도 볼륨이나 NAS로 복제가 필요하다.
-5. **HTTPS 미적용.** 매뉴얼 서버는 로그인·세션 기반인데 평문 HTTP다. `SESSION_COOKIE_SECURE`
-   가 `false`인 상태. 사내망 전용이라 즉시 위험은 아니지만, nginx에 `listen 443 ssl` 추가와
-   그 플래그 전환만으로 끝나는 작업이다.
-6. **nginx의 구 주소 호환 블록은 임시 조치다.** 통합 전 주소(`/documents`, `/api/` 등)를
-   `/manual-hub/*`로 넘겨주는 블록이 `deploy/nginx/qa-platform.conf`에 있다. 핵심 앱에 같은
-   이름의 경로를 만들면 충돌한다. 전환이 끝났다고 판단되는 시점에 제거할 계획이 필요하다.
+4. **매뉴얼 서버 백업이 원본과 같은 디스크에 있다.** 실서버 조사 확인(2026-09-02): 물리
+   디스크가 `sda` 하나뿐이고 `/`·`/home`이 같은 btrfs subvolume이다. `/srv/qa-manual-hub/
+   backup`(276M)과 `storage`(58M) 모두 `/dev/sda3` 위에 있어 디스크 장애 시 함께 소실된다.
+   `/mnt/vhdmaster`가 별도 마운트로 있지만 운영 보호 규칙상 접근·마운트 변경 금지 대상이라
+   쓸 수 없다. **여분 디스크가 없어 이 서버만으로는 해결 불가 — 별도 볼륨/NAS 추가라는
+   인프라 결정이 먼저 필요하다** (보류, 사용자 결정 대기).
+5. ~~**HTTPS 미적용.**~~ → **완료 (2026-09-02)**. self-signed 인증서(`/etc/nginx/ssl/
+   qa-platform/`, CN=10.13.0.222, 825일)를 발급해 `listen 443 ssl` 추가, 포트 80은 443으로
+   강제 리다이렉트, Manual Hub `.env`의 `SESSION_COOKIE_SECURE=true`로 전환.
+   `scripts/monitor_health.py`(cron)가 평문 HTTP로 `/health`·`/manual-hub/api/health`를
+   조회하다가 리다이렉트→self-signed 인증서 검증 실패로 깨지는 문제를 실제로 재현했고,
+   `location = /health`/`location = /manual-hub/api/health`를 loopback 전용 예외로 둬서
+   해결(단, `return 301`을 server 최상위에 바로 두면 location 매칭보다 rewrite phase가
+   먼저 실행돼 exact-match location이 무시되는 nginx 특성이 있어 `location / { return 301
+   ...; }`로 감싸야 했다 — 실제로 이 순서 문제를 겪고 고쳤다). 주요 7개 경로 https 200,
+   monitor 스크립트 `{"status":"ok", ...}` 재확인, 다른 보호 서비스(5000/5001/5002/5003/
+   8000/10000/18800, qa-verification PID 불변) 전부 유지 확인. `deploy/nginx/
+   qa-platform.conf` 갱신, 배포 전 파일은 서버 `/etc/nginx/backups/`에 백업됨.
+6. ~~**nginx의 구 주소 호환 블록은 임시 조치다.**~~ → **완료 (2026-09-02)**. 핵심 앱 라우터
+   전체(`impact_analyzer`/`manual_review`/`knowledge`/`cost_dashboard`)를 grep해 호환
+   블록이 가로채던 경로(`/products`, `/documents`, `/search`, `/recent`, `/users`,
+   `/categories`, `/audit`, `/settings`, `/account`, `/login`, `/api/`)와 겹치는 경로가
+   하나도 없음을 확인한 뒤 제거. 통합 전 주소를 직접 북마크/캐시해둔 사용자가 있다면 이제
+   404를 본다(사용자 승인 후 진행).
 
 ### B. 제품 기능 고도화
 
@@ -369,8 +384,8 @@ version id 를 넣어 같은 Current 는 로컬 사본을 재사용하고, 바�
 15. **핵심 앱 배포가 수동이다.** `scripts/deploy.ps1`이 파일만 복사하고 `pip install`과
     재기동은 사람이 한다. 매뉴얼 서버의 `deploy.sh`(의존성 동기화 + 마이그레이션 + 재시작 +
     헬스체크)와 비대칭이다. 1번의 systemd 유닛이 생기면 같은 수준으로 맞출 수 있다.
-16. **로컬 폴더 rename 미완료.** `HANDOFF.md` §2에 명령이 있다. Claude Code 세션이 폴더를
-    물고 있어 세션 내부에서는 불가능하다.
+16. ~~**로컬 폴더 rename 미완료.**~~ → 완료 (2026-09-02 확인, `HANDOFF.md` §2 참고). 사용자가
+    세션 밖에서 직접 rename하고 작업 스케줄러 경로도 갱신했다.
 17. **구 GitHub 저장소 정리.** `hongmin3/qa-manual-hub`는 병합 후에도 그대로 남아 있다.
     새 저장소에서 정상 동작이 확인됐으므로 Archive 처리 시점이다.
 
