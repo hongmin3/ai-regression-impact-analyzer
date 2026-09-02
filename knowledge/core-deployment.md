@@ -39,8 +39,15 @@
 - 같은 호스트의 nginx가 `/`는 핵심 앱(:12000)으로, `/manual-hub/`는 하위 서비스로 라우팅한다 (`deploy/nginx/qa-platform.conf`).
 - 하위 서비스 프론트엔드를 재배포할 때 **반드시 `BUILD_MODE=platform`**을 준다. 빠뜨리면 단독용(base `/`)으로 빌드돼 화면이 빈 채로 뜬다. `deploy.sh`가 전송 전에 검사해 중단시킨다.
 - 하위 서비스의 `install.sh`를 다시 돌릴 일이 있으면 `SKIP_NGINX=1`을 준다. 안 주면 단독용 nginx 사이트가 다시 설치돼 `/`가 하위 서비스로 돌아간다.
-- 통합 전 주소 호환 리다이렉트 블록은 2026-09-02에 제거했다(core 앱 라우터 전체와 겹치는 경로가 없음을 확인한 뒤). 지금은 80이 443으로 강제 리다이렉트되고(self-signed 인증서), `scripts/monitor_health.py`가 쓰는 `/health`·`/manual-hub/api/health`만 loopback에서 리다이렉트 없이 직접 응답하도록 예외 처리돼 있다.
-- nginx `server{}` 블록 최상위에 바로 쓴 `return`(예: `return 301 https://$host$request_uri;`)은 rewrite phase에서 location 매칭보다 먼저 실행돼, exact-match `location = /health` 같은 예외 규칙이 있어도 무시하고 리다이렉트가 먼저 발생한다. 특정 경로를 리다이렉트에서 빼려면 그 `return`을 `location / { return ...; }`로 감싸야 한다.
+- 통합 전 주소 호환 리다이렉트 블록은 2026-09-02에 제거했다(core 앱 라우터 전체와 겹치는 경로가 없음을 확인한 뒤). **지금은 평문 HTTP만 쓴다** — 같은 날 self-signed 인증서로 HTTPS 강제 리다이렉트를 적용했다가, 브라우저의 "안전하지 않음" 경고가 실제 사용성 문제라 곧바로 롤백했다. 정식 CA(또는 사내 CA) 인증서를 발급받기 전에는 재적용하지 않는다.
+- nginx `server{}` 블록 최상위에 바로 쓴 `return`(예: `return 301 https://$host$request_uri;`)은 rewrite phase에서 location 매칭보다 먼저 실행돼, exact-match `location = /health` 같은 예외 규칙이 있어도 무시하고 리다이렉트가 먼저 발생한다. 특정 경로를 리다이렉트에서 빼려면 그 `return`을 `location / { return ...; }`로 감싸야 한다(HTTPS를 다시 켤 때 재사용할 것).
+- **포트를 새로 열 때는 nginx 설정만으로 끝난 게 아니다.** `curl 127.0.0.1` 같은 loopback
+  검증은 서버 자체 방화벽(`ufw`)을 절대 통과하지 않으므로, ufw가 그 포트를 막고 있어도
+  loopback 테스트는 전부 통과해버린다. 실제로 443을 열지 않은 채 HTTP→HTTPS 강제
+  리다이렉트를 적용했다가, 외부 사용자가 "연결할 수 없음" 오류를 겪은 뒤에야 발견한 적이
+  있다(2026-09-02, 이후 HTTPS 자체를 롤백하며 443도 다시 닫음). 새 포트를 리스닝하게
+  만들 때는 `sudo ufw allow <port>/tcp`까지 같이 하고, **loopback이 아니라 실제 외부
+  클라이언트에서** 접속을 재확인한다.
 
 ## 점검 순서
 <!-- akela: id=check-order scope=deployment tier=should -->

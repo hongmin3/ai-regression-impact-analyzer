@@ -11,7 +11,15 @@
 - 2026-09-02: Word Comment 앵커링을 문단 단위→변경 요소 단위로 정밀화 — `f5c4f9f`
 - 2026-09-02: `app/parsers/*` 계층 역전 해소(`app/core/document_schemas.py`) — `dee64c2`
 - 2026-09-02: `deploy.ps1` 자동 pip install + `-Restart` 옵션 — `15f1d05`
-- 2026-09-02: nginx HTTPS 강제 적용(self-signed) + 구주소 호환 블록 제거 — `e887bc7`
+- 2026-09-02: nginx HTTPS 강제 적용(self-signed) + 구주소 호환 블록 제거 — `e887bc7`,
+  **이후 같은 날 HTTPS만 롤백**(구주소 블록 제거는 유지). 배포 직후 서버 loopback(`curl
+  127.0.0.1`)으로만 검증해 443이 방화벽에 막혀 있는 걸 놓쳤고, `sudo ufw allow 443/tcp`로
+  1차 수정까지 했으나 self-signed 인증서의 브라우저 "안전하지 않음" 경고를 사용자가
+  실사용성 문제로 지적해 HTTPS 강제 자체를 되돌리기로 결정. nginx를 평문 HTTP 단일
+  서버블록으로 복원, Manual Hub `SESSION_COOKIE_SECURE=false`로 원복, `ufw`의 443 규칙도
+  삭제. 외부 클라이언트(개발 PC)에서 http 정상·https 접속불가(의도된 상태) 확인 완료.
+  정식 CA 인증서 없이 self-signed로 다시 시도하지 않는다 — 필요해지면 사용자와 인증서
+  발급 방안(정식 CA vs 사내 CA)부터 다시 정한다.
 - 2026-09-02: Akela 첫 CURATE 검토 + `core-deployment.md` 갱신 — `a4fca4c`
 - 2026-09-02: 구 GitHub 저장소(`qa-manual-hub`) archive 처리
 - 2026-09-02: 운영 신뢰성/평가 CLI/CI/백업/PDF 개정 표시 고도화 — `7d8f854`, `611e4a9`
@@ -35,6 +43,10 @@
 
 ### A. 운영 리스크
 
+0. **HTTPS 미적용 (다시).** self-signed 인증서로 2026-09-02에 적용했다가 브라우저
+   "안전하지 않음" 경고 때문에 같은 날 롤백했다(위 완료 이력 참고). 매뉴얼 서버는
+   로그인·세션 기반인데 여전히 평문 HTTP다. 재적용하려면 정식 CA 인증서를 발급받거나
+   사내 CA를 신뢰 저장소에 배포하는 방안이 먼저 필요하다 — 사용자 결정 대기.
 1. **매뉴얼 서버 백업이 원본과 같은 디스크에 있다.** 실서버 조사 확인(2026-09-02): 물리
    디스크가 `sda` 하나뿐이고 `/`·`/home`이 같은 btrfs subvolume이다. `/srv/qa-manual-hub/
    backup`(276M)과 `storage`(58M) 모두 `/dev/sda3` 위에 있어 디스크 장애 시 함께 소실된다.
