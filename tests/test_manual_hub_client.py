@@ -22,8 +22,9 @@ PRODUCTS = [
 DOCUMENTS = [
     {"id": "d-1", "name": "Service Manual", "category_name": "Service Manual",
      "current_revision": "V1.0.12W1", "current_version_id": "v-1"},
+    # 매뉴얼 서버는 Revision/Version 형식을 강제하지 않아 둘 다 비어 있을 수 있다.
     {"id": "d-2", "name": "Operation Manual", "category_name": "Operation Manual",
-     "current_revision": "Rev.1.3", "current_version_id": "v-2"},
+     "current_revision": None, "current_version_label": None, "current_version_id": "v-2"},
     # Current 가 없는 문서는 대조 대상이 될 수 없다.
     {"id": "d-3", "name": "Draft Manual", "category_name": "Other",
      "current_revision": None, "current_version_id": None},
@@ -66,16 +67,30 @@ def test_finds_product_and_lists_documents_with_a_current_version():
         documents = hub.documents(product_id)
     assert [d.name for d in documents] == ["Service Manual", "Operation Manual"]
     assert documents[0].current_revision == "V1.0.12W1"
+    assert documents[0].describe_current() == "매뉴얼 서버 V1.0.12W1"
+
+
+def test_missing_revision_still_labels_the_source():
+    """Revision/Version 이 둘 다 비어 있어도 출처는 남아야 한다 — 실서버 문서가 그렇다."""
+    with client_for(hub_transport()) as hub:
+        documents = hub.documents("p-1")
+    operation = next(d for d in documents if d.name == "Operation Manual")
+    assert operation.describe_current() == "매뉴얼 서버"
+
+
+def test_version_label_is_used_when_revision_is_empty():
+    document = HubDocument("d-9", "QC Manual", "QC Manual", "", "1.1", "v-9")
+    assert document.describe_current() == "매뉴얼 서버 1.1"
 
 
 def test_download_keeps_the_korean_file_name_and_extension(tmp_path):
-    document = HubDocument("d-1", "Service Manual", "Service Manual", "V1", "v-1")
+    document = HubDocument("d-1", "Service Manual", "Service Manual", "V1", "", "v-1")
     with client_for(hub_transport()) as hub:
         path = hub.download_current(document, tmp_path)
     assert path is not None
     assert path.read_bytes() == b"manual bytes"
-    # 확장자가 살아야 파서가 형식별로 처리할 수 있고, 문서 id 접두어로 충돌을 막는다.
-    assert path.name == "d-1_매뉴얼.pdf"
+    # 확장자가 살아야 파서가 형식별로 처리할 수 있고, 문서·버전 id 접두어로 충돌을 막는다.
+    assert path.name == "d-1_v-1_매뉴얼.pdf"
 
 
 def test_unknown_product_returns_none():
@@ -108,7 +123,7 @@ def test_document_listing_failure_returns_empty():
 
 
 def test_download_failure_returns_none(tmp_path):
-    document = HubDocument("d-1", "Service Manual", "Service Manual", "V1", "v-1")
+    document = HubDocument("d-1", "Service Manual", "Service Manual", "V1", "", "v-1")
     with client_for(hub_transport(download_status=410)) as hub:
         assert hub.download_current(document, tmp_path) is None
 
@@ -151,3 +166,43 @@ def test_fully_configured_returns_a_client(tmp_path):
     assert client is not None
     assert client.base_url == BASE
     client.close()
+
+
+# --- 로컬 사본 캐시 --------------------------------------------------------- #
+
+def test_same_version_is_not_downloaded_twice(tmp_path):
+    """실제 매뉴얼은 한 건이 수십 MB다. 같은 Current 버전을 매번 다시 받으면 안 된다."""
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/current/download"):
+            calls["n"] += 1
+            return httpx.Response(200, content=b"manual bytes", headers={
+                "content-disposition": 'attachment; filename="m.pdf"'})
+        return httpx.Response(200, json={})
+
+    document = HubDocument("d-1", "Service Manual", "Service Manual", "V1", "", "v-1")
+    hub = client_for(httpx.MockTransport(handler))
+    first = hub.download_current(document, tmp_path)
+    second = hub.download_current(document, tmp_path)
+    hub.close()
+
+    assert first == second
+    assert calls["n"] == 1                       # 두 번째는 로컬 사본을 그대로 쓴다
+    assert first.name == "d-1_v-1_m.pdf"         # 파일명에 version id 가 들어간다
+
+
+def test_new_current_version_replaces_the_old_copy(tmp_path):
+    """Current 가 바뀌면 새로 받고, 지난 버전 사본은 남기지 않는다."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=b"bytes", headers={
+            "content-disposition": 'attachment; filename="m.pdf"'})
+
+    hub = client_for(httpx.MockTransport(handler))
+    old = hub.download_current(HubDocument("d-1", "M", "M", "V1", "", "v-1"), tmp_path)
+    new = hub.download_current(HubDocument("d-1", "M", "M", "V2", "", "v-2"), tmp_path)
+    hub.close()
+
+    assert new.name == "d-1_v-2_m.pdf"
+    assert not old.exists()
+    assert [p.name for p in tmp_path.iterdir()] == ["d-1_v-2_m.pdf"]

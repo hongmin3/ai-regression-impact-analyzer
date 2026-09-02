@@ -73,7 +73,7 @@ def load_manual_hub_sources(product: str, current_manual: str) -> dict[str, tupl
                     continue
                 path = client.download_current(document, cache_dir)
                 if path is not None:
-                    label = f"{document.name} (매뉴얼 서버 {document.current_revision})".strip()
+                    label = f"{document.name} ({document.describe_current()})"
                     sources[document.name] = (label, path)
     except Exception:  # noqa: BLE001 - 연동 실패가 검증 실패로 번지지 않게 한다
         logger.warning("매뉴얼 서버 연동 조회에 실패해 이번 검증에서는 건너뜁니다.", exc_info=True)

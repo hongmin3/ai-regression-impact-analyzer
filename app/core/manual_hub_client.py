@@ -35,7 +35,19 @@ class HubDocument:
     name: str
     category: str
     current_revision: str
+    current_version_label: str
     current_version_id: str | None
+
+    def describe_current(self) -> str:
+        """대조 결과에 표시할 Current 식별자.
+
+        매뉴얼 서버는 Revision/Version 형식을 강제하지 않고 둘 다 비워 둘 수도 있다
+        (문서에 적힌 그대로 입력하는 정책). 그래서 있는 것을 순서대로 쓰고, 둘 다
+        없으면 출처만 밝힌다."""
+        for value in (self.current_revision, self.current_version_label):
+            if value.strip():
+                return f"매뉴얼 서버 {value.strip()}"
+        return "매뉴얼 서버"
 
 
 def _filename_from_disposition(header: str | None, fallback: str) -> str:
@@ -143,12 +155,20 @@ class ManualHubClient:
                 name=str(row.get("name", "")),
                 category=str(row.get("category_name") or row.get("category") or ""),
                 current_revision=str(row.get("current_revision") or ""),
+                current_version_label=str(row.get("current_version_label") or ""),
                 current_version_id=str(version_id),
             ))
         return result
 
     def download_current(self, document: HubDocument, destination_dir: Path) -> Path | None:
-        """Current 버전 파일을 내려받아 저장한 경로를 돌려준다. 실패하면 None."""
+        """Current 버전 파일을 내려받아 저장한 경로를 돌려준다. 실패하면 None.
+
+        같은 버전을 이미 받아 뒀으면 다시 내려받지 않는다. 실제 매뉴얼은 한 건이 수십 MB라
+        검증할 때마다 전부 다시 받으면 느리고 서버에도 부담이다. 파일명에 version id 가
+        들어가므로 Current 가 바뀌면 자동으로 새로 받는다."""
+        cached = self._cached_path(document, destination_dir)
+        if cached is not None:
+            return cached
         try:
             response = self._client.get(
                 self._url(f"/documents/{document.document_id}/current/download"))
@@ -164,12 +184,37 @@ class ManualHubClient:
         filename = _filename_from_disposition(
             response.headers.get("content-disposition"), f"{document.document_id}.bin")
         # 서버가 준 파일명을 그대로 경로에 쓰지 않는다 — 디렉터리 이탈을 막기 위해
-        # 이름 부분만 취하고 문서 id 를 접두어로 붙여 충돌도 함께 방지한다.
+        # 이름 부분만 취하고 문서·버전 id 를 접두어로 붙여 충돌과 버전 혼동을 막는다.
         safe_name = Path(filename).name or f"{document.document_id}.bin"
         destination_dir.mkdir(parents=True, exist_ok=True)
-        path = destination_dir / f"{document.document_id}_{safe_name}"
+        path = destination_dir / f"{self._cache_prefix(document)}{safe_name}"
         path.write_bytes(content)
+        self._prune_old_versions(document, destination_dir, keep=path)
         return path
+
+    # --- 로컬 사본 관리 ------------------------------------------------------ #
+
+    @staticmethod
+    def _cache_prefix(document: HubDocument) -> str:
+        return f"{document.document_id}_{document.current_version_id}_"
+
+    def _cached_path(self, document: HubDocument, destination_dir: Path) -> Path | None:
+        prefix = self._cache_prefix(document)
+        if not destination_dir.exists():
+            return None
+        for candidate in destination_dir.glob(f"{prefix}*"):
+            if candidate.is_file() and candidate.stat().st_size > 0:
+                return candidate
+        return None
+
+    def _prune_old_versions(self, document: HubDocument, destination_dir: Path, keep: Path) -> None:
+        """같은 문서의 지난 버전 사본을 지운다. 대조용 사본이라 이력을 남길 이유가 없다."""
+        for candidate in destination_dir.glob(f"{document.document_id}_*"):
+            if candidate.is_file() and candidate != keep:
+                try:
+                    candidate.unlink()
+                except OSError:
+                    logger.debug("이전 버전 사본 삭제 실패: %s", candidate.name)
 
 
 def from_settings(settings: Settings | None = None,
