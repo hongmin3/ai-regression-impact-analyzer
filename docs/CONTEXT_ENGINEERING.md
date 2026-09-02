@@ -72,20 +72,22 @@ akela log outcome --status DONE
 
 ### 실제로 주입되는 slice
 
-`core-development` 작업 하나의 실제 컴파일 결과(`.akela/runs/*/slice.md`)다. 전체 1.1KB이며,
-쓰인 것과 **버려진 것과 그 이유**까지 남는다.
+컴파일 결과에는 **쓰인 것과 버려진 것, 그리고 버린 이유**가 함께 남는다
+(`.akela/runs/<run>/slice.md`).
 
 ```yaml
 compiler: akela 0.1.4   domain: default
+budget: {max: 0, used: 82}
 sources:
-  - id: REF-project-overview#purpose      tier: must   lines: 2
-  - id: REF-workflow#execution-flow       tier: must   lines: 2
-dropped:
-  - id: REF-project-overview#components   reason: general-scope
-  - id: REF-troubleshooting#known-issues  reason: general-scope
-  - id: REF-troubleshooting#check-order   reason: general-scope
-  - id: REF-workflow#rerun-caveats        reason: general-scope
+  - id: REF-core-architecture#module-boundaries      tier: must   lines: 9
+  - id: REF-core-architecture#active-documents-rule  tier: must   lines: 7
+  - id: REF-core-ai-integration#id-cross-validation  tier: must   lines: 9
+  ...                                                             # 21개
+dropped: []
 ```
+
+`dropped`에는 이유가 함께 적힌다. 예를 들어 `reason: general-scope`는 그 섹션이 특정 작업에
+매이지 않아 이번 slice에서 빠졌다는 뜻이다 — 아래 "측정해서 알게 된 것" 참고.
 
 ---
 
@@ -93,16 +95,46 @@ dropped:
 
 | 항목 | 값 |
 |---|---|
-| 지식 파일 | 7개 (`knowledge/*.md`) |
-| 섹션 | 38개 · 약 27KB |
-| scope 분포 | `all` 6 · `deployment` 1 · `manual-hub` 31 |
-| tier 분포 | `must` 19 · `should` 19 |
+| 지식 파일 | 12개 (`knowledge/*.md`) |
+| 섹션 | 78개 · 약 49KB (핵심 앱 24KB / 매뉴얼 서버 25KB) |
+| scope 분포 | `manual-hub` 31 · `core-development` 19 · `deployment` 8 · `web-ui` 7 · `testing` 6 · `documentation` 5 · `all` 2 |
+| tier 분포 | `must` 40 · `should` 38 |
 | activity | `core-development`, `web-ui`, `testing`, `deployment`, `documentation`, `manual-hub` |
 | 기록된 작업 | 31건 (`.akela/runs/`) |
 | 근거 사용 기록 | `applied` 56건 · `contradicted` 1건 (`akela/learnings-log.jsonl`) |
 
-**핵심 효과.** 지식 베이스는 27KB지만 회귀 분석 쪽 작업에 실제로 들어가는 slice는 1.2KB
-안팎이다. 매뉴얼 서버 지식 31개 섹션(약 25KB)은 `scope`가 달라 애초에 컴파일되지 않는다.
+작업 종류별로 실제 컴파일한 slice 크기다. 49KB 전체를 매번 넣는 대신 필요한 만큼만 들어간다.
+
+| activity | 섹션 | slice |
+|---|---|---|
+| `documentation` | 7 | 3.6KB |
+| `testing` | 8 | 4.0KB |
+| `web-ui` | 9 | 4.8KB |
+| `deployment` | 10 | 5.3KB |
+| `core-development` | 21 | 12KB |
+| `manual-hub` | 33 | 27KB |
+
+## 측정해서 알게 된 것 — 태깅해 뒀다고 전달되는 것이 아니다
+
+`akela stats`와 컴파일 로그를 확인하다 발견한 사실이다.
+
+`scope=all` + `tier=should`로 태깅한 섹션 4개(`components`, `known-issues`, `check-order`,
+`rerun-caveats`)가 **30번의 컴파일에서 단 한 번도 slice에 들어가지 않았다.** 매번
+`reason: general-scope`로 버려지고 있었다. 컴파일러는 `scope=all`에서 `must`만 남기고
+`should`는 활동별 지식에 자리를 내주기 때문이다.
+
+즉 이 저장소의 핵심 앱 지식은 "작지만 효율적"이었던 게 아니라 **사실상 2개 섹션뿐**이었다.
+
+고친 방법:
+
+1. 네 섹션을 실제로 필요한 activity로 좁혔다 (`core-development`, `deployment`).
+2. 코드에서 확인한 규칙으로 핵심 앱 지식을 6개 파일 · 40여 섹션으로 보강하고, 각각을
+   activity 단위로 태깅했다.
+3. 그 결과 `core-development` slice가 2개 섹션(1.2KB)에서 21개 섹션(12KB)이 됐다.
+
+교훈은 하나다. **지식을 써 두고 태그를 붙였다고 에이전트에게 전달되는 것이 아니다.**
+`akela stats`의 dormant / dropped 기록을 주기적으로 확인해야 한다
+([`akela/CURATE.md`](../akela/CURATE.md)).
 
 ## 저장소를 합칠 때 이 기준을 어떻게 적용했나
 
@@ -118,8 +150,9 @@ Root가 생기면 에이전트가 어느 Context를 써야 하는지 모호해�
 3. `akela.json`의 `activities`에 `manual-hub` 추가
 4. 하위의 `akela.json` / `akela/` 삭제, `AGENTS.md` / `CLAUDE.md`는 루트를 가리키는 안내로 대체
 
-결과적으로 **저장소가 커져도 회귀 분석 작업의 컨텍스트 크기는 그대로다.** 지식이 늘어난
-만큼 토큰이 늘지 않는다. 새 하위 서비스를 추가할 때도 같은 순서를 따른다
+결과적으로 지식이 25KB 늘었는데도 **회귀 분석 코드 작업의 slice에는 그 25KB가 한 줄도
+들어가지 않는다.** 저장소가 커진 만큼 매 작업의 토큰이 늘지 않는다. 새 하위 서비스를
+추가할 때도 같은 순서를 따른다
 ([공용 아키텍처](SHARED_PLATFORM_ARCHITECTURE.md)의 하위 서비스 체크리스트).
 
 ## 새 지식을 추가할 때
@@ -137,3 +170,8 @@ Root가 생기면 에이전트가 어느 Context를 써야 하는지 모호해�
 - 태깅이 실제와 어긋나면 잘못된 지식이 계속 주입된다. 그래서 `applied` / `contradicted`
   기록을 남기고 [`akela/CURATE.md`](../akela/CURATE.md)의 정기 검토로 교정한다.
 - 지식이 늘수록 `scope=all` 섹션이 늘어나기 쉽다. 검토에서 가장 먼저 보는 항목이다.
+- `scope=all` + `tier=should`는 컴파일러가 `general-scope`로 버린다. 모든 작업에 필요한
+  규칙이면 `must`로 올리고, 아니면 activity로 좁힌다. 이 조합으로 두면 아무 데도 안 간다.
+- **`manual-hub` slice가 27KB로 아직 크다.** 매뉴얼 서버 지식 31개 섹션이 한 activity에
+  전부 들어가기 때문이다. 다음 검토에서 `manual-hub-deployment` / `manual-hub-auth` 처럼
+  작업 단위를 쪼개는 것이 개선 방향이다.

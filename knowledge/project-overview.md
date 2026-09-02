@@ -4,7 +4,7 @@
 SW 변경사항, 제품 사양서/Manual, TC Excel을 분석해 Regression 검증 TC와 근거를 자동 추천한다. 사용자가 별도 AI 채팅에 질문하지 않는 업무 흐름이 핵심이다.
 
 ## 주요 구성
-<!-- akela: id=components scope=all tier=should -->
+<!-- akela: id=components scope=core-development tier=should -->
 
 FastAPI UI, PDF/Excel Parser, BM25 Retriever, Rule Candidate Selector, Gemini Structured Decision, Validation Engine, HTML/CSV Report, SQLite Storage로 구성한다.
 

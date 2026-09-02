@@ -82,7 +82,12 @@
 읽어야 하는 문서는 위 표에 있고, 이쪽은 에이전트가 쓴다. 동작 방식은
 [Context Engineering](CONTEXT_ENGINEERING.md)에 정리했다.
 
-| 파일 | 범위 |
+| 파일 | 범위 (scope) |
 |---|---|
-| `project-overview.md`, `workflow.md`, `troubleshooting.md` | 핵심 앱 |
-| `manual-hub-*.md` | 하위 서비스 QA Manual Hub (`scope=manual-hub`) |
+| `project-overview.md`, `workflow.md` | 모든 작업에 공통 (`all`) |
+| `core-architecture.md`, `core-ai-integration.md` | 핵심 앱 코드 작업 (`core-development`) |
+| `core-web-ui.md` | 화면 작업 (`web-ui`) |
+| `core-testing.md` | 테스트 작업 (`testing`) |
+| `core-deployment.md` | 배포·운영 (`deployment`) |
+| `core-documentation.md` | 문서 작업 (`documentation`) |
+| `manual-hub-*.md` | 하위 서비스 QA Manual Hub (`manual-hub`) |
