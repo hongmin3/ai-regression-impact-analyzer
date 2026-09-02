@@ -2,7 +2,7 @@ from pathlib import Path
 
 import fitz
 
-from app.modules.impact_analyzer.schemas import RevisionMark, SpecificationChunk
+from app.core.document_schemas import RevisionMark, SpecificationChunk
 
 
 def detect_revision_marks(page: fitz.Page) -> list[RevisionMark]:

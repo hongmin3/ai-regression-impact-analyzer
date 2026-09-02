@@ -5,7 +5,7 @@ from pathlib import Path
 
 from openpyxl import load_workbook
 
-from app.modules.impact_analyzer.schemas import TestCase
+from app.core.document_schemas import TestCase
 
 ALIASES = {
     "tc_id": ["tcid", "testcaseid", "testid", "oldid", "id", "tcno", "테스트케이스id", "tc번호"],
