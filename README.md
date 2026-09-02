@@ -431,6 +431,7 @@ pytest tests -q
 | [docs/COST_OPTIMIZATION.md](docs/COST_OPTIMIZATION.md) | 비용 절감 파이프라인 9단계 |
 | [docs/CONTEXT_ENGINEERING.md](docs/CONTEXT_ENGINEERING.md) | 저장소 관리 기준과 Akela — 에이전트 컨텍스트 토큰 절감 |
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | 로컬 설치 · 서버 배포 · 하위 서비스 통합 |
+| [docs/SERVERS.md](docs/SERVERS.md) | 운영 서버에 떠 있는 3개 서버(핵심 앱/Manual Hub/nginx) 각각의 역할과 필수 명령 |
 | [docs/OPERATIONS.md](docs/OPERATIONS.md) | 작업 복구 · 백업 · 모니터링 |
 | [docs/EVALUATION.md](docs/EVALUATION.md) | 추천 정확도 평가 |
 | [docs/AUTOMATION.md](docs/AUTOMATION.md) | 진행 상태 · 사양서 자동 동기화 |

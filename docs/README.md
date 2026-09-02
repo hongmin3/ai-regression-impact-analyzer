@@ -11,6 +11,7 @@
 | 이 프로젝트가 무엇인지 훑기 | [README](../README.md) |
 | **써 보기** — 로컬에 띄우고 분석 1건 돌려보기 | [배포 가이드 §2–3](DEPLOYMENT.md) → 앱 안 `/impact-analyzer/guide` |
 | **서버에 올리기** | [배포 가이드](DEPLOYMENT.md) |
+| **운영 서버에 뭐가 떠 있는지 알기** | [서버 3개 안내](SERVERS.md) |
 | **매뉴얼 서버까지 같이 올리기** | [배포 가이드 §8](DEPLOYMENT.md#8-하위-서비스qa-manual-hub를-같은-서버-manual-hub에-붙이기) |
 | **기능 하나를 자세히 알기** | [Regression 영향 분석](modules/impact-analyzer.md) · [매뉴얼 개정 검증](modules/manual-review.md) · [QA Manual Hub](../services/qa-manual-hub/README.md) |
 | **추천 정확도를 측정하기** | [Regression 추천 정확도 평가](EVALUATION.md) |
@@ -59,6 +60,7 @@
 | [COST_OPTIMIZATION.md](COST_OPTIMIZATION.md) | LLM 호출을 줄이는 9단계 파이프라인 |
 | [CONTEXT_ENGINEERING.md](CONTEXT_ENGINEERING.md) | 저장소 관리 기준과 Akela — 작업별 지식 주입으로 컨텍스트 토큰 절감 |
 | [DEPLOYMENT.md](DEPLOYMENT.md) | 로컬 설치부터 서버 배포, 하위 서비스 통합까지 |
+| [SERVERS.md](SERVERS.md) | 운영 서버에 떠 있는 3개 서버 프로그램(핵심 앱/Manual Hub/nginx)이 각각 무엇을 하는지, 필수 명령 |
 | [OPERATIONS.md](OPERATIONS.md) | 작업 복구, 백업, 상태 모니터링 |
 | [EVALUATION.md](EVALUATION.md) | precision·recall·F1 기반 추천 정확도 평가 |
 | [AUTOMATION.md](AUTOMATION.md) | 진행 상태 SSE, 사양서 자동 동기화, 보고서 구조 |
