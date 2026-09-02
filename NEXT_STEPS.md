@@ -8,7 +8,7 @@
 ## 완료 이력 색인 (최신순, 상세는 커밋 참고)
 
 - 2026-09-02: Release Scope BM25 소표본 오탐 완화(토큰 겹침 fallback) — `63fbd11`
-- 2026-09-02: Word Comment 앵커링을 문단 단위→변경 요소 단위로 정밀화 — (커밋 예정)
+- 2026-09-02: Word Comment 앵커링을 문단 단위→변경 요소 단위로 정밀화 — `f5c4f9f`
 - 2026-09-02: `app/parsers/*` 계층 역전 해소(`app/core/document_schemas.py`) — `dee64c2`
 - 2026-09-02: `deploy.ps1` 자동 pip install + `-Restart` 옵션 — `15f1d05`
 - 2026-09-02: nginx HTTPS 강제 적용(self-signed) + 구주소 호환 블록 제거 — `e887bc7`
