@@ -30,6 +30,25 @@ def test_extracts_insertion_and_deletion():
     assert result.plain_text == "신규 문구를 추가한다."
 
 
+def test_change_index_in_paragraph_counts_within_same_paragraph():
+    """한 문단에 변경이 여러 건이면 comment_writer.py가 각각 다른 위치에 앵커링할 수 있도록
+    문단 안에서의 순번을 붙인다 (0부터)."""
+    body = (
+        "<w:p>"
+        "<w:r><w:t>문장 시작. </w:t></w:r>"
+        '<w:ins w:id="1" w:author="연구소" w:date="2026-08-01T00:00:00Z">'
+        "<w:r><w:t>첫 번째 삽입.</w:t></w:r></w:ins>"
+        "<w:r><w:t> 중간 문장. </w:t></w:r>"
+        '<w:del w:id="2" w:author="연구소" w:date="2026-08-01T00:00:00Z">'
+        "<w:r><w:delText>두 번째 삭제.</w:delText></w:r></w:del>"
+        "</w:p>"
+    )
+    result = extract_track_changes_from_xml(_document_xml(body))
+
+    assert [c.change_index_in_paragraph for c in result.changes] == [0, 1]
+    assert [c.paragraph_index for c in result.changes] == [0, 0]
+
+
 def test_extracts_move_from_and_move_to():
     body = (
         '<w:p><w:moveFrom w:id="1" w:author="연구소" w:date="2026-08-01T00:00:00Z">'

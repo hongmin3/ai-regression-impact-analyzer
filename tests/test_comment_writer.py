@@ -87,6 +87,46 @@ def test_insert_comments_anchors_to_tracked_change_paragraph(tmp_path):
     assert comments[0].text == "SRS와 다릅니다."
 
 
+def test_insert_comments_anchors_to_specific_change_not_whole_paragraph(tmp_path):
+    """한 문단에 변경이 2건이면 각 Comment는 자신의 변경 요소에만 앵커링돼야 한다 — 문단
+    전체(예전 동작)로 뭉치면 두 Comment가 서로의 텍스트까지 감싸게 된다."""
+    body = (
+        "<w:p>"
+        "<w:r><w:t>문장 시작. </w:t></w:r>"
+        '<w:ins w:author="연구소" w:date="2026-08-01T00:00:00Z">'
+        "<w:r><w:t>첫 번째 삽입.</w:t></w:r></w:ins>"
+        "<w:r><w:t> 중간 문장. </w:t></w:r>"
+        '<w:del w:author="연구소" w:date="2026-08-01T00:00:00Z">'
+        "<w:r><w:delText>두 번째 삭제.</w:delText></w:r></w:del>"
+        "</w:p>"
+    )
+    revision_path = tmp_path / "revision.docx"
+    _write_minimal_docx(revision_path, body)
+    changes = [
+        {"paragraph_index": 0, "change_index_in_paragraph": 0, "functional": True, "decision": "MODIFICATION_REQUIRED", "ai_judgment": {"qa_comment": "삽입 관련 지적"}},
+        {"paragraph_index": 0, "change_index_in_paragraph": 1, "functional": True, "decision": "SUPPLEMENT_REQUIRED", "ai_judgment": {"qa_comment": "삭제 관련 지적"}},
+    ]
+    output_path = tmp_path / "out.docx"
+
+    inserted = insert_comments(revision_path, changes, output_path)
+    assert inserted == 2
+
+    with zipfile.ZipFile(output_path) as archive:
+        xml = archive.read("word/document.xml").decode("utf-8")
+
+    # 두 Comment의 anchor가 서로의 텍스트를 침범하지 않고, 순서대로 정확히 자기 변경만 감싼다.
+    start_1 = xml.index("문장 시작")
+    range_start_1 = xml.index("commentRangeStart")
+    insertion_text = xml.index("첫 번째 삽입")
+    range_end_1 = xml.index("commentRangeEnd")
+    middle_text = xml.index("중간 문장")
+    range_start_2 = xml.index("commentRangeStart", range_end_1)
+    deletion_text = xml.index("두 번째 삭제")
+    range_end_2 = xml.index("commentRangeEnd", range_start_2)
+
+    assert start_1 < range_start_1 < insertion_text < range_end_1 < middle_text < range_start_2 < deletion_text < range_end_2
+
+
 def test_insert_comments_skips_pass_and_non_functional(tmp_path):
     body = "<w:p><w:r><w:t>변경 없음.</w:t></w:r></w:p>"
     revision_path = tmp_path / "revision.docx"

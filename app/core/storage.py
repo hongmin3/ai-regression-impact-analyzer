@@ -108,7 +108,11 @@ class Storage:
                 if column not in existing:
                     db.execute(f"ALTER TABLE analyses ADD COLUMN {column} {ddl}")
             manual_change_columns = {row["name"] for row in db.execute("PRAGMA table_info(manual_changes)")}
-            for column, ddl in (("source_page", "INTEGER"), ("review_required", "INTEGER NOT NULL DEFAULT 0")):
+            for column, ddl in (
+                ("source_page", "INTEGER"),
+                ("review_required", "INTEGER NOT NULL DEFAULT 0"),
+                ("change_index_in_paragraph", "INTEGER NOT NULL DEFAULT 0"),
+            ):
                 if column not in manual_change_columns:
                     db.execute(f"ALTER TABLE manual_changes ADD COLUMN {column} {ddl}")
             release_finding_columns = {row["name"] for row in db.execute("PRAGMA table_info(manual_release_findings)")}
@@ -526,11 +530,12 @@ class Storage:
         functional: bool = True,
         source_page: int | None = None,
         review_required: bool = False,
+        change_index_in_paragraph: int = 0,
     ) -> int:
         with self.connect() as db:
             cursor = db.execute(
-                "INSERT INTO manual_changes(revision_id,kind,author,change_date,paragraph_index,text,functional,source_page,review_required,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
-                (revision_id, kind, author, change_date, paragraph_index, text, int(functional), source_page, int(review_required), datetime.now(timezone.utc).isoformat()),
+                "INSERT INTO manual_changes(revision_id,kind,author,change_date,paragraph_index,text,functional,source_page,review_required,change_index_in_paragraph,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                (revision_id, kind, author, change_date, paragraph_index, text, int(functional), source_page, int(review_required), change_index_in_paragraph, datetime.now(timezone.utc).isoformat()),
             )
             return int(cursor.lastrowid)
 

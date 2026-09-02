@@ -1,9 +1,10 @@
 """Word Track Changes(<w:ins>/<w:del>/<w:moveFrom>/<w:moveTo>) 구조화 추출.
 
 document_parser.py와 동일하게 python-docx 없이 zipfile+ElementTree로 word/document.xml만
-읽는다 (신규 의존성 추가는 OPEN_QUESTIONS.md에서 사용자 결정을 기다린다). 단순 서식/페이지
-번호 등 NON_FUNCTIONAL_CHANGE 필터링, section/heading 매핑, Word Comment 삽입(쓰기)은
-이후 단계 범위이며 이 모듈은 순수 추출만 담당한다.
+읽는다 — 순수 추출(읽기)만 하는 이 모듈은 그걸로 충분하다. Word Comment 삽입(쓰기)은
+python-docx가 필요해(`comment_writer.py`) 별도 의존성으로 추가돼 있다. 단순 서식/페이지
+번호 등 NON_FUNCTIONAL_CHANGE 필터링, section/heading 매핑도 이 모듈 범위 밖이며 이
+모듈은 순수 추출만 담당한다.
 """
 
 from __future__ import annotations
@@ -34,6 +35,9 @@ class TrackedChange:
     paragraph_index: int
     source_page: int | None = None
     review_required: bool = False
+    # 같은 문단(paragraph_index) 안에서 이 변경이 몇 번째 <w:ins>/<w:del>/<w:moveFrom>/<w:moveTo>
+    # 인지(0부터). comment_writer.py가 문단 전체가 아니라 이 변경만 정확히 앵커링하는 데 쓴다.
+    change_index_in_paragraph: int = 0
 
 
 @dataclass
@@ -64,6 +68,7 @@ def extract_track_changes_from_xml(xml_bytes: bytes) -> TrackChangesResult:
     plain_lines: list[str] = []
     for paragraph_index, paragraph in enumerate(root.iter(f"{W_NS}p")):
         paragraph_plain: list[str] = []
+        change_index_in_paragraph = 0
         for child in paragraph:
             kind = _KIND_BY_TAG.get(child.tag)
             if kind:
@@ -80,8 +85,10 @@ def extract_track_changes_from_xml(xml_bytes: bytes) -> TrackChangesResult:
                         text=text,
                         paragraph_index=paragraph_index,
                         review_required=has_image,
+                        change_index_in_paragraph=change_index_in_paragraph,
                     )
                 )
+                change_index_in_paragraph += 1
                 if kind in _KEPT_IN_PLAIN_TEXT and not has_image:
                     paragraph_plain.append(text)
             elif child.tag == f"{W_NS}r":

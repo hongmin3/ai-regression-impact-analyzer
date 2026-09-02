@@ -111,6 +111,7 @@ class ManualRevisionReviewer:
                 change_id = self.storage.add_manual_change(
                     revision_id, change.kind, change.author, change.date, change.paragraph_index, change.text,
                     functional=functional, source_page=change.source_page, review_required=change.review_required,
+                    change_index_in_paragraph=change.change_index_in_paragraph,
                 )
                 if functional:
                     functional_pairs.append((change_id, change))

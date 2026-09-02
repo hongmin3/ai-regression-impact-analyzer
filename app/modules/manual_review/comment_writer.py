@@ -5,10 +5,12 @@ python-docx의 `Paragraph.runs`/`.text`는 `<w:ins>/<w:del>/<w:moveFrom>/<w:move
 run을 찾지 못하므로(직계 자식 `<w:r>`만 봄), 이 모듈은 lxml로 문단 안의 모든 `<w:r>`을 직접
 찾아 `Run` 객체로 감싼 뒤 `Document.add_comment(...)`에 넘긴다.
 
-각 TrackedChange는 문단(paragraph) 단위 위치만 기록하므로(정확한 run 범위는 추적하지 않음),
-Comment는 항상 "해당 변경이 속한 문단 전체"에 앵커링된다 — 스펙 §25가 허용하는 fallback
-방식("정확한 위치를 찾지 못하면 해당 문단 전체에 Comment를 단다")과 동일하다. 한 문단에
-변경이 여러 건이면 문단 전체에 Comment가 여러 개 겹쳐 달릴 수 있다(문제 없음, Word가 지원).
+각 TrackedChange는 문단 인덱스(paragraph_index)와 그 문단 안에서 몇 번째 <w:ins>/<w:del>/
+<w:moveFrom>/<w:moveTo>인지(change_index_in_paragraph)를 함께 기록한다(2026-09-02). Comment는
+그 특정 변경 요소의 run 범위에만 앵커링된다 — 문단에 변경이 여러 건이어도 서로 다른 위치에
+Comment가 달린다. 원본 문서가 바뀌어 해당 인덱스의 요소를 더 이상 찾을 수 없으면(예:
+paragraph_index는 유효하지만 그 안의 변경 개수가 줄어든 경우) 스펙 §25가 허용하는 fallback으로
+"해당 문단 전체"에 앵커링한다.
 
 원본 Track Changes와 기존 연구소 Comment는 전혀 수정하지 않는다 — 새 Comment만 추가한다.
 """
@@ -40,6 +42,23 @@ def output_filename(manual_name: str, revision_label: str) -> str:
 def _paragraph_run_elements(paragraph_element) -> list:
     """문단 안의 모든 <w:r>을 문서 순서대로 찾는다 (ins/del/moveFrom/moveTo 내부 포함)."""
     return list(paragraph_element.iter(f"{W_NS}r"))
+
+
+_TRACKED_CHANGE_TAGS = (f"{W_NS}ins", f"{W_NS}del", f"{W_NS}moveFrom", f"{W_NS}moveTo")
+
+
+def _nth_tracked_change_element(paragraph_element, index: int):
+    """문단의 직계 자식 중 index번째 <w:ins>/<w:del>/<w:moveFrom>/<w:moveTo>를 찾는다.
+
+    docx_track_changes.py가 추출 시점에 같은 원본 파일·같은 문단 안에서 똑같은 순서로 센
+    change_index_in_paragraph와 짝을 맞춰야 한다."""
+    count = 0
+    for child in paragraph_element:
+        if child.tag in _TRACKED_CHANGE_TAGS:
+            if count == index:
+                return child
+            count += 1
+    return None
 
 
 def comment_text_for(change: dict) -> str | None:
@@ -81,10 +100,16 @@ def insert_comments(revision_path: Path, changes: list[dict], output_path: Path,
         index = change.get("paragraph_index")
         if index is None or not (0 <= index < len(paragraph_elements)):
             continue
-        run_elements = _paragraph_run_elements(paragraph_elements[index])
+        paragraph_element = paragraph_elements[index]
+        change_element = _nth_tracked_change_element(paragraph_element, change.get("change_index_in_paragraph") or 0)
+        run_elements = _paragraph_run_elements(change_element) if change_element is not None else []
+        if not run_elements:
+            # 특정 변경 요소를 못 찾으면(원본이 바뀌었거나 인덱스가 없던 옛 데이터) 문단
+            # 전체로 fallback한다 — 스펙 §25가 허용하는 방식.
+            run_elements = _paragraph_run_elements(paragraph_element)
         if not run_elements:
             continue
-        paragraph = Paragraph(paragraph_elements[index], document)
+        paragraph = Paragraph(paragraph_element, document)
         anchor_runs = [Run(run_elements[0], paragraph), Run(run_elements[-1], paragraph)]
         document.add_comment(anchor_runs, text=text, author=author, initials="QA")
         inserted += 1
