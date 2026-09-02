@@ -32,6 +32,10 @@ output-bootstrap.log
 backups/
 akela/.cache/
 
+# 사내 고유 정보가 들어가는 운영 메모 (예제 파일만 공개)
+docs/local/*
+!docs/local/*.example.md
+
 # 사용자가 직접 편집하는 비밀정보 파일 (예제 파일만 공개)
 secrets.json
 secrets.txt

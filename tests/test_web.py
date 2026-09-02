@@ -58,6 +58,27 @@ def test_external_services_skips_blank_url(monkeypatch):
     assert cards[0]["url"] == "https://example.internal"
 
 
+def test_relative_service_url_redirects_to_nginx_origin_when_hit_on_app_port():
+    """앱 포트로 직접 들어온 /manual-hub 요청은 포트 없는 같은 호스트로 돌려보낸다.
+
+    nginx를 거치면 이 경로는 앱까지 오지 않는다. 앱 포트(:12000 등)로 직접 접속한
+    사용자의 홈 카드가 404로 끝나지 않게 하기 위한 폴백이다."""
+    client = TestClient(app, base_url="http://10.0.0.5:12000")
+    response = client.get("/manual-hub/documents?q=x", follow_redirects=False)
+    assert response.status_code == 307
+    assert response.headers["location"] == "http://10.0.0.5/manual-hub/documents?q=x"
+
+
+def test_relative_service_url_does_not_loop_on_default_port():
+    """기본 포트로 들어왔는데 이 앱까지 왔다면 nginx 설정이 빠진 것이다.
+
+    같은 주소로 리다이렉트하면 무한 루프가 되므로 404로 원인을 알린다."""
+    client = TestClient(app, base_url="http://10.0.0.5")
+    response = client.get("/manual-hub/", follow_redirects=False)
+    assert response.status_code == 404
+    assert "nginx" in response.json()["detail"]
+
+
 def test_impact_analyzer_has_dedicated_entry_route():
     response = TestClient(app).get("/impact-analyzer")
     assert response.status_code == 200
