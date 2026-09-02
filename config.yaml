@@ -16,6 +16,8 @@ storage:
   log_dir: "output/logs"
   manual_revision_dir: "data/manual_revisions"
   manual_review_comment_dir: "output/manual_review_comments"
+  # 매뉴얼 서버에서 내려받은 Current 매뉴얼의 로컬 사본 (원본이 아니라 대조용 사본)
+  manual_hub_cache_dir: "data/manual_hub_cache"
 
 # 이 저장소가 함께 관리하는 하위 서비스. 핵심 앱과 다른 프로세스·다른 DB를 쓰는
 # 독립 배포 단위이므로, 홈 화면에서는 링크로만 연결한다 (services/ 참고).
@@ -27,6 +29,10 @@ services:
     # 기본값은 같은 서버 nginx가 /manual-hub/ 로 프록시하는 통합 배포 기준이다
     # (deploy/nginx/qa-platform.conf). 별도 호스트로 운영하면 절대 URL을 넣는다.
     url: "/manual-hub/"
+    # 핵심 앱이 매뉴얼 서버 API를 호출할 주소(서버 내부에서 접근). 비우면 연동 비활성.
+    # 자격증명은 secrets.txt의 MANUAL_HUB_USER / MANUAL_HUB_PASSWORD에서 읽는다 —
+    # 둘 중 하나라도 없으면 연동은 그대로 꺼진 채 기존 동작을 유지한다.
+    api_url: ""
 
 manual_review:
   # 근거 SRS 후보 개수 상한 (토큰 절약, 스펙 §28-G)

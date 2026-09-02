@@ -17,6 +17,8 @@ class Secrets(BaseModel):
     gemini_api_key: str = DEFAULTS["gemini_api_key"]
     gemini_model: str = DEFAULTS["gemini_model"]
     app_secret_key: str = DEFAULTS["app_secret_key"]
+    manual_hub_user: str = DEFAULTS["manual_hub_user"]
+    manual_hub_password: str = DEFAULTS["manual_hub_password"]
 
 
 class Settings(BaseModel):
@@ -58,7 +60,7 @@ def build_settings(root: Path = ROOT) -> Settings:
         raw = yaml.safe_load(handle) or {}
     values, sources = resolve_secrets(root, os.environ)
     settings = Settings(raw=raw, secrets=Secrets(**values), secret_sources=sources, root=root)
-    for key in ("upload_dir", "specification_dir", "testcase_dir", "index_dir", "report_dir", "export_dir", "generated_tc_dir", "log_dir", "manual_revision_dir", "manual_review_comment_dir"):
+    for key in ("upload_dir", "specification_dir", "testcase_dir", "index_dir", "report_dir", "export_dir", "generated_tc_dir", "log_dir", "manual_revision_dir", "manual_review_comment_dir", "manual_hub_cache_dir"):
         settings.path(f"storage.{key}").mkdir(parents=True, exist_ok=True)
     return settings
 

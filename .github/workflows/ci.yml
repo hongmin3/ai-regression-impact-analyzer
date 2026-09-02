@@ -38,7 +38,7 @@ jobs:
         shell: bash
         run: |
           ! git ls-files | grep -E '(^|/)(secrets\.(txt|json)|\.env|\.deploy\.env|app\.db)$'
-          ! git ls-files | grep -E '^(data/(uploads|specifications|testcases|indexes|manual_revisions)|output)/'
+          ! git ls-files | grep -E '^(data/(uploads|specifications|testcases|indexes|manual_revisions|manual_hub_cache)|output)/'
           # 하위 서비스의 런타임 산출물·실문서도 커밋되면 안 된다.
           ! git ls-files | grep -E '^services/[^/]+/(storage|backup|pgdata|node_modules)/'
           ! git ls-files | grep -E '^services/.*/frontend/dist/'

@@ -18,6 +18,7 @@ data/specifications/
 data/testcases/
 data/indexes/
 data/manual_revisions/
+data/manual_hub_cache/
 data/*.db
 data/spec_sync_state.json
 data/spec_sync.lock

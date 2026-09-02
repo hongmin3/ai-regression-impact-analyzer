@@ -41,10 +41,18 @@ PDF와 페이지별 텍스트 추가·삭제·수정을 비교한다. 위치·�
 confidence를 최대 60%로 제한하고 `PDF_DIFF_REVIEW_REQUIRED`를 표시하며, PDF에는 Word
 Comment를 생성하지 않고 QA가 결과 화면에서 최종 판정한다.
 
-**Cross-Manual 영향은 후보로만 표시한다.** 같은 제품의 다른 매뉴얼 최신 리비전(없으면 등록된
-Knowledge 문서)을 이번 Release·설계 변경과 BM25로 대조해 관련 있어 보이는 항목을
-`REVIEW_REQUIRED` 후보로 표시한다. 자동 확정하지 않고, QA가 결과 화면에서 확인 필요 / 영향
-있음 / 영향 없음으로 직접 확정한다 (`cross_manual.py`).
+**Cross-Manual 영향은 후보로만 표시한다.** 같은 제품의 다른 매뉴얼을 이번 Release·설계
+변경과 BM25로 대조해 관련 있어 보이는 항목을 `REVIEW_REQUIRED` 후보로 표시한다. 자동
+확정하지 않고, QA가 결과 화면에서 확인 필요 / 영향 있음 / 영향 없음으로 직접 확정한다
+(`cross_manual.py`).
+
+대조 대상 매뉴얼은 세 곳에서 이 순서로 모은다.
+
+1. 이 앱에 등록된 최신 매뉴얼 리비전 — 지금 검증 흐름에 직접 올라온 것
+2. **매뉴얼 서버(`services/qa-manual-hub`)의 Current 버전** — 조직이 최신본으로 인정한 문서
+3. 등록된 Knowledge 문서 중 이름이 매칭되는 것 — 하위 호환 소스
+
+같은 매뉴얼 이름이 여러 곳에 있으면 앞 순서가 이긴다.
 
 **이전 Round 지적사항의 상태는 자동으로 바꾸지 않는다.** Round 계보를 추적하며 이전
 지적사항에 대해 로컬 유사도 기반 참고 판정을 제공하지만, QA가 해결 / 미해결 / 재오픈 / 제외를
@@ -72,8 +80,31 @@ Knowledge 문서)을 이번 Release·설계 변경과 BM25로 대조해 관련 �
 | 키 | 기본값 | 의미 |
 |---|---|---|
 | `manual_review.max_srs_candidates` | 6 | 근거 SRS 후보 개수 상한 |
+| `services.manual_hub.api_url` | (빈 값) | 매뉴얼 서버 API 주소. 비면 연동 비활성 |
+| `storage.manual_hub_cache_dir` | `data/manual_hub_cache` | 매뉴얼 서버에서 받아 온 대조용 사본 |
 | `storage.manual_revision_dir` | `data/manual_revisions` | 개정 Manual 원본 보관 |
 | `storage.manual_review_comment_dir` | `output/manual_review_comments` | Comment 삽입 DOCX 산출 |
 
 프롬프트는 `app/prompts/manual_revision_quick.yaml`, `manual_revision_detail.yaml` 에 버전과
 함께 들어 있다.
+
+## 매뉴얼 서버 연동 (선택)
+
+매뉴얼 서버에 보관된 Current 매뉴얼을 Cross-Manual 대조에 자동으로 끌어온다. 켜면 다른
+매뉴얼을 이 앱에 따로 올리지 않아도 된다.
+
+**켜는 방법** — 셋이 모두 있어야 동작한다. 하나라도 없으면 연동은 꺼진 채 기존 동작을
+그대로 유지한다.
+
+1. 매뉴얼 서버에서 **읽기 전용 용도의 일반 User 계정**을 하나 만든다 (Admin 금지).
+2. `secrets.txt`에 `MANUAL_HUB_USER` / `MANUAL_HUB_PASSWORD`를 넣는다.
+3. `config.yaml`의 `services.manual_hub.api_url`에 API 주소를 넣는다
+   (통합 배포 기준: `http://127.0.0.1/manual-hub/api`).
+
+**경계** — 두 시스템은 프로세스도 DB도 공유하지 않는다. 이 연동은 **HTTP API만** 사용하며
+매뉴얼 서버의 코드를 import 하거나 PostgreSQL·문서 저장소를 직접 읽지 않는다
+(`app/core/manual_hub_client.py`).
+
+**장애 격리** — 매뉴얼 서버가 내려가 있거나 로그인에 실패해도 이 단계만 건너뛰고 검증은
+계속된다. 저장소를 합친 대가로 장애가 전파되면 안 되기 때문이며, 테스트로 고정해 두었다
+(`tests/test_manual_hub_client.py`, `tests/test_cross_manual.py`).

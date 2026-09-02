@@ -28,6 +28,9 @@ DEFAULTS: dict[str, str] = {
     "gemini_api_key": "",
     "gemini_model": "gemini-2.5-flash",
     "app_secret_key": "",
+    # 하위 서비스(매뉴얼 서버) 조회용 전용 계정. 비어 있으면 연동 자체가 비활성이다.
+    "manual_hub_user": "",
+    "manual_hub_password": "",
 }
 
 # 정규화된 이름(영숫자 소문자만) -> 표준 키
@@ -39,6 +42,11 @@ ALIASES: dict[str, str] = {
     "geminimodel": "gemini_model",
     "model": "gemini_model",
     "appsecretkey": "app_secret_key",
+    "manualhubuser": "manual_hub_user",
+    "manualhubid": "manual_hub_user",
+    "manualhubloginid": "manual_hub_user",
+    "manualhubpassword": "manual_hub_password",
+    "manualhubpw": "manual_hub_password",
 }
 
 # 예제 파일을 그대로 둔 경우를 미입력으로 취급하기 위한 표시값
