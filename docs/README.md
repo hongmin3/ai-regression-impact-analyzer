@@ -49,7 +49,7 @@
 | [HANDOFF.md](../HANDOFF.md) | 작업 인수인계 기록 |
 | [NEXT_STEPS.md](../NEXT_STEPS.md) | 남은 작업 (우선순위 순) |
 | [OPEN_QUESTIONS.md](../OPEN_QUESTIONS.md) | 결정이 필요한 항목 |
-| [CLAUDE.md](../CLAUDE.md) / [AGENTS.md](../AGENTS.md) | AI 에이전트 작업 규칙 |
+| [AGENTS.md](../AGENTS.md) | AI 에이전트 작업 규칙의 단일 원본 (`CLAUDE.md`가 이 파일을 import) |
 
 ### `docs/` — 설계와 운영
 
