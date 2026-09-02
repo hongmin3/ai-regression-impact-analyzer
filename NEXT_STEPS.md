@@ -375,15 +375,20 @@ version id 를 넣어 같은 Current 는 로컬 사본을 재사용하고, 바�
 
 ### C. 구조 · 기술 부채
 
-13. **`app/parsers/*`의 계층 역전.** `document_parser`·`excel_parser`·`pdf_parser`가
-    `app.modules.impact_analyzer.schemas`를 import한다. 공용 파서가 특정 모듈에 의존하는
-    구조라, 스키마를 `app/core/`로 올려야 한다.
+13. ~~**`app/parsers/*`의 계층 역전.**~~ → **완료 (2026-09-02)**. `TestCase`/
+    `SpecificationChunk`/`RevisionMark`를 `app/core/document_schemas.py`로 옮기고,
+    `impact_analyzer.schemas`는 하위 호환을 위해 그대로 재노출한다(다른 모듈들의 기존
+    import 경로는 안 바꿔도 된다). 동작 변화 없음, `pytest -q` 244 passed로 확인. 커밋
+    `dee64c2`.
 14. **핵심 앱 스키마 마이그레이션 방식.** 현재 `CREATE TABLE IF NOT EXISTS` + 컬럼 보강이다.
     `docs/SHARED_PLATFORM_ARCHITECTURE.md`가 정한 전환 시점(운영 인스턴스나 개발자 증가)에
     도달하면 Alembic으로 옮긴다. 매뉴얼 서버는 이미 Alembic을 쓴다.
-15. **핵심 앱 배포가 수동이다.** `scripts/deploy.ps1`이 파일만 복사하고 `pip install`과
-    재기동은 사람이 한다. 매뉴얼 서버의 `deploy.sh`(의존성 동기화 + 마이그레이션 + 재시작 +
-    헬스체크)와 비대칭이다. 1번의 systemd 유닛이 생기면 같은 수준으로 맞출 수 있다.
+15. ~~**핵심 앱 배포가 수동이다.**~~ → **완료 (2026-09-02)**. `deploy.ps1`이 파일 전송 뒤
+    서버에서 `pip install -r requirements.txt`까지 항상 수행하고, `-Restart` 옵션을 주면
+    `secrets.txt`의 `SERVER_SUDO_PASSWORD`로 `sudo systemctl restart qa-verification` +
+    헬스체크까지 수행한다(옵션 없으면 재기동 시점은 여전히 사람이 고른다). `deploy/`도 함께
+    전송하도록 추가. 매뉴얼 서버의 `deploy.sh`와 대등한 수준. 커밋 `15f1d05`. 실제 서버 적용은
+    다음 배포 때 확인.
 16. ~~**로컬 폴더 rename 미완료.**~~ → 완료 (2026-09-02 확인, `HANDOFF.md` §2 참고). 사용자가
     세션 밖에서 직접 rename하고 작업 스케줄러 경로도 갱신했다.
 17. **구 GitHub 저장소 정리.** `hongmin3/qa-manual-hub`는 병합 후에도 그대로 남아 있다.
