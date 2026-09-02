@@ -396,15 +396,23 @@ version id 를 넣어 같은 Current 는 로컬 사본을 재사용하고, 바�
 
 ### D. Akela 지식 운영
 
-18. **learnings 파이프라인이 한 번도 쓰이지 않았다.** `akela stats`의 citation compliance가
-    31개 run 전부 `0/N learnings`다. 섹션 인용(28/31)은 잘 되는데, 작업 중 새로 알게 된 것을
-    `akela vet` → LEARNINGS.md로 올리는 경로가 비어 있다.
+18. ~~**learnings 파이프라인이 한 번도 쓰이지 않았다.**~~ → **처음 실사용 (2026-09-02)**. 오늘
+    nginx `return`/location 우선순위 발견을 `akela vet`에 실제로 제출해 accept 판정을 받았고,
+    20번 CURATE 검토에서 소유자 승인을 받아 `knowledge/core-deployment.md#platform-nginx`에
+    직접 편입했다(별도 `LRN-` 항목을 만들지 않고 해당 위키 섹션에 바로 반영하는 경로도
+    유효함을 확인). 여전히 `LEARNINGS.md`에 정식 `LRN-` 항목은 0개 — 위키 섹션에 바로 붙지
+    않는 범용 학습이 나오면 그때 첫 항목이 생긴다.
 19. **매뉴얼 서버 지식 31개 섹션이 아직 한 번도 applied되지 않았다.** 병합하며 편입만 했고
     그 activity로 실제 작업을 한 적이 없다. 다음 매뉴얼 서버 작업 때 실제로 쓸모가 있는지
     검증해야 한다.
-20. **CURATE 정기 검토가 설정되지 않았다.** `akela/CURATE.md`는 주기적 검토를 전제하는데
-    아직 한 번도 돌리지 않았다. `scope=all` + `tier=should` 섹션이 30번 컴파일 내내 버려지던
-    문제를 뒤늦게 발견한 것도 이 검토가 없었기 때문이다.
+20. ~~**CURATE 정기 검토가 설정되지 않았다.**~~ → **1차 검토 완료 (2026-09-02)**. 오늘 실제
+    작업(HTTPS 적용, nginx 구주소 블록 제거, deploy.ps1 자동화)이 `core-deployment.md`의 4개
+    섹션(`dependency-sync`/`restart-procedure`/`deploy-script-scope`/`platform-nginx`)을
+    실제와 다르게 만든 것을 `akela stats`로 확인 → 검토표 제시 → 소유자 승인 → 재작성 →
+    `akela check` ok까지 마쳤다(커밋 `a4fca4c`). **다음 정기 검토는 아직 예약되지 않음** —
+    주기적 실행(주 1회 또는 스프린트당 1회)을 원하면 `/loop` 또는 스케줄 작업으로 등록.
+    `scope=all`+`tier=should` 누락 문제는 이번 검토 범위에서는 발견되지 않았다(범위가
+    `deployment`/`core-development`로 좁았기 때문일 수 있음 — 전체 스코프 검토는 아직 안 함).
 
 ## 알려진 설계상 단순화 (버그 아님, 의도적 v1 범위)
 
